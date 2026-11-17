@@ -28,24 +28,24 @@ export const ZONE_BOUNDS: Readonly<Record<ZoneName, { startX: number; endX: numb
 };
 
 /** 걸을 수 있는 돌바닥 띠. 좌우 끝은 맵 끝에서 막힌다. */
-export const WALK_AREA: Rect = { x: 0, y: 140, w: MAP_WIDTH, h: 124 };
+export const WALK_AREA: Rect = { x: 0, y: 116, w: MAP_WIDTH, h: 148 };
 
 // --- 주요 시설 위치 ---
 /** 트리에서 너무 멀지 않게 구역 오른쪽(광장 쪽)으로 붙인다 */
 export const CAROUSEL_X = 380;
 export const CAROUSEL_HALF_WIDTH = 44;
-export const CAROUSEL_DEPTH = 36;
+export const CAROUSEL_DEPTH = 44;
 
 export const TREE_X = 720;
 export const TREE_BED_HALF_WIDTH = 34;
 export const TREE_BED_DEPTH = 28;
 /** 트리는 광장 안쪽에 선다: 바닥 띠 윗선에서 이만큼 앞 (뒤로도 지나갈 수 있음) */
-export const TREE_BED_SETBACK = 26;
+export const TREE_BED_SETBACK = 40;
 
 /** 링크는 구역 왼쪽(광장 쪽)으로 붙이고, 입구도 광장 쪽 끝에 둔다 */
 export const RINK_FENCE_START_X = 970;
 export const RINK_FENCE_END_X = 1300;
-export const RINK_FENCE_DEPTH = 70;
+export const RINK_FENCE_DEPTH = 90;
 /** 울타리 왼쪽 끝에서 입구까지 */
 export const RINK_GATE_OFFSET = 60;
 

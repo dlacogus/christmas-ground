@@ -68,8 +68,8 @@ describe('광장 건물', () => {
     }
   });
 
-  it('3~4층이고 1층은 아치, 위층은 격자 창, 지붕에는 지붕 창', () => {
-    for (const b of row) expect([3, 4]).toContain(b.floors);
+  it('2층이고 1층은 아치, 2층은 격자 창, 지붕에는 지붕 창', () => {
+    for (const b of row) expect(b.floors).toBe(2);
     const windows = collectWindows(row, createRng(1));
     const kinds = new Set(windows.map((w) => w.kind));
     expect(kinds).toEqual(new Set(['arch', 'grid', 'dormer']));

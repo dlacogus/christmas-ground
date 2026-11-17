@@ -15,13 +15,20 @@ import {
 } from './carousel';
 
 describe('회전목마 모양', () => {
-  it('폭 약 160px, 높이 약 140px', () => {
+  it('트리와 비슷한 규모: 판 폭 240px, 깃발까지 높이 약 185px, 화면 위로 안 잘림', () => {
     const g = carouselGeometry();
     const flagTop = g.apexY - CAROUSEL.flagPoleHeight;
-    expect(g.rimBottom - flagTop).toBeGreaterThanOrEqual(130);
-    expect(g.rimBottom - flagTop).toBeLessThanOrEqual(150);
-    expect(g.platformRadiusX * 2).toBe(160);
+    expect(g.platformRadiusX * 2).toBe(240);
+    expect(g.rimBottom - flagTop).toBeGreaterThanOrEqual(175);
+    expect(g.rimBottom - flagTop).toBeLessThanOrEqual(200);
     expect(flagTop).toBeGreaterThanOrEqual(0);
+  });
+
+  it('판과 지붕이 회전목마 구역(0~480) 안에 있고 전나무 줄에 닿지 않는다', () => {
+    const platform = getObstacle('carousel');
+    expect(platform.x + platform.w).toBeLessThanOrEqual(480);
+    expect(CAROUSEL_X + CAROUSEL.roofHalfWidth).toBeLessThanOrEqual(480);
+    expect(platform.x).toBeGreaterThan(FIR_LINE_X);
   });
 
   it('판 아래는 장애물, 입구 앞에 CAROUSEL_ENTRY', () => {

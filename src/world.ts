@@ -31,11 +31,11 @@ export const ZONE_BOUNDS: Readonly<Record<ZoneName, { startX: number; endX: numb
 export const WALK_AREA: Rect = { x: 0, y: 116, w: MAP_WIDTH, h: 148 };
 
 // --- 주요 시설 위치 ---
-/** 트리에서 너무 멀지 않게 구역 오른쪽(광장 쪽)으로 붙인다 */
-export const CAROUSEL_X = 380;
-/** 회전목마 둥근 판(발밑 기준 사각형 = 판과 앞 테두리를 감싸는 상자) */
-export const CAROUSEL_HALF_WIDTH = 80;
-export const CAROUSEL_DEPTH = 30;
+/** 트리에서 너무 멀지 않게 구역 오른쪽(광장 쪽)으로 붙이되, 큰 판이 구역 경계(480)를 넘지 않게 */
+export const CAROUSEL_X = 340;
+/** 회전목마 둥근 판(발밑 기준 사각형 = 판과 앞 테두리를 감싸는 상자: 판 지름 + 앞 테두리) */
+export const CAROUSEL_HALF_WIDTH = 120;
+export const CAROUSEL_DEPTH = 40;
 /** 바닥 띠 윗선에서 판 뒤쪽 끝까지 — 뒤로도 지나갈 수 있다 */
 export const CAROUSEL_SETBACK = 62;
 
@@ -55,8 +55,8 @@ export const FIRS = [
 
 /** 벤치 (발밑 가운데) */
 export const BENCHES = [
-  { x: 120, y: 238 },
-  { x: 220, y: 238 },
+  { x: 80, y: 238 },
+  { x: 150, y: 238 },
 ] as const;
 export const BENCH_HALF_WIDTH = 10;
 export const BENCH_DEPTH = 3;
@@ -79,8 +79,8 @@ export const RINK_GATE_OFFSET = 60;
 export const STALLS = [
   { x: 580, roof: 'red' },
   { x: 860, roof: 'red' },
-  { x: 110, roof: 'navy' },
-  { x: 200, roof: 'navy' },
+  { x: 80, roof: 'navy' },
+  { x: 150, roof: 'navy' },
 ] as const;
 export const STALL_WIDTH = 64;
 /** 노점 오두막이 바닥 띠를 차지하는 깊이 */
@@ -92,8 +92,8 @@ export const LAMPS = [
   { x: 950, y: 126, heads: 1 },
   { x: 600, y: 252, heads: 2 },
   { x: 840, y: 252, heads: 2 },
-  { x: 262, y: 126, heads: 1 },
-  { x: 284, y: 252, heads: 2 },
+  { x: 196, y: 126, heads: 1 },
+  { x: 196, y: 252, heads: 2 },
 ] as const;
 /** 가로등 받침이 바닥을 차지하는 크기 */
 export const LAMP_FOOT_HALF_WIDTH = 3;

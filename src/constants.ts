@@ -476,13 +476,13 @@ export const CAROUSEL = {
   /** 한 바퀴 (초) — 숨쉬듯 느긋하게 */
   rotationPeriod: 12,
   horseCount: 8,
-  horseOrbitRadius: 62,
+  horseOrbitRadius: 92,
   /** 말 발끝 = 판 가운데에서 위로 (탄 사람 머리가 지붕 장식에 닿지 않게) */
-  horseBaseAbove: 14,
+  horseBaseAbove: 26,
   /** 탈 때 안장 위로 올라오는 캐릭터 높이 (엉덩이 ~ 털모자 방울) */
   riderAboveSeat: 24,
   /** 앞쪽 말일수록 이만큼 아래로 (원근) */
-  horseDepthDrop: 6,
+  horseDepthDrop: 9,
   bobAmplitude: 4,
   bobPeriod: 3.2,
   /** 뒤쪽 말을 어둡게 하는 단계 수와 가장 어두울 때 섞는 비율 */
@@ -490,38 +490,38 @@ export const CAROUSEL = {
   maxShade: 0.55,
   /** 뒤쪽 말 크기 (앞쪽 대비) */
   backScale: 0.82,
-  platformRadiusY: 12,
-  rimHeight: 6,
+  platformRadiusY: 16,
+  rimHeight: 8,
   /** 판 가운데에서 지붕 아래선까지 */
-  roofBottomAbove: 76,
-  roofHeight: 32,
-  roofHalfWidth: 88,
+  roofBottomAbove: 106,
+  roofHeight: 44,
+  roofHalfWidth: 132,
   /** 지붕 둥글기 (작을수록 볼록) */
   roofCurve: 0.6,
   /** 지붕 아래선이 가운데에서 앞으로 처지는 정도 (둥근 천막을 앞에서 본 모습) */
-  roofSag: 4,
-  stripeCount: 16,
+  roofSag: 6,
+  stripeCount: 20,
   /** 지붕 줄무늬가 도는 모습을 미리 그려 두는 장 수 */
   roofFrames: 8,
   roofEdgeShade: 0.8,
-  goldBandHeight: 2,
-  valanceHeight: 6,
-  scallopWidth: 10,
-  bulbSpacing: 6,
+  goldBandHeight: 3,
+  valanceHeight: 8,
+  scallopWidth: 14,
+  bulbSpacing: 7,
   /** 전구 불빛이 흐르는 속도 (초당 칸)와 한 번에 밝은 칸 수 */
   bulbChaseSpeed: 8,
   bulbChaseLength: 7,
   bulbMinAlpha: 0.35,
   bulbGlowAlpha: 0.35,
-  poleHalfWidth: 6,
-  poleBandEvery: 14,
-  flagPoleHeight: 8,
-  flagWidth: 7,
-  flagHeight: 5,
+  poleHalfWidth: 9,
+  poleBandEvery: 18,
+  flagPoleHeight: 12,
+  flagWidth: 10,
+  flagHeight: 7,
   flagWavePeriod: 0.6,
   /** 주변 바닥에 번지는 불빛 */
-  floorGlowRadiusX: 130,
-  floorGlowRadiusY: 26,
+  floorGlowRadiusX: 190,
+  floorGlowRadiusY: 34,
   floorGlowAlpha: 0.24,
   floorGlowRings: 4,
   floorGlowPulse: 0.15,

@@ -56,7 +56,7 @@ describe('캐릭터 이동', () => {
 
   it('위아래로 바닥 띠를 벗어나지 않는다', () => {
     // 위아래로 아무것도 없는 줄 (노점·벤치·가로등·회전목마 사이)
-    const ch = createCharacter(250, SPAWN.y);
+    const ch = createCharacter(207, SPAWN.y);
     walk(ch, { x: 0, y: -1 }, 5);
     expect(ch.y).toBe(WALK_AREA.y + CHARACTER.footHeight);
     walk(ch, { x: 0, y: 1 }, 5);

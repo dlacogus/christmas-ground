@@ -31,7 +31,8 @@ export const ZONE_BOUNDS: Readonly<Record<ZoneName, { startX: number; endX: numb
 export const WALK_AREA: Rect = { x: 0, y: 200, w: MAP_WIDTH, h: 62 };
 
 // --- 주요 시설 위치 ---
-export const CAROUSEL_X = 240;
+/** 트리에서 너무 멀지 않게 구역 오른쪽(광장 쪽)으로 붙인다 */
+export const CAROUSEL_X = 380;
 export const CAROUSEL_HALF_WIDTH = 44;
 export const CAROUSEL_DEPTH = 24;
 
@@ -39,9 +40,12 @@ export const TREE_X = 720;
 export const TREE_BED_HALF_WIDTH = 22;
 export const TREE_BED_DEPTH = 24;
 
-export const RINK_FENCE_START_X = 1010;
-export const RINK_FENCE_END_X = 1390;
+/** 링크는 구역 왼쪽(광장 쪽)으로 붙이고, 입구도 광장 쪽 끝에 둔다 */
+export const RINK_FENCE_START_X = 970;
+export const RINK_FENCE_END_X = 1300;
 export const RINK_FENCE_DEPTH = 38;
+/** 울타리 왼쪽 끝에서 입구까지 */
+export const RINK_GATE_OFFSET = 60;
 
 /** 노점 4곳 (메인 광장, 트리 양옆) — 가운데 x */
 export const STALL_CENTERS = [522, 594, 846, 918] as const;
@@ -109,7 +113,7 @@ export const INTERACTION_POINTS: readonly InteractionPoint[] = [
   { id: 'CAROUSEL_ENTRY', x: CAROUSEL_X, y: WALK_AREA.y + CAROUSEL_DEPTH + INTERACTION_FRONT_GAP },
   {
     id: 'RINK_GATE',
-    x: (RINK_FENCE_START_X + RINK_FENCE_END_X) / 2,
+    x: RINK_FENCE_START_X + RINK_GATE_OFFSET,
     y: WALK_AREA.y + RINK_FENCE_DEPTH + INTERACTION_FRONT_GAP,
   },
   ...STALL_CENTERS.map((x, i) => ({

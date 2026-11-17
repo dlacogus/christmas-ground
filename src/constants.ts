@@ -80,7 +80,7 @@ export const STARS = {
   minCount: 40,
   maxCount: 60,
   minY: 2,
-  maxY: 130,
+  maxY: 100,
   /** 반짝임 한 주기 (초) */
   minPeriod: 2.5,
   maxPeriod: 7,
@@ -97,8 +97,8 @@ export const FAR_CITY = {
   minWidth: 16,
   maxWidth: 44,
   maxGap: 2,
-  minHeight: 92,
-  maxHeight: 150,
+  minHeight: 96,
+  maxHeight: 132,
   gableChance: 0.35,
   steppedChance: 0.2,
   gableMaxHeight: 10,
@@ -206,7 +206,7 @@ export const GROUND = {
   /** 걷는 띠 위쪽 연석 높이 */
   curbHeight: 4,
   /** 판석 줄 높이 (위=멀리 작게 → 아래=가까이 크게). 합 = WALK_AREA.h */
-  rowHeights: [3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 10, 11],
+  rowHeights: [3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10],
   /** 판석 너비 = 줄 높이 × aspect + extra */
   slabAspect: 3,
   slabExtra: 2,
@@ -279,11 +279,12 @@ export const SNOWFALL = {
 
 /** 임시 그림(단색 상자)의 크기 */
 export const PLACEHOLDER = {
-  treeTopY: 44,
+  /** 대형 트리: 화면 꼭대기 근처까지 */
+  treeTopY: 8,
   treeBaseOffset: 6,
-  treeHalfWidth: 56,
-  treeTrunkHalfWidth: 6,
-  treeBedVisibleHeight: 12,
+  treeHalfWidth: 80,
+  treeTrunkHalfWidth: 8,
+  treeBedVisibleHeight: 14,
   carouselHeight: 84,
   stallHeight: 40,
   rinkHeight: 70,

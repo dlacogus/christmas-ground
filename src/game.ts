@@ -4,7 +4,7 @@ import { drawCharacter } from './character/render';
 import { LAYER_FACTORS, SCREEN_HEIGHT, SCREEN_WIDTH } from './constants';
 import { drawDebugOverlay } from './debug';
 import { createInput } from './input';
-import { createLayers, drawLayers } from './layers';
+import { createLayers, drawLayers, updateLayers } from './layers';
 import { fitCanvasToWindow, frameDt } from './screen';
 import { SPAWN, WALK_AREA } from './world';
 import { createZones } from './zones';
@@ -46,6 +46,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     updateCharacter(character, dt, input.direction());
     for (const zone of zones) zone.update(dt);
     updateCamera(camera, character.x, dt);
+    updateLayers(layers, dt, camera);
 
     drawLayers(ctx, camera, layers);
     if (debug) drawDebugOverlay(ctx, camera, character, zones);

@@ -1,6 +1,8 @@
 // 월드 좌표 데이터. 좌표는 모두 맵 기준 (x 0~1440, y 0~270).
 // 장애물은 '발밑 기준' 사각형이다: 캐릭터의 발 상자가 겹치면 못 지나간다.
 
+import { GROUND } from './constants';
+
 export interface Rect {
   x: number;
   y: number;
@@ -117,44 +119,8 @@ export const INTERACTION_POINTS: readonly InteractionPoint[] = [
   })),
 ];
 
-// --- 뒤 배경 (임시 단색 건물) — 각 레이어 좌표 기준, 바닥 띠 위에 선다 ---
-export interface BuildingShape {
-  w: number;
-  h: number;
-}
-
-export const FAR_BUILDINGS: readonly BuildingShape[] = [
-  { w: 40, h: 96 },
-  { w: 30, h: 122 },
-  { w: 52, h: 84 },
-  { w: 36, h: 134 },
-  { w: 46, h: 104 },
-];
-
-export const PLAZA_BUILDINGS: readonly BuildingShape[] = [
-  { w: 64, h: 70 },
-  { w: 52, h: 90 },
-  { w: 72, h: 62 },
-  { w: 58, h: 82 },
-];
-
-export const BUILDING_GAP = 3;
-
-/** 앞 눈 더미 — 앞 레이어 좌표 기준, 화면 아래쪽에 붙는다 */
-export interface Mound {
-  x: number;
-  w: number;
-  h: number;
-}
-
-export const FOREGROUND_MOUNDS: readonly Mound[] = [
-  { x: 40, w: 60, h: 9 },
-  { x: 330, w: 44, h: 7 },
-  { x: 610, w: 70, h: 10 },
-  { x: 930, w: 50, h: 7 },
-  { x: 1220, w: 64, h: 9 },
-  { x: 1530, w: 56, h: 8 },
-];
+/** 연석 윗줄 = 건물들이 서 있는 선 (바닥 띠 바로 위 연석만큼) */
+export const STREET_LINE_Y = WALK_AREA.y - GROUND.curbHeight;
 
 export function rectsOverlap(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;

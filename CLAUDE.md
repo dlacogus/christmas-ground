@@ -53,3 +53,4 @@
 - `npm run dev` — 개발 서버
 - `npm run build` — 타입 검사 + 빌드
 - `npm test` — vitest
+- `npm run deploy` — 빌드 결과를 `gh-pages` 브랜치에 올려 GitHub Pages(https://dlacogus.github.io/christmas-ground/)에 배포. 자동 배포는 없으니 공유할 변경이 생기면 실행한다.

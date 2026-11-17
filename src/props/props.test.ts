@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SCREEN_HEIGHT, TREE } from '../constants';
 import { createRng } from '../random';
-import { LAMPS, OBSTACLES, SPAWN, TREE_X, getObstacle } from '../world';
+import { LAMPS, OBSTACLES, SPAWN, TREE_X, getObstacle, inZone } from '../world';
 import { createPlazaZone } from '../zones/plaza';
 import {
   foliageHalfWidth,
@@ -96,18 +96,19 @@ describe('트리 장식', () => {
 
 describe('메인 광장 배치', () => {
   it('노점 2곳이 트리 양옆에 있다', () => {
-    const stalls = OBSTACLES.filter((o) => o.id.startsWith('stall-'));
+    const stalls = OBSTACLES.filter((o) => o.id.startsWith('stall-') && inZone('plaza', o.x));
     expect(stalls).toHaveLength(2);
     expect(stalls[0].x + stalls[0].w).toBeLessThan(TREE_X - TREE.baseHalfWidth);
     expect(stalls[1].x).toBeGreaterThan(TREE_X + TREE.baseHalfWidth);
   });
 
   it('가로등 4개가 광장 앞쪽과 뒤쪽에 나뉘어 있다', () => {
-    expect(LAMPS).toHaveLength(4);
-    const ys = LAMPS.map((l) => l.y);
+    const lamps = LAMPS.filter((l) => inZone('plaza', l.x));
+    expect(lamps).toHaveLength(4);
+    const ys = lamps.map((l) => l.y);
     const mid = (Math.min(...ys) + Math.max(...ys)) / 2;
-    expect(LAMPS.filter((l) => l.y < mid)).toHaveLength(2);
-    expect(LAMPS.filter((l) => l.y > mid)).toHaveLength(2);
+    expect(lamps.filter((l) => l.y < mid)).toHaveLength(2);
+    expect(lamps.filter((l) => l.y > mid)).toHaveLength(2);
   });
 
   it('시작 위치는 트리 앞(화단 아래쪽)', () => {

@@ -43,7 +43,8 @@
 - `src/layers.ts` — 깊이 레이어: 하늘 0 / 먼 건물 0.3 / 광장 건물 0.6 / 본 레이어 1 / 앞 눈 더미 1.3. 본 레이어는 발밑 y 정렬. 내리는 눈 세 층은 각각 먼 건물·광장 건물·본 레이어 바로 뒤에 끼운다.
 - `src/scenery/` — 배경: `sky`(띠·별), `farCity`(먼 실루엣), `plazaBuildings`(2층 석조 건물·창 켜고 끄기·전구 줄), `ground`(연석·판석·쌓인 눈), `foreground`(앞 눈 더미·작은 나무), `snowfall`(눈 세 층). 움직이지 않는 부분은 처음 한 번 오프스크린 캔버스에 그려 두고 찍어 쓴다.
 - `src/random.ts` — 시드 고정 무작위. 배경 배치는 `SCENERY_SEED`로 항상 같은 모습.
-- `src/props/` — 구역에 놓는 소품(y 정렬되는 `DepthDrawable`): `tree`(큰 트리·별·전구 물결·장식·화단·선물), `marketStall`(나무 오두막 노점), `streetLamp`(주철 가로등), `pixel`(픽셀 원·빛 번짐·문자열 그림). 구역 파일은 소품을 만들어 배치만 한다. 다른 구역에서도 다시 쓸 수 있다.
+- `src/props/` — 구역에 놓는 소품(y 정렬되는 `DepthDrawable`): `tree`(큰 트리·별·전구 물결·장식·화단·선물), `carousel`(회전목마·목마 회전·흐르는 전구·바닥 불빛), `marketStall`(나무 오두막 노점, 지붕 색 선택), `streetLamp`(주철 가로등), `bench`, `firTree`, `pixel`(픽셀 원·타원·빛 번짐·색 섞기·문자열 그림). 구역 파일은 소품을 만들어 배치만 한다. 다른 구역에서도 다시 쓸 수 있다.
+- `src/audio/` — Web Audio 합성 소리. `musicBox`(회전목마 오르골: 거리에 따라 음량·좌우, 첫 클릭·키 입력 뒤에만 켜짐), `melody`(직접 만든 3/4박자 선율, 문자열 음표).
 - `src/character/` — 스프라이트(문자열 배열, 글자 = 픽셀), 이동·충돌, 입김, 그리기. 코트·목도리 색은 `constants.ts`의 `OUTFITS`로 바꿔 끼운다.
 - `src/input.ts` — 방향키/WASD, 바닥 탭.
 - `src/debug.ts`, `src/spriteSheet.ts` — 개발용 화면.

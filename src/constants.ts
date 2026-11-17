@@ -424,8 +424,11 @@ export const STALL_COLORS = {
   counterTop: '#a8744a',
   interior: '#2e1c12',
   shelf: '#6b4428',
-  roof: '#5c2a26',
-  roofDark: '#45201d',
+  /** 지붕 색 (구역마다 다르게) */
+  roofs: {
+    red: { roof: '#5c2a26', roofDark: '#45201d' },
+    navy: { roof: '#2a3358', roofDark: '#1f2645' },
+  },
   snow: '#e8eef8',
   snowShade: '#b9c4dc',
   candle: '#f3e6c4',
@@ -464,6 +467,150 @@ export const LAMP_COLORS = {
   wreath: '#2b6249',
   wreathDark: '#1f4a3a',
   bow: '#d23a3a',
+} as const;
+
+// ───────────── 회전목마 구역 ─────────────
+
+/** 회전목마 (중심 x는 world.ts의 CAROUSEL_X, 판 위치는 carousel 장애물) */
+export const CAROUSEL = {
+  /** 한 바퀴 (초) — 숨쉬듯 느긋하게 */
+  rotationPeriod: 12,
+  horseCount: 8,
+  horseOrbitRadius: 62,
+  /** 말 발끝 = 판 가운데에서 위로 (막대 가운데쯤 떠 있게) */
+  horseBaseAbove: 20,
+  /** 앞쪽 말일수록 이만큼 아래로 (원근) */
+  horseDepthDrop: 6,
+  bobAmplitude: 4,
+  bobPeriod: 3.2,
+  /** 뒤쪽 말을 어둡게 하는 단계 수와 가장 어두울 때 섞는 비율 */
+  shadeLevels: 4,
+  maxShade: 0.55,
+  /** 뒤쪽 말 크기 (앞쪽 대비) */
+  backScale: 0.82,
+  platformRadiusY: 12,
+  rimHeight: 6,
+  /** 판 가운데에서 지붕 아래선까지 */
+  roofBottomAbove: 76,
+  roofHeight: 32,
+  roofHalfWidth: 88,
+  /** 지붕 둥글기 (작을수록 볼록) */
+  roofCurve: 0.6,
+  /** 지붕 아래선이 가운데에서 앞으로 처지는 정도 (둥근 천막을 앞에서 본 모습) */
+  roofSag: 4,
+  stripeCount: 16,
+  /** 지붕 줄무늬가 도는 모습을 미리 그려 두는 장 수 */
+  roofFrames: 8,
+  roofEdgeShade: 0.8,
+  goldBandHeight: 2,
+  valanceHeight: 6,
+  scallopWidth: 10,
+  bulbSpacing: 6,
+  /** 전구 불빛이 흐르는 속도 (초당 칸)와 한 번에 밝은 칸 수 */
+  bulbChaseSpeed: 8,
+  bulbChaseLength: 7,
+  bulbMinAlpha: 0.35,
+  bulbGlowAlpha: 0.35,
+  poleHalfWidth: 6,
+  poleBandEvery: 14,
+  flagPoleHeight: 8,
+  flagWidth: 7,
+  flagHeight: 5,
+  flagWavePeriod: 0.6,
+  /** 주변 바닥에 번지는 불빛 */
+  floorGlowRadiusX: 130,
+  floorGlowRadiusY: 26,
+  floorGlowAlpha: 0.24,
+  floorGlowRings: 4,
+  floorGlowPulse: 0.15,
+  floorGlowPeriod: 2.4,
+} as const;
+
+export const CAROUSEL_COLORS = {
+  stripeA: '#f3e6c8',
+  stripeB: '#c8343e',
+  stripeAShade: '#c9bc9e',
+  stripeBShade: '#9a2630',
+  gold: '#e2b23e',
+  goldShade: '#b0862a',
+  bulb: '#fff1c2',
+  bulbGlow: '#ffd98a',
+  mirror: '#c9d4ea',
+  mirrorDark: '#8e9bb8',
+  platformTop: '#7a5236',
+  plank: '#6a4529',
+  rim: '#4a3020',
+  flag: '#c8343e',
+  floorGlow: '#ffcf7a',
+  /** 뒤쪽 말을 어둡게 할 때 섞는 밤색 */
+  shadeTarget: '#1a1530',
+  horses: [
+    { body: '#f4f1ea', shade: '#cfc8bb', mane: '#e2b23e' }, // 흰색
+    { body: '#f0dcb0', shade: '#cdb487', mane: '#7a4a2a' }, // 크림
+    { body: '#8a5a3a', shade: '#6a4229', mane: '#3a2418' }, // 갈색
+  ],
+  saddles: ['#c8343e', '#e2b23e'],
+  eye: '#2a1a1a',
+} as const;
+
+/** 나무 벤치 (위에 눈 살짝) */
+export const BENCH = {
+  seatAbove: 7,
+  seatThickness: 2,
+  backTopAbove: 13,
+  backSlats: 2,
+  legInset: 1,
+  snowChance: 0.6,
+} as const;
+
+export const BENCH_COLORS = {
+  wood: '#8a5a38',
+  woodDark: '#6a4529',
+  iron: '#17171f',
+  snow: '#e8eef8',
+} as const;
+
+/** 구역 끝을 막는 작은 전나무 */
+export const FIR = {
+  tierHeight: 6,
+  /** 키에 대한 아래 반폭 비율 */
+  halfWidthRatio: 0.3,
+  trunkHeight: 3,
+  trunkHalfWidth: 1,
+} as const;
+
+// ───────────── 소리 ─────────────
+
+/** 기준음 A4 (Hz), 미디 번호 */
+export const A4_FREQUENCY = 440;
+export const A4_MIDI = 69;
+
+/** 회전목마 오르골 */
+export const MUSIC_BOX = {
+  /** 4분음표 빠르기 (bpm) */
+  tempo: 100,
+  maxVolume: 0.16,
+  /** 이 거리 안에서는 최대, farDistance 밖에서는 들리지 않는다 (px) */
+  nearDistance: 70,
+  farDistance: 380,
+  /** 좌우 소리 위치가 끝까지 가는 거리 */
+  panDistance: 260,
+  /** 음량·좌우 변화를 부드럽게 (초) */
+  smoothing: 0.15,
+  /** 미리 예약하는 시간, 예약 점검 간격 */
+  lookahead: 0.3,
+  scheduleIntervalMs: 100,
+  attack: 0.004,
+  /** 소리가 남아 있는 시간 */
+  noteLength: 2.2,
+  melodyVelocity: 1,
+  bassVelocity: 0.55,
+  /** 오르골 음색: 배음 비율·세기·사라지는 속도 */
+  partials: [
+    { ratio: 1, gain: 1, decay: 0.5 },
+    { ratio: 2, gain: 0.3, decay: 0.3 },
+    { ratio: 4.1, gain: 0.08, decay: 0.12 },
+  ],
 } as const;
 
 /** ?sprites=1 확인 화면 */

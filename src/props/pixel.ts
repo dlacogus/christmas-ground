@@ -27,6 +27,26 @@ export function fillSoftGlow(
   ctx.restore();
 }
 
+/** 두 색 #rrggbb를 t(0~1)만큼 섞는다 */
+export function mixColor(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const ch = (shift: number) => {
+    const ca = (pa >> shift) & 0xff;
+    const cb = (pb >> shift) & 0xff;
+    return Math.round(ca + (cb - ca) * t);
+  };
+  return `#${((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, '0')}`;
+}
+
+/** 가로줄로 채운 픽셀 타원 */
+export function fillPixelEllipse(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number): void {
+  for (let dy = -ry; dy <= ry; dy++) {
+    const half = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy / ry) ** 2)));
+    if (half > 0) ctx.fillRect(cx - half, cy + dy, half * 2, 1);
+  }
+}
+
 /** 문자열 픽셀 그림을 찍는다 (글자 → 색, '.'은 투명) */
 export function stampPixels(
   ctx: CanvasRenderingContext2D,

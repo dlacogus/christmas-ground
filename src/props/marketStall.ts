@@ -31,7 +31,10 @@ function paintItems(ctx: CanvasRenderingContext2D, rng: Rng, left: number, right
   }
 }
 
-function paintStall(ctx: CanvasRenderingContext2D, width: number, bufH: number, rng: Rng): void {
+export type StallRoof = keyof typeof C.roofs;
+
+function paintStall(ctx: CanvasRenderingContext2D, width: number, bufH: number, rng: Rng, roof: StallRoof): void {
+  const roofColors = C.roofs[roof];
   const left = PAD_X;
   const right = PAD_X + width;
   const center = PAD_X + width / 2;
@@ -78,7 +81,7 @@ function paintStall(ctx: CanvasRenderingContext2D, width: number, bufH: number, 
   const roofTop = wallTop - S.roofHeight + 2;
   for (let r = 0; r < S.roofHeight; r++) {
     const half = roofHalfAt(width, r);
-    ctx.fillStyle = r % S.roofTextureEvery === 0 ? C.roofDark : C.roof;
+    ctx.fillStyle = r % S.roofTextureEvery === 0 ? roofColors.roofDark : roofColors.roof;
     ctx.fillRect(Math.round(center - half), roofTop + r, half * 2, 1);
   }
   // 경사를 따라 쌓인 눈
@@ -115,11 +118,11 @@ function paintStall(ctx: CanvasRenderingContext2D, width: number, bufH: number, 
 }
 
 /** foot = 노점이 바닥을 차지하는 사각형 (world.ts의 stall 장애물) */
-export function createMarketStall(foot: Rect, rng: Rng): DepthDrawable {
+export function createMarketStall(foot: Rect, rng: Rng, roof: StallRoof = 'red'): DepthDrawable {
   const bottom = foot.y + foot.h;
   const bufW = foot.w + PAD_X * 2;
   const bufH = S.wallHeight + S.roofHeight;
-  const getBuffer = lazyBuffer(bufW, bufH, (ctx) => paintStall(ctx, foot.w, bufH, rng));
+  const getBuffer = lazyBuffer(bufW, bufH, (ctx) => paintStall(ctx, foot.w, bufH, rng, roof));
   return {
     footY: bottom,
     draw(ctx: CanvasRenderingContext2D, camera: Camera) {

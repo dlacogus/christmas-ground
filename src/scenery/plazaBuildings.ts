@@ -235,7 +235,7 @@ function paintBuilding(ctx: CanvasRenderingContext2D, b: PlazaBuilding): void {
 /** 전구 줄 한 칸의 x에서 처진 높이 */
 export function garlandY(xInSpan: number): number {
   const t = xInSpan / GARLAND.span;
-  return GARLAND.anchorY + Math.round(GARLAND.sag * 4 * t * (1 - t));
+  return STREET_LINE_Y - GARLAND.anchorAboveStreet + Math.round(GARLAND.sag * 4 * t * (1 - t));
 }
 
 function paintGarland(ctx: CanvasRenderingContext2D, width: number): void {

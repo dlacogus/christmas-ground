@@ -188,7 +188,8 @@ export const PLAZA_COLORS = {
 
 /** 건물 앞면 2층 높이에 처지게 걸린 전구 줄 */
 export const GARLAND = {
-  anchorY: 156,
+  /** 건물이 서는 선에서 위로 (2층 높이) */
+  anchorAboveStreet: 40,
   span: 34,
   sag: 5,
   bulbSpacing: 5,
@@ -205,7 +206,7 @@ export const GROUND = {
   /** 걷는 띠 위쪽 연석 높이 */
   curbHeight: 4,
   /** 판석 줄 높이 (위=멀리 작게 → 아래=가까이 크게). 합 = WALK_AREA.h */
-  rowHeights: [3, 3, 4, 4, 5, 5, 6, 7, 8, 8, 9],
+  rowHeights: [3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 10, 11],
   /** 판석 너비 = 줄 높이 × aspect + extra */
   slabAspect: 3,
   slabExtra: 2,
@@ -278,7 +279,7 @@ export const SNOWFALL = {
 
 /** 임시 그림(단색 상자)의 크기 */
 export const PLACEHOLDER = {
-  treeTopY: 64,
+  treeTopY: 44,
   treeBaseOffset: 6,
   treeHalfWidth: 56,
   treeTrunkHalfWidth: 6,

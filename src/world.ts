@@ -28,7 +28,7 @@ export const ZONE_BOUNDS: Readonly<Record<ZoneName, { startX: number; endX: numb
 };
 
 /** 걸을 수 있는 돌바닥 띠. 좌우 끝은 맵 끝에서 막힌다. */
-export const WALK_AREA: Rect = { x: 0, y: 200, w: MAP_WIDTH, h: 62 };
+export const WALK_AREA: Rect = { x: 0, y: 176, w: MAP_WIDTH, h: 88 };
 
 // --- 주요 시설 위치 ---
 /** 트리에서 너무 멀지 않게 구역 오른쪽(광장 쪽)으로 붙인다 */
@@ -43,7 +43,7 @@ export const TREE_BED_DEPTH = 24;
 /** 링크는 구역 왼쪽(광장 쪽)으로 붙이고, 입구도 광장 쪽 끝에 둔다 */
 export const RINK_FENCE_START_X = 970;
 export const RINK_FENCE_END_X = 1300;
-export const RINK_FENCE_DEPTH = 38;
+export const RINK_FENCE_DEPTH = 48;
 /** 울타리 왼쪽 끝에서 입구까지 */
 export const RINK_GATE_OFFSET = 60;
 
@@ -57,7 +57,7 @@ export const STALL_BACK_DEPTH = 10;
 export const INTERACTION_FRONT_GAP = 8;
 
 /** 시작 위치를 트리 화단 앞으로 띄우는 거리 */
-export const SPAWN_FRONT_GAP = 20;
+export const SPAWN_FRONT_GAP = 40;
 
 // --- 장애물 ---
 export interface Obstacle extends Rect {

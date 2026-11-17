@@ -18,6 +18,6 @@ describe('구역 배치', () => {
     const byZone = Object.fromEntries(zones.map((z) => [z.name, z.interactionPoints.map((p) => p.id)]));
     expect(byZone.carousel).toEqual(['CAROUSEL_ENTRY']);
     expect(byZone.rink).toEqual(['RINK_GATE']);
-    expect(byZone.plaza).toEqual(['STALL_1', 'STALL_2', 'STALL_3', 'STALL_4']);
+    expect(byZone.plaza).toEqual(['STALL_1', 'STALL_2']);
   });
 });

@@ -1,4 +1,4 @@
-// 임시 그림: 단색 상자·삼각형. 나중에 진짜 픽셀 그림으로 바꾼다.
+// 임시 그림: 단색 상자. 회전목마·링크를 진짜 픽셀 그림으로 바꿀 때까지 쓴다.
 
 import { layerOffsetX, type Camera } from '../camera';
 import { LAYER_FACTORS } from '../constants';
@@ -16,19 +16,4 @@ export function boxProp(foot: Rect, height: number, color: string): DepthDrawabl
       ctx.fillRect(foot.x - ox, bottom - height, foot.w, height);
     },
   };
-}
-
-/** 한 줄씩 채운 픽셀 삼각형 (경로 채우기의 번짐 없이) */
-export function fillPixelTriangle(
-  ctx: CanvasRenderingContext2D,
-  centerX: number,
-  topY: number,
-  baseY: number,
-  halfWidth: number,
-): void {
-  const height = baseY - topY;
-  for (let y = topY; y < baseY; y++) {
-    const half = Math.round(((y - topY + 1) / height) * halfWidth);
-    ctx.fillRect(centerX - half, y, half * 2, 1);
-  }
 }

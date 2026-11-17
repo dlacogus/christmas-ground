@@ -6,7 +6,7 @@ import { drawDebugOverlay } from './debug';
 import { createInput } from './input';
 import { createLayers, drawLayers, updateLayers } from './layers';
 import { fitCanvasToWindow, frameDt } from './screen';
-import { SPAWN, WALK_AREA } from './world';
+import { SPAWN, TREE_X, WALK_AREA } from './world';
 import { createZones } from './zones';
 import type { DepthDrawable } from './zones/zone';
 
@@ -20,7 +20,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   const camera = createCamera();
   const zones = createZones();
   const character = createCharacter(SPAWN.x, SPAWN.y);
-  snapCamera(camera, character.x);
+  // 처음 들어오면 트리를 화면 가운데에 둔다
+  snapCamera(camera, TREE_X);
 
   const input = createInput(canvas, SCREEN_WIDTH, SCREEN_HEIGHT, (sx, sy) => {
     // 바닥을 탭했을 때만 그 자리로 걸어간다

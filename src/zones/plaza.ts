@@ -1,40 +1,32 @@
-import { layerOffsetX, type Camera } from '../camera';
-import { COLORS, LAYER_FACTORS, PLACEHOLDER } from '../constants';
-import { OBSTACLES, TREE_X, ZONE_BOUNDS, getObstacle } from '../world';
-import { boxProp, fillPixelTriangle } from './placeholder';
-import { pointsInZone, type DepthDrawable, type Zone } from './zone';
+// 메인 광장 (x 480~960): 가운데 큰 트리, 양옆 마켓 노점 2곳, 앞뒤 가로등 4개.
 
-/** 메인 광장 (가운데) — 지금은 초록 삼각형 트리와 노점 상자 4개 */
+import { SCENERY_SEED } from '../constants';
+import { createMarketStall } from '../props/marketStall';
+import { createStreetLamp } from '../props/streetLamp';
+import { createTree } from '../props/tree';
+import { createRng } from '../random';
+import { LAMPS, OBSTACLES, ZONE_BOUNDS } from '../world';
+import { pointsInZone, type Zone } from './zone';
+
+/** 메인 광장 소품 시드 (배경 시드와 겹치지 않게) */
+const PLAZA_SEED_OFFSET = 100;
+
 export function createPlazaZone(): Zone {
   const { startX, endX } = ZONE_BOUNDS.plaza;
-  const bed = getObstacle('tree-bed');
-  const bedBottom = bed.y + bed.h;
-
-  const tree: DepthDrawable = {
-    footY: bedBottom,
-    draw(ctx: CanvasRenderingContext2D, camera: Camera) {
-      const cx = TREE_X - layerOffsetX(camera, LAYER_FACTORS.main);
-      const bedTop = bedBottom - PLACEHOLDER.treeBedVisibleHeight;
-      ctx.fillStyle = COLORS.treeTrunk;
-      ctx.fillRect(cx - PLACEHOLDER.treeTrunkHalfWidth, bed.y, PLACEHOLDER.treeTrunkHalfWidth * 2, bedTop - bed.y);
-      ctx.fillStyle = COLORS.treeGreen;
-      fillPixelTriangle(ctx, cx, PLACEHOLDER.treeTopY, bed.y + PLACEHOLDER.treeBaseOffset, PLACEHOLDER.treeHalfWidth);
-      ctx.fillStyle = COLORS.treeBed;
-      ctx.fillRect(cx - bed.w / 2, bedTop, bed.w, PLACEHOLDER.treeBedVisibleHeight);
-    },
-  };
-
-  const stalls = OBSTACLES.filter((o) => o.id.startsWith('stall-')).map((o) =>
-    boxProp(o, PLACEHOLDER.stallHeight, COLORS.stall),
-  );
+  const rng = createRng(SCENERY_SEED + PLAZA_SEED_OFFSET);
+  const tree = createTree(rng);
+  const stalls = OBSTACLES.filter((o) => o.id.startsWith('stall-')).map((o) => createMarketStall(o, rng));
+  const lamps = LAMPS.map(createStreetLamp);
 
   return {
     name: 'plaza',
     startX,
     endX,
     interactionPoints: pointsInZone(startX, endX),
-    props: [tree, ...stalls],
-    update(_dt: number) {},
+    props: [tree, ...stalls, ...lamps],
+    update(dt: number) {
+      tree.update(dt);
+    },
     draw() {},
   };
 }

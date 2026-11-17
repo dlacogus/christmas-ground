@@ -278,15 +278,192 @@ export const SNOWFALL = {
 
 /** 임시 그림(단색 상자)의 크기 */
 export const PLACEHOLDER = {
-  /** 대형 트리: 화면 꼭대기 근처까지 */
-  treeTopY: 8,
-  treeBaseOffset: 6,
-  treeHalfWidth: 80,
-  treeTrunkHalfWidth: 8,
-  treeBedVisibleHeight: 14,
   carouselHeight: 84,
-  stallHeight: 40,
   rinkHeight: 70,
+} as const;
+
+// ───────────── 메인 광장 소품 ─────────────
+
+/** 큰 트리 (중심 x는 world.ts의 TREE_X) */
+export const TREE = {
+  /** 잎 꼭대기 y — 별이 화면 위로 잘리지 않게 */
+  tipY: 18,
+  /** 잎 맨 아래 y */
+  foliageBottomY: 198,
+  /** 맨 아래 잎 단의 반폭 (폭 약 130px) */
+  baseHalfWidth: 65,
+  tiers: 6,
+  /** 윗단이 아랫단을 덮는 줄 수 */
+  tierOverlap: 10,
+  /** 각 단 윗변 폭 / 아랫변 폭 */
+  tierTopRatio: 0.45,
+  /** 바깥쪽 밝은 초록 테두리 두께 */
+  edgeWidth: 2,
+  /** 단 아래 그늘 줄 수 */
+  shadowRows: 2,
+  /** 단 아래 테두리 들쭉날쭉 패턴 (열마다 아래로 더 내려가는 px) */
+  jagPattern: [0, 1, 2, 1, 0, 0, 1, 2, 2, 1, 0, 1],
+  trunkHalfWidth: 5,
+  /** 별 가운데 = 잎 꼭대기에서 위로 */
+  starCenterAbove: 4,
+  starPeriod: 4,
+  starMinAlpha: 0.7,
+  starGlowRadius: 9,
+  starGlowMinAlpha: 0.25,
+  starGlowMaxAlpha: 0.6,
+  ornamentMinCount: 30,
+  ornamentMaxCount: 40,
+  ornamentMinGap: 9,
+  /** 장식을 잎 테두리 안쪽으로 들이는 거리 */
+  ornamentInset: 4,
+  ornamentTopMargin: 20,
+  ornamentBottomMargin: 6,
+  ornamentSizes: [3, 4],
+  ribbonThickness: 3,
+  /** 리본 기울기 (x 1px당 y) */
+  ribbonSlope: 0.45,
+  /** 리본이 트리 가운데를 지나는 y */
+  ribbonCenterYs: [72, 140],
+  lightMinCount: 60,
+  lightMaxCount: 80,
+  lightInset: 2,
+  lightTopMargin: 8,
+  lightMinPeriod: 1.6,
+  lightMaxPeriod: 4.2,
+  lightMinAlpha: 0.45,
+  lightMaxAlpha: 1,
+  /** 이 밝기 이상이면 전구 둘레에 은은한 번짐 */
+  lightHaloLevel: 0.75,
+  lightHaloAlpha: 0.35,
+  /** 아래에서 위로 흐르는 빛 물결 */
+  waveInterval: 30,
+  waveDuration: 3,
+  /** 처음 들어오고 몇 초 뒤 첫 물결 */
+  waveFirstDelay: 4,
+  waveWidth: 14,
+  /** 물결이 지나갈 때 번짐 반지름 */
+  waveGlowRadius: 3,
+  waveGlowAlpha: 0.5,
+  /** 화단 타원: 화단 상자 윗선에서 중심까지, 세로 반지름, 앞 벽 높이, 테두리 두께 */
+  bedCenterFromTop: 7,
+  bedRadiusY: 6,
+  bedWallHeight: 3,
+  bedRimWidth: 3,
+  bedSnowChance: 0.08,
+  /** 선물 상자 (트리 중심 기준 x, 크기, 색 이름) */
+  gifts: [
+    { dx: -27, w: 9, h: 8, box: 'red', ribbon: 'gold' },
+    { dx: -16, w: 8, h: 11, box: 'green', ribbon: 'gold' },
+    { dx: -4, w: 9, h: 6, box: 'gold', ribbon: 'red' },
+    { dx: 11, w: 10, h: 9, box: 'red', ribbon: 'gold' },
+    { dx: 23, w: 7, h: 7, box: 'green', ribbon: 'red' },
+  ],
+  /** 선물 바닥 = 화단 중심에서 아래로 */
+  giftBaseBelowCenter: 3,
+} as const;
+
+export const TREE_COLORS = {
+  needleDark: '#1d4a34',
+  needleLight: '#2f7348',
+  needleShadow: '#143526',
+  trunk: '#4a3020',
+  trunkShade: '#36231a',
+  star: '#ffd34d',
+  starBright: '#fff2a8',
+  starGlow: '#ffe08a',
+  light: '#fff1c2',
+  lightHalo: '#ffd98a',
+  ribbon: '#f1d48a',
+  ribbonLight: '#fff3cf',
+  ribbonShade: '#c9a85e',
+  ornaments: [
+    { base: '#e8b83a', shade: '#b8862a' }, // 금
+    { base: '#d6dbe8', shade: '#9aa2b8' }, // 은
+    { base: '#d23a3a', shade: '#9e2626' }, // 빨강
+  ],
+  ornamentShine: '#ffffff',
+  bedStone: '#6f7188',
+  bedStoneDark: '#4f5068',
+  bedSoil: '#2b2320',
+  snow: '#e8eef8',
+  gift: {
+    red: { base: '#c73a3a', shade: '#962a2a' },
+    green: { base: '#2f8a52', shade: '#226540' },
+    gold: { base: '#e2b23e', shade: '#b0862a' },
+  },
+} as const;
+
+/** 나무 오두막 마켓 노점 */
+export const MARKET_STALL = {
+  wallHeight: 34,
+  counterHeight: 12,
+  postWidth: 4,
+  openingTopGap: 4,
+  roofHeight: 20,
+  roofOverhang: 5,
+  /** 지붕 위 눈: 경사를 따라 쌓인 두께, 처마 끝 눈 덩이 */
+  snowThickness: 3,
+  eaveSnowWidth: 6,
+  plankEvery: 4,
+  counterPlankEvery: 4,
+  roofTextureEvery: 3,
+  shelfCount: 2,
+  itemSpacing: 5,
+  candleChance: 0.4,
+  candleHeight: 3,
+  bulbSpacing: 4,
+  bulbGlowAlpha: 0.3,
+  /** 안쪽 따뜻한 빛 (아래가 가장 밝다) */
+  warmGlowMaxAlpha: 0.35,
+} as const;
+
+export const STALL_COLORS = {
+  wood: '#5a3a26',
+  woodDark: '#432a1b',
+  woodLight: '#8a5a38',
+  counterTop: '#a8744a',
+  interior: '#2e1c12',
+  shelf: '#6b4428',
+  roof: '#5c2a26',
+  roofDark: '#45201d',
+  snow: '#e8eef8',
+  snowShade: '#b9c4dc',
+  candle: '#f3e6c4',
+  flame: '#ffd36b',
+  warmGlow: '#ffb347',
+  items: ['#d23a3a', '#e8b83a', '#d6dbe8', '#3aa36b'],
+  itemShine: '#ffffff',
+} as const;
+
+/** 주철 가로등 */
+export const STREET_LAMP = {
+  height: 58,
+  baseWidth: 6,
+  baseHeight: 5,
+  plinthWidth: 4,
+  plinthHeight: 2,
+  poleWidth: 2,
+  /** 기둥 장식 고리 = 발밑에서 위로 */
+  collarAbove: 40,
+  /** 리스 가운데 = 발밑에서 위로 */
+  wreathAbove: 26,
+  wreathRadius: 3,
+  armHalfWidth: 7,
+  lanternWidth: 6,
+  lanternHeight: 8,
+  glowRadius: 12,
+  glowAlpha: 0.3,
+} as const;
+
+export const LAMP_COLORS = {
+  iron: '#17171f',
+  ironLight: '#2c2c3a',
+  glass: '#ffd98a',
+  glassBright: '#fff1c4',
+  glow: '#ffcf7a',
+  wreath: '#2b6249',
+  wreathDark: '#1f4a3a',
+  bow: '#d23a3a',
 } as const;
 
 /** ?sprites=1 확인 화면 */
@@ -312,12 +489,8 @@ export const DEBUG = {
 export const COLORS = {
   nightSky: '#141a3a',
   bulbGold: '#ffc857',
-  treeGreen: '#2e7d4f',
-  treeTrunk: '#5a3b26',
-  treeBed: '#7a5236',
   carouselGold: '#d9a93c',
   rinkIce: '#8fd3f0',
-  stall: '#8a4b3a',
   shadow: '#0a0d20',
   breath: '#ffffff',
   sheetBackground: '#141a3a',

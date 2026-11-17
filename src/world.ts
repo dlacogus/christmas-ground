@@ -37,10 +37,11 @@ export const CAROUSEL_HALF_WIDTH = 44;
 export const CAROUSEL_DEPTH = 44;
 
 export const TREE_X = 720;
-export const TREE_BED_HALF_WIDTH = 34;
-export const TREE_BED_DEPTH = 28;
+/** 낮은 원형 화단 (발밑 기준 사각형 = 타원 화단을 감싸는 상자) */
+export const TREE_BED_HALF_WIDTH = 44;
+export const TREE_BED_DEPTH = 16;
 /** 트리는 광장 안쪽에 선다: 바닥 띠 윗선에서 이만큼 앞 (뒤로도 지나갈 수 있음) */
-export const TREE_BED_SETBACK = 40;
+export const TREE_BED_SETBACK = 86;
 
 /** 링크는 구역 왼쪽(광장 쪽)으로 붙이고, 입구도 광장 쪽 끝에 둔다 */
 export const RINK_FENCE_START_X = 970;
@@ -49,17 +50,28 @@ export const RINK_FENCE_DEPTH = 90;
 /** 울타리 왼쪽 끝에서 입구까지 */
 export const RINK_GATE_OFFSET = 60;
 
-/** 노점 4곳 (메인 광장, 트리 양옆) — 가운데 x */
-export const STALL_CENTERS = [522, 594, 846, 918] as const;
-export const STALL_WIDTH = 44;
-/** 노점 뒷면이 바닥 띠를 차지하는 깊이 */
-export const STALL_BACK_DEPTH = 10;
+/** 마켓 노점 2곳 (트리 양옆, 광장 뒤쪽) — 가운데 x */
+export const STALL_CENTERS = [580, 860] as const;
+export const STALL_WIDTH = 64;
+/** 노점 오두막이 바닥 띠를 차지하는 깊이 */
+export const STALL_BACK_DEPTH = 30;
+
+/** 가로등 4개: 광장 뒤쪽 2개(등 하나), 앞쪽 2개(등 둘). y는 발밑 */
+export const LAMPS = [
+  { x: 510, y: 126, heads: 1 },
+  { x: 950, y: 126, heads: 1 },
+  { x: 600, y: 252, heads: 2 },
+  { x: 840, y: 252, heads: 2 },
+] as const;
+/** 가로등 받침이 바닥을 차지하는 크기 */
+export const LAMP_FOOT_HALF_WIDTH = 3;
+export const LAMP_FOOT_DEPTH = 3;
 
 /** 상호작용 지점을 시설 앞쪽으로 띄우는 거리 */
 export const INTERACTION_FRONT_GAP = 8;
 
 /** 시작 위치를 트리 화단 앞으로 띄우는 거리 */
-export const SPAWN_FRONT_GAP = 30;
+export const SPAWN_FRONT_GAP = 26;
 
 // --- 장애물 ---
 export interface Obstacle extends Rect {
@@ -87,6 +99,13 @@ export const OBSTACLES: readonly Obstacle[] = [
     y: WALK_AREA.y,
     w: STALL_WIDTH,
     h: STALL_BACK_DEPTH,
+  })),
+  ...LAMPS.map((lamp, i) => ({
+    id: `lamp-${i + 1}`,
+    x: lamp.x - LAMP_FOOT_HALF_WIDTH,
+    y: lamp.y - LAMP_FOOT_DEPTH,
+    w: LAMP_FOOT_HALF_WIDTH * 2,
+    h: LAMP_FOOT_DEPTH,
   })),
   {
     id: 'rink-fence',

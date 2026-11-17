@@ -1,0 +1,161 @@
+// 월드 좌표 데이터. 좌표는 모두 맵 기준 (x 0~1440, y 0~270).
+// 장애물은 '발밑 기준' 사각형이다: 캐릭터의 발 상자가 겹치면 못 지나간다.
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export const MAP_WIDTH = 1440;
+export const MAP_HEIGHT = 270;
+
+export type ZoneName = 'carousel' | 'plaza' | 'rink';
+
+/** 구역 경계 (x 좌표, 시작 포함 ~ 끝 미포함) */
+export const ZONE_BOUNDS: Readonly<Record<ZoneName, { startX: number; endX: number }>> = {
+  carousel: { startX: 0, endX: 480 },
+  plaza: { startX: 480, endX: 960 },
+  rink: { startX: 960, endX: 1440 },
+};
+
+/** 걸을 수 있는 돌바닥 띠. 좌우 끝은 맵 끝에서 막힌다. */
+export const WALK_AREA: Rect = { x: 0, y: 200, w: MAP_WIDTH, h: 62 };
+
+// --- 주요 시설 위치 ---
+export const CAROUSEL_X = 240;
+export const CAROUSEL_HALF_WIDTH = 44;
+export const CAROUSEL_DEPTH = 24;
+
+export const TREE_X = 720;
+export const TREE_BED_HALF_WIDTH = 22;
+export const TREE_BED_DEPTH = 24;
+
+export const RINK_FENCE_START_X = 1010;
+export const RINK_FENCE_END_X = 1390;
+export const RINK_FENCE_DEPTH = 38;
+
+/** 노점 4곳 (메인 광장, 트리 양옆) — 가운데 x */
+export const STALL_CENTERS = [522, 594, 846, 918] as const;
+export const STALL_WIDTH = 44;
+/** 노점 뒷면이 바닥 띠를 차지하는 깊이 */
+export const STALL_BACK_DEPTH = 10;
+
+/** 상호작용 지점을 시설 앞쪽으로 띄우는 거리 */
+export const INTERACTION_FRONT_GAP = 8;
+
+/** 시작 위치를 트리 화단 앞으로 띄우는 거리 */
+export const SPAWN_FRONT_GAP = 20;
+
+// --- 장애물 ---
+export interface Obstacle extends Rect {
+  id: string;
+}
+
+export const OBSTACLES: readonly Obstacle[] = [
+  {
+    id: 'carousel',
+    x: CAROUSEL_X - CAROUSEL_HALF_WIDTH,
+    y: WALK_AREA.y,
+    w: CAROUSEL_HALF_WIDTH * 2,
+    h: CAROUSEL_DEPTH,
+  },
+  {
+    id: 'tree-bed',
+    x: TREE_X - TREE_BED_HALF_WIDTH,
+    y: WALK_AREA.y,
+    w: TREE_BED_HALF_WIDTH * 2,
+    h: TREE_BED_DEPTH,
+  },
+  ...STALL_CENTERS.map((cx, i) => ({
+    id: `stall-${i + 1}`,
+    x: cx - STALL_WIDTH / 2,
+    y: WALK_AREA.y,
+    w: STALL_WIDTH,
+    h: STALL_BACK_DEPTH,
+  })),
+  {
+    id: 'rink-fence',
+    x: RINK_FENCE_START_X,
+    y: WALK_AREA.y,
+    w: RINK_FENCE_END_X - RINK_FENCE_START_X,
+    h: RINK_FENCE_DEPTH,
+  },
+];
+
+export function getObstacle(id: string): Obstacle {
+  const found = OBSTACLES.find((o) => o.id === id);
+  if (!found) throw new Error(`장애물 없음: ${id}`);
+  return found;
+}
+
+/** 시작 위치: 트리 앞 */
+export const SPAWN: Point = { x: TREE_X, y: WALK_AREA.y + TREE_BED_DEPTH + SPAWN_FRONT_GAP };
+
+// --- 상호작용 지점 (자리만, 동작 없음) ---
+export interface InteractionPoint extends Point {
+  id: string;
+}
+
+export const INTERACTION_POINTS: readonly InteractionPoint[] = [
+  { id: 'CAROUSEL_ENTRY', x: CAROUSEL_X, y: WALK_AREA.y + CAROUSEL_DEPTH + INTERACTION_FRONT_GAP },
+  {
+    id: 'RINK_GATE',
+    x: (RINK_FENCE_START_X + RINK_FENCE_END_X) / 2,
+    y: WALK_AREA.y + RINK_FENCE_DEPTH + INTERACTION_FRONT_GAP,
+  },
+  ...STALL_CENTERS.map((x, i) => ({
+    id: `STALL_${i + 1}`,
+    x,
+    y: WALK_AREA.y + STALL_BACK_DEPTH + INTERACTION_FRONT_GAP,
+  })),
+];
+
+// --- 뒤 배경 (임시 단색 건물) — 각 레이어 좌표 기준, 바닥 띠 위에 선다 ---
+export interface BuildingShape {
+  w: number;
+  h: number;
+}
+
+export const FAR_BUILDINGS: readonly BuildingShape[] = [
+  { w: 40, h: 96 },
+  { w: 30, h: 122 },
+  { w: 52, h: 84 },
+  { w: 36, h: 134 },
+  { w: 46, h: 104 },
+];
+
+export const PLAZA_BUILDINGS: readonly BuildingShape[] = [
+  { w: 64, h: 70 },
+  { w: 52, h: 90 },
+  { w: 72, h: 62 },
+  { w: 58, h: 82 },
+];
+
+export const BUILDING_GAP = 3;
+
+/** 앞 눈 더미 — 앞 레이어 좌표 기준, 화면 아래쪽에 붙는다 */
+export interface Mound {
+  x: number;
+  w: number;
+  h: number;
+}
+
+export const FOREGROUND_MOUNDS: readonly Mound[] = [
+  { x: 40, w: 60, h: 9 },
+  { x: 330, w: 44, h: 7 },
+  { x: 610, w: 70, h: 10 },
+  { x: 930, w: 50, h: 7 },
+  { x: 1220, w: 64, h: 9 },
+  { x: 1530, w: 56, h: 8 },
+];
+
+export function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}

@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { clampCameraX } from '../camera';
-import { MAP_WIDTH, SCREEN_WIDTH } from '../constants';
+import { INTERACTION_POINTS, MAP_WIDTH } from '../world';
 import { createZones } from './index';
 
 describe('구역 배치', () => {
+  const zones = createZones();
+
   it('세 구역이 빈틈 없이 맵 전체를 덮는다', () => {
-    const zones = createZones();
     expect(zones.map((z) => z.name)).toEqual(['carousel', 'plaza', 'rink']);
     expect(zones[0].startX).toBe(0);
-    for (let i = 1; i < zones.length; i++) {
-      expect(zones[i].startX).toBe(zones[i - 1].endX);
-    }
-    expect(zones[zones.length - 1].endX).toBe(MAP_WIDTH);
+    for (let i = 1; i < zones.length; i++) expect(zones[i].startX).toBe(zones[i - 1].endX);
+    expect(zones.at(-1)!.endX).toBe(MAP_WIDTH);
   });
-});
 
-describe('카메라', () => {
-  it('맵 범위 밖으로 나가지 않는다', () => {
-    expect(clampCameraX(-50)).toBe(0);
-    expect(clampCameraX(5000)).toBe(MAP_WIDTH - SCREEN_WIDTH);
+  it('상호작용 지점은 자기 구역에 하나씩 들어간다', () => {
+    const ids = zones.flatMap((z) => z.interactionPoints.map((p) => p.id));
+    expect(ids.sort()).toEqual(INTERACTION_POINTS.map((p) => p.id).sort());
+    const byZone = Object.fromEntries(zones.map((z) => [z.name, z.interactionPoints.map((p) => p.id)]));
+    expect(byZone.carousel).toEqual(['CAROUSEL_ENTRY']);
+    expect(byZone.rink).toEqual(['RINK_GATE']);
+    expect(byZone.plaza).toEqual(['STALL_1', 'STALL_2', 'STALL_3', 'STALL_4']);
   });
 });

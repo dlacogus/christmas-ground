@@ -32,9 +32,22 @@
 ## 구조
 - 구역은 `src/zones/`에 파일 하나씩: `plaza.ts`, `carousel.ts`, `rink.ts`.
 - 각 구역은 자기 좌표(`startX`, `endX`), `update(dt)`, `draw(ctx, camera)`를 갖는다 (`src/zones/zone.ts`의 `Zone` 인터페이스).
-- 새 기능은 구역에 **상호작용 지점**(`interactionPoints`)을 추가하는 식으로 붙인다.
-- 모든 숫자(속도, 좌표, 색)는 상수 파일 `src/constants.ts`에 모은다.
+  - `draw`는 바닥에 붙은 납작한 것, `props`는 발밑 y로 앞뒤 정렬되는 시설.
+- 새 기능은 구역에 **상호작용 지점**(`interactionPoints`)을 추가하는 식으로 붙인다. 지점 좌표는 `src/world.ts`의 `INTERACTION_POINTS`에 두면 x 범위에 맞는 구역이 가져간다.
+- 모든 숫자는 한곳에 모은다: 월드 좌표(맵, 구역, 바닥 띠, 장애물, 지점, 시작 위치)는 `src/world.ts`, 속도·시간·크기·색은 `src/constants.ts`.
 - `localStorage` 접근은 항상 `try/catch`로 감싼다.
+
+### 파일 지도
+- `src/world.ts` — 맵 1440x270, 구역 경계, `WALK_AREA`(돌바닥 띠 y 200~262), 발밑 기준 장애물, `SPAWN`, 상호작용 지점.
+- `src/camera.ts` — 캐릭터를 화면 가운데에 두고 매 프레임 차이의 10%씩 따라감, 0~960에서 멈춤, 그릴 때 정수 픽셀로 반올림.
+- `src/layers.ts` — 깊이 레이어: 하늘 0 / 먼 건물 0.3 / 광장 건물 0.6 / 본 레이어 1 / 앞 눈 더미 1.3. 본 레이어는 발밑 y 정렬.
+- `src/character/` — 스프라이트(문자열 배열, 글자 = 픽셀), 이동·충돌, 입김, 그리기. 코트·목도리 색은 `constants.ts`의 `OUTFITS`로 바꿔 끼운다.
+- `src/input.ts` — 방향키/WASD, 바닥 탭.
+- `src/debug.ts`, `src/spriteSheet.ts` — 개발용 화면.
+
+## 개발용 주소
+- `?debug=1` — 바닥 띠, 장애물, 상호작용 지점, 구역 경계를 겹쳐 보여주고 카메라·캐릭터 좌표 표시.
+- `?sprites=1` — 캐릭터 모든 자세를 4배로 확대해 격자로 보여줌.
 
 ## 명령
 - `npm run dev` — 개발 서버

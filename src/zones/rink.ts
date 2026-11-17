@@ -1,17 +1,18 @@
-import type { Camera } from '../camera';
-import { ZONE_BOUNDS } from '../constants';
-import type { InteractionPoint, Zone } from './zone';
+import { COLORS, PLACEHOLDER } from '../constants';
+import { ZONE_BOUNDS, getObstacle } from '../world';
+import { boxProp } from './placeholder';
+import { pointsInZone, type Zone } from './zone';
 
-/** 스케이트장 (오른쪽) — 아직 뼈대만 있다. */
+/** 스케이트장 구역 (오른쪽) — 지금은 하늘색 상자 */
 export function createRinkZone(): Zone {
-  const interactionPoints: InteractionPoint[] = [];
-
+  const { startX, endX } = ZONE_BOUNDS.rink;
   return {
     name: 'rink',
-    startX: ZONE_BOUNDS.rink.startX,
-    endX: ZONE_BOUNDS.rink.endX,
-    interactionPoints,
+    startX,
+    endX,
+    interactionPoints: pointsInZone(startX, endX),
+    props: [boxProp(getObstacle('rink-fence'), PLACEHOLDER.rinkHeight, COLORS.rinkIce)],
     update(_dt: number) {},
-    draw(_ctx: CanvasRenderingContext2D, _camera: Camera) {},
+    draw() {},
   };
 }

@@ -80,7 +80,7 @@ export const STARS = {
   minCount: 40,
   maxCount: 60,
   minY: 2,
-  maxY: 100,
+  maxY: 60,
   /** 반짝임 한 주기 (초) */
   minPeriod: 2.5,
   maxPeriod: 7,
@@ -97,8 +97,8 @@ export const FAR_CITY = {
   minWidth: 16,
   maxWidth: 44,
   maxGap: 2,
-  minHeight: 96,
-  maxHeight: 132,
+  minHeight: 84,
+  maxHeight: 112,
   gableChance: 0.35,
   steppedChance: 0.2,
   gableMaxHeight: 10,
@@ -123,16 +123,16 @@ export const PLAZA_BUILDINGS = {
   /** 창문 한 칸(베이) 너비 */
   bayWidth: 13,
   sideMargin: 4,
-  groundFloorHeight: 24,
-  floorHeight: 18,
-  roofHeight: 14,
+  groundFloorHeight: 22,
+  floorHeight: 16,
+  roofHeight: 12,
   /** 지붕이 한 줄 올라갈 때 안으로 들어가는 정도 */
   roofSlope: 0.25,
   roofTextureEvery: 3,
   corniceHeight: 2,
   windowWidth: 7,
   windowHeight: 10,
-  windowTopOffset: 4,
+  windowTopOffset: 3,
   /** 격자 창 가로 창살 위치 (창 높이 비율) */
   transomFraction: 0.4,
   archWidth: 9,
@@ -189,7 +189,7 @@ export const PLAZA_COLORS = {
 /** 건물 앞면 2층 높이에 처지게 걸린 전구 줄 */
 export const GARLAND = {
   /** 건물이 서는 선에서 위로 (2층 높이) */
-  anchorAboveStreet: 40,
+  anchorAboveStreet: 36,
   span: 34,
   sag: 5,
   bulbSpacing: 5,
@@ -206,7 +206,7 @@ export const GROUND = {
   /** 걷는 띠 위쪽 연석 높이 */
   curbHeight: 4,
   /** 판석 줄 높이 (위=멀리 작게 → 아래=가까이 크게). 합 = WALK_AREA.h */
-  rowHeights: [3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10],
+  rowHeights: [3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 10, 10],
   /** 판석 너비 = 줄 높이 × aspect + extra */
   slabAspect: 3,
   slabExtra: 2,

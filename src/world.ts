@@ -28,22 +28,24 @@ export const ZONE_BOUNDS: Readonly<Record<ZoneName, { startX: number; endX: numb
 };
 
 /** 걸을 수 있는 돌바닥 띠. 좌우 끝은 맵 끝에서 막힌다. */
-export const WALK_AREA: Rect = { x: 0, y: 160, w: MAP_WIDTH, h: 104 };
+export const WALK_AREA: Rect = { x: 0, y: 140, w: MAP_WIDTH, h: 124 };
 
 // --- 주요 시설 위치 ---
 /** 트리에서 너무 멀지 않게 구역 오른쪽(광장 쪽)으로 붙인다 */
 export const CAROUSEL_X = 380;
 export const CAROUSEL_HALF_WIDTH = 44;
-export const CAROUSEL_DEPTH = 30;
+export const CAROUSEL_DEPTH = 36;
 
 export const TREE_X = 720;
 export const TREE_BED_HALF_WIDTH = 34;
 export const TREE_BED_DEPTH = 28;
+/** 트리는 광장 안쪽에 선다: 바닥 띠 윗선에서 이만큼 앞 (뒤로도 지나갈 수 있음) */
+export const TREE_BED_SETBACK = 26;
 
 /** 링크는 구역 왼쪽(광장 쪽)으로 붙이고, 입구도 광장 쪽 끝에 둔다 */
 export const RINK_FENCE_START_X = 970;
 export const RINK_FENCE_END_X = 1300;
-export const RINK_FENCE_DEPTH = 56;
+export const RINK_FENCE_DEPTH = 70;
 /** 울타리 왼쪽 끝에서 입구까지 */
 export const RINK_GATE_OFFSET = 60;
 
@@ -57,7 +59,7 @@ export const STALL_BACK_DEPTH = 10;
 export const INTERACTION_FRONT_GAP = 8;
 
 /** 시작 위치를 트리 화단 앞으로 띄우는 거리 */
-export const SPAWN_FRONT_GAP = 40;
+export const SPAWN_FRONT_GAP = 30;
 
 // --- 장애물 ---
 export interface Obstacle extends Rect {
@@ -75,7 +77,7 @@ export const OBSTACLES: readonly Obstacle[] = [
   {
     id: 'tree-bed',
     x: TREE_X - TREE_BED_HALF_WIDTH,
-    y: WALK_AREA.y,
+    y: WALK_AREA.y + TREE_BED_SETBACK,
     w: TREE_BED_HALF_WIDTH * 2,
     h: TREE_BED_DEPTH,
   },
@@ -102,7 +104,10 @@ export function getObstacle(id: string): Obstacle {
 }
 
 /** 시작 위치: 트리 앞 */
-export const SPAWN: Point = { x: TREE_X, y: WALK_AREA.y + TREE_BED_DEPTH + SPAWN_FRONT_GAP };
+export const SPAWN: Point = {
+  x: TREE_X,
+  y: WALK_AREA.y + TREE_BED_SETBACK + TREE_BED_DEPTH + SPAWN_FRONT_GAP,
+};
 
 // --- 상호작용 지점 (자리만, 동작 없음) ---
 export interface InteractionPoint extends Point {

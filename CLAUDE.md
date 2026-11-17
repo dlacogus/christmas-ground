@@ -44,6 +44,7 @@
 - `src/scenery/` — 배경: `sky`(띠·별), `farCity`(먼 실루엣), `plazaBuildings`(2층 석조 건물·창 켜고 끄기·전구 줄), `ground`(연석·판석·쌓인 눈), `foreground`(앞 눈 더미·작은 나무), `snowfall`(눈 세 층). 움직이지 않는 부분은 처음 한 번 오프스크린 캔버스에 그려 두고 찍어 쓴다.
 - `src/random.ts` — 시드 고정 무작위. 배경 배치는 `SCENERY_SEED`로 항상 같은 모습.
 - `src/props/` — 구역에 놓는 소품(y 정렬되는 `DepthDrawable`): `tree`(큰 트리·별·전구 물결·장식·화단·선물), `carousel`(회전목마·목마 회전·흐르는 전구·바닥 불빛), `marketStall`(나무 오두막 노점, 지붕 색 선택), `streetLamp`(주철 가로등), `bench`, `firTree`, `pixel`(픽셀 원·타원·빛 번짐·색 섞기·문자열 그림). 구역 파일은 소품을 만들어 배치만 한다. 다른 구역에서도 다시 쓸 수 있다.
+  - 목마(30x23)는 캐릭터가 탈 크기로 맞춰 두었다. 태울 때는 `horseSeat(말)`이 주는 안장 자리에 캐릭터 엉덩이를 맞추고, 뒤쪽 말이면 같은 `scale`로 줄여 그린다. 안장 위 캐릭터 높이는 `CAROUSEL.riderAboveSeat` — 지붕 장식에 닿지 않는지 테스트가 지킨다.
 - `src/audio/` — Web Audio 합성 소리. `musicBox`(회전목마 오르골: 거리에 따라 음량·좌우, 첫 클릭·키 입력 뒤에만 켜짐), `melody`(직접 만든 3/4박자 선율, 문자열 음표).
 - `src/character/` — 스프라이트(문자열 배열, 글자 = 픽셀), 이동·충돌, 입김, 그리기. 코트·목도리 색은 `constants.ts`의 `OUTFITS`로 바꿔 끼운다.
 - `src/input.ts` — 방향키/WASD, 바닥 탭.

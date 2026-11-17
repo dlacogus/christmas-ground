@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { parseSong, BEATS_PER_BAR, noteFrequency } from '../audio/melody';
 import { musicBoxPan, musicBoxVolume } from '../audio/musicBox';
-import { CAROUSEL, MUSIC_BOX } from '../constants';
+import { CAROUSEL, CHARACTER, MUSIC_BOX } from '../constants';
 import { CAROUSEL_X, FIRS, FIR_LINE_X, INTERACTION_POINTS, LAMPS, STALLS, getObstacle, inZone } from '../world';
-import { HORSE_HEIGHT, HORSE_WIDTH, bulbLevel, carouselGeometry, horseStates, shadeLevel } from './carousel';
+import {
+  HORSE_HEIGHT,
+  HORSE_WIDTH,
+  bulbLevel,
+  carouselGeometry,
+  horseSeat,
+  horseStates,
+  roofBottomAt,
+  shadeLevel,
+} from './carousel';
 
 describe('회전목마 모양', () => {
   it('폭 약 160px, 높이 약 140px', () => {
@@ -22,8 +31,22 @@ describe('회전목마 모양', () => {
     expect(entry.y).toBeGreaterThan(platform.y + platform.h);
   });
 
-  it('목마 스프라이트는 22x18 (캐릭터 키 32px 대비 너무 작지 않게)', () => {
-    expect([HORSE_WIDTH, HORSE_HEIGHT]).toEqual([22, 18]);
+  it('목마는 캐릭터가 탈 수 있는 크기 (몸통 ≈ 캐릭터 폭 2배, 키는 캐릭터보다 조금 작게)', () => {
+    expect([HORSE_WIDTH, HORSE_HEIGHT]).toEqual([30, 23]);
+    expect(HORSE_WIDTH).toBeGreaterThanOrEqual(CHARACTER.spriteWidth * 1.8);
+    expect(HORSE_HEIGHT).toBeLessThan(CHARACTER.spriteHeight);
+  });
+
+  it('언제 어느 말에 타도 머리가 지붕 장식에 닿지 않고, 안장은 말 위에 있다', () => {
+    for (let t = 0; t < CAROUSEL.rotationPeriod; t += 0.37) {
+      for (const h of horseStates(t)) {
+        const seat = horseSeat(h);
+        const valanceBottom = roofBottomAt(seat.x - CAROUSEL_X) + CAROUSEL.goldBandHeight + CAROUSEL.valanceHeight;
+        expect(seat.y - CAROUSEL.riderAboveSeat * seat.scale).toBeGreaterThan(valanceBottom);
+        expect(seat.y).toBeLessThan(h.y);
+        expect(Math.abs(seat.x - h.x)).toBeLessThan(HORSE_WIDTH / 2);
+      }
+    }
   });
 });
 

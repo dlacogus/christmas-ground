@@ -8,7 +8,6 @@ import { lazyBuffer, type PixelBuffer } from '../scenery/buffer';
 import { CAROUSEL_X, getObstacle } from '../world';
 import type { DepthDrawable } from '../zones/zone';
 import { fillPixelEllipse, mixColor } from './pixel';
-
 // ───────────── 위치 계산 (순수) ─────────────
 
 export function carouselGeometry() {
@@ -80,27 +79,38 @@ export function bulbLevel(index: number, time: number): number {
 
 // ───────────── 목마 스프라이트 ─────────────
 
-/** 오른쪽을 보는 목마 (22x18), 앞발 하나를 든 모습. B 몸, D 그늘, M 갈기, T 꼬리, S 안장, E 눈 */
+/**
+ * 오른쪽을 보는 목마 (30x23), 앞발 하나를 든 모습. B 몸, D 그늘, M 갈기, T 꼬리, S 안장, E 눈.
+ * 나중에 캐릭터(16x32)가 탈 수 있게: 몸통 길이 ≈ 캐릭터 폭 2배, 안장은 HORSE_SEAT.
+ */
 const HORSE: readonly string[] = [
-  '...............MM.....',
-  '..............MBBB....',
-  '.............MBBBBB...',
-  '.............MBBEBBB..',
-  '............MMBBBBBBBB',
-  '............MBBB...DBD',
-  '...........MMBBB......',
-  'TT.........MBBBB......',
-  'TTT......SSSBBBB......',
-  '.TTBBBBBBSSSBBBB......',
-  '..TBBBBBBSSSBBBBB.....',
-  '...BBBBBBBBBBBBBBBDD..',
-  '...BBBBBBBBBBBBBB..DD.',
-  '...BBD.......BBD....D.',
-  '...BD.......BD.....D..',
-  '..BD........BD........',
-  '.BD.........D.........',
-  '.D..........D.........',
+  '........................BB....',
+  '.....................MMBBBB...',
+  '....................MMBBBBBB..',
+  '...................MMBBBEBBBB.',
+  '..................MMBBBBBBBBBB',
+  '..................MMBBBBBBBBBD',
+  '.................MMBBBB....DDD',
+  '.................MMBBBB.......',
+  '................MMBBBBB.......',
+  'TT.........SSSSMMBBBBB........',
+  'TTT......SSSSSSBBBBBBB........',
+  '.TTBBBBBBSSSSSSBBBBBBB........',
+  '..TBBBBBBBSSSSBBBBBBBBB.......',
+  '..TBBBBBBBBBBBBBBBBBBBBB......',
+  '...BBBBBBBBBBBBBBBBBBBBBD.....',
+  '...DBBBBBBBBBBBBBBBBBBBBDDD...',
+  '....DBBBBBDDDDDDDDBBBBD...DD..',
+  '.....BBD..........BBD.....D...',
+  '....BBD...........BD.....DD...',
+  '...BBD............BD..........',
+  '..BBD.............BD..........',
+  '.BBD..............BD..........',
+  '.DD...............DD..........',
 ];
+
+/** 안장 가운데 윗면 (오른쪽 보는 스프라이트 기준, 왼쪽 위가 0,0) — 탄 사람의 엉덩이 자리 */
+export const HORSE_SEAT = { x: 12, y: 9 } as const;
 export const HORSE_WIDTH = HORSE[0].length;
 export const HORSE_HEIGHT = HORSE.length;
 
@@ -112,6 +122,28 @@ function resample(rows: readonly string[], w: number, h: number): string[] {
 }
 
 const SMALL_HORSE = resample(HORSE, Math.round(HORSE_WIDTH * K.backScale), Math.round(HORSE_HEIGHT * K.backScale));
+
+/** 말 스프라이트 크기 (뒤쪽 말은 작다) */
+export function horseSize(z: number): { w: number; h: number } {
+  const rows = z < 0 ? SMALL_HORSE : HORSE;
+  return { w: rows[0].length, h: rows.length };
+}
+
+/**
+ * 이 말의 안장 자리 (월드 좌표) — 나중에 캐릭터를 태울 때 엉덩이를 여기에 맞춘다.
+ * 뒤쪽 말은 작게 그리므로 탄 사람도 같은 비율(CAROUSEL.backScale)로 줄여 그린다.
+ */
+export function horseSeat(h: HorseState): { x: number; y: number; scale: number } {
+  const { w, h: height } = horseSize(h.z);
+  const scale = h.z < 0 ? w / HORSE_WIDTH : 1;
+  const seatX = Math.round(HORSE_SEAT.x * scale);
+  const left = Math.round(h.x) - Math.floor(w / 2);
+  return {
+    x: left + (h.facing === 'right' ? seatX : w - 1 - seatX),
+    y: Math.round(h.y) - height + Math.round(HORSE_SEAT.y * scale),
+    scale,
+  };
+}
 
 const horseCache = new Map<string, HTMLCanvasElement>();
 

@@ -477,8 +477,10 @@ export const CAROUSEL = {
   rotationPeriod: 12,
   horseCount: 8,
   horseOrbitRadius: 62,
-  /** 말 발끝 = 판 가운데에서 위로 (막대 가운데쯤 떠 있게) */
-  horseBaseAbove: 20,
+  /** 말 발끝 = 판 가운데에서 위로 (탄 사람 머리가 지붕 장식에 닿지 않게) */
+  horseBaseAbove: 14,
+  /** 탈 때 안장 위로 올라오는 캐릭터 높이 (엉덩이 ~ 털모자 방울) */
+  riderAboveSeat: 24,
   /** 앞쪽 말일수록 이만큼 아래로 (원근) */
   horseDepthDrop: 6,
   bobAmplitude: 4,

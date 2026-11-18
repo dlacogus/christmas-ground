@@ -67,6 +67,12 @@ export interface Ball {
   idle: number;
   /** 같이 미는 사람 수 (나중에 친구와 함께 밀면 2) */
   pushers: number;
+  /** 서버와 주고받는 id */
+  netId: string;
+  /** 다른 사람이 굴리는 중이면 그 사람 id (내가 이어 굴릴 수 없다) */
+  heldBy: string | null;
+  /** 서버에 알렸나 (놓았거나, 서버에서 받은 것) */
+  synced: boolean;
 }
 
 // ───────────── 눈사람 ─────────────
@@ -128,6 +134,8 @@ export interface Snowman {
   capped: boolean;
   /** 살아 있던 시간 (새가 앉는 박자) */
   age: number;
+  netId: string;
+  synced: boolean;
 }
 
 /** 시드로 정해지는 생김새 (눈사람마다 조금씩 다르다) */
@@ -197,6 +205,14 @@ export interface SnowWorld {
   /** owner가 만든 눈사람들 (저장용) */
   saved(owner: string): SavedSnowman[];
   load(list: readonly SavedSnowman[]): void;
+  /** 서버 id로 찾는다 */
+  findNet(netId: string): SnowThing | null;
+  /** 서버에서 받은 눈덩이를 넣거나 고친다. heldBy = 굴리는 사람 (놓인 것이면 null), idle = 놓여 있던 시간(초) */
+  upsertBall(netId: string, data: { x: number; y: number; d: number; roll: number; seed: number; owner: string }, heldBy: string | null, idle?: number): Ball;
+  /** 서버에서 받은 눈사람을 넣거나 고친다 */
+  upsertSnowman(netId: string, data: SavedSnowman): Snowman;
+  /** 서버에서 없어졌다: 눈덩이는 바로, 눈사람은 녹기 시작한다 */
+  removeNet(netId: string): void;
 }
 
 export function createSnowWorld(random: () => number = Math.random): SnowWorld {
@@ -204,12 +220,15 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
   const snowmen: Snowman[] = [];
   let nextId = 1;
   let order = 0;
+  /** 이 접속에서 만든 것들의 id 앞머리 (다른 사람 것과 겹치지 않게) */
+  const prefix = Math.floor(random() * 0xffffff).toString(36) + Date.now().toString(36).slice(-4);
 
   const world: SnowWorld = {
     balls,
     snowmen,
     addBall(x, y, d, owner, roll = 0) {
-      const ball: Ball = { kind: 'ball', id: nextId++, x, y, d, roll, seed: Math.floor(random() * 1e6), owner, idle: 0, pushers: 1 };
+      const id = nextId++;
+      const ball: Ball = { kind: 'ball', id, x, y, d, roll, seed: Math.floor(random() * 1e6), owner, idle: 0, pushers: 1, netId: `${prefix}-${id}`, heldBy: null, synced: false };
       balls.push(ball);
       return ball;
     },
@@ -218,7 +237,8 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
       if (i >= 0) balls.splice(i, 1);
     },
     addSnowman(x, y, tiers, owner, seed = Math.floor(random() * 1e6)) {
-      const snowman: Snowman = { kind: 'snowman', id: nextId++, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0 };
+      const id = nextId++;
+      const snowman: Snowman = { kind: 'snowman', id, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0, netId: `${prefix}-${id}`, synced: false };
       snowmen.push(snowman);
       // 상한을 넘으면 (아직 안 녹는 것 가운데) 가장 오래된 것부터 녹는다
       const standing = snowmen.filter((s) => s.melt < 0);
@@ -232,7 +252,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
     update(dt, rolling = null) {
       for (let k = balls.length - 1; k >= 0; k--) {
         const ball = balls[k];
-        if (ball === rolling) {
+        if (ball === rolling || ball.heldBy) {
           ball.idle = 0;
           continue;
         }
@@ -265,6 +285,33 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
     },
     saved(owner) {
       return snowmen.filter((s) => s.owner === owner && s.melt < 0).map((s) => ({ x: s.x, y: s.y, tiers: [...s.tiers], seed: s.seed, owner: s.owner }));
+    },
+    findNet(netId) {
+      return balls.find((b) => b.netId === netId) ?? snowmen.find((s) => s.netId === netId) ?? null;
+    },
+    upsertBall(netId, data, heldBy, idle = 0) {
+      let ball = balls.find((b) => b.netId === netId);
+      if (!ball) {
+        ball = world.addBall(data.x, data.y, data.d, data.owner, data.roll);
+        ball.netId = netId;
+      }
+      Object.assign(ball, { x: data.x, y: data.y, d: data.d, roll: data.roll, seed: data.seed, owner: data.owner, heldBy, idle, synced: true });
+      return ball;
+    },
+    upsertSnowman(netId, data) {
+      let snowman = snowmen.find((s) => s.netId === netId);
+      if (!snowman) {
+        snowman = world.addSnowman(data.x, data.y, [...data.tiers], data.owner, data.seed);
+        snowman.netId = netId;
+      }
+      Object.assign(snowman, { x: data.x, y: data.y, tiers: [...data.tiers], seed: data.seed, owner: data.owner, synced: true });
+      return snowman;
+    },
+    removeNet(netId) {
+      const i = balls.findIndex((b) => b.netId === netId);
+      if (i >= 0) balls.splice(i, 1);
+      const snowman = snowmen.find((s) => s.netId === netId);
+      if (snowman && snowman.melt < 0) snowman.melt = 0;
     },
     load(list) {
       for (const item of list) {

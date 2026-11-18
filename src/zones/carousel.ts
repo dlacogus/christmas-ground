@@ -23,6 +23,8 @@ export interface CarouselZone extends Zone {
   readonly seats: Seats;
   /** 회전목마가 돌아간 시간 (탈 것 위치를 정하는 시계) */
   rideTime(): number;
+  /** 회전목마 시계를 서버 시각(초)에 맞춘다 — 모든 사람 화면에서 같은 각도 */
+  syncRideTime(seconds: number): void;
   /** 캐릭터가 입구 가까이 있는가 — 아치 전구가 밝아지고 반짝이가 튄다 */
   setEntranceNear(near: boolean): void;
   /** 올라타는 순간: 입구 오른쪽 줄이 잠깐 풀렸다 다시 걸린다 */
@@ -48,6 +50,7 @@ export function createCarouselZone(): CarouselZone {
     props: [carousel, entrance.back, entrance.pillars, entrance.ropes, ...huts, ...lamps, ...benches, ...firs],
     seats,
     rideTime: () => carousel.time(),
+    syncRideTime: (seconds) => carousel.setTime(seconds),
     setEntranceNear: (near) => entrance.setNear(near),
     openEntranceRope: () => entrance.openRope(),
     update(dt: number) {

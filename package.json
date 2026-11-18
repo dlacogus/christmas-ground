@@ -4,13 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "node scripts/dev.mjs",
+    "build": "tsc && tsc -p tsconfig.worker.json && vite build",
     "test": "vitest run",
     "deploy": "npm run build && wrangler deploy",
     "deploy:pages": "npm run build && gh-pages -d dist"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261118.1",
     "gh-pages": "^6.3.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",

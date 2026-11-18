@@ -22,6 +22,7 @@ import { createSnowmanSounds } from './audio/snowmanSounds';
 import { createSnowWorld, loadSnowmen } from './features/snowman';
 import { drawableFor } from './features/snowmanDraw';
 import { createSnowmanPlay } from './features/snowmanPlay';
+import { createSession } from './net/session';
 import { createCold, isWarmAt } from './character/cold';
 import { createBaldHead, createHat, createSneeze, drawRedNose } from './features/sneeze';
 import { actionsFor, nearestInteraction, withoutSpace } from './input/interact';
@@ -182,12 +183,26 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
 
   // 눈사람 만들기: 눈덩이·눈사람 목록(내 눈사람은 저장해 둔 것을 불러온다)과 굴리기 조작
   const snowWorld = createSnowWorld();
-  snowWorld.load(loadSnowmen());
+  // 실시간 서버: 친구들과 같은 광장. 눈덩이·눈사람은 서버에 저장한다 (예전에 이 브라우저에 저장한 것은 처음 접속 때 옮긴다)
+  const session = createSession({
+    canvas,
+    character,
+    carousel: world.carousel,
+    play,
+    skate,
+    snowHits,
+    snowWorld,
+    roofSnow,
+    rolling: () => snowPlay.rolling,
+    legacy: loadSnowmen(),
+  });
   const snowPlay = createSnowmanPlay(character, snowWorld, {
     field: snowField(),
     takePile: (x, y, halfW) => roofSnow.takePile(x, y, halfW),
     sounds: snowmanSounds,
-    owner: MY_ID,
+    owner: () => session.owner(),
+    sync: session.sync,
+    save: () => {},
   });
   /** 스페이스 한 번으로 굴리기 시작해 굴리는 중인가 (다시 누르면 놓는다) */
   let keyRolling = false;
@@ -197,7 +212,9 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   /** 이어 굴릴 수 있는 눈덩이 (이번 프레임) */
   let nearBall: ReturnType<typeof snowPlay.nearestBall> = null;
   const startSneeze = () => {
-    if (sneeze.start()) sneezeSound.windup();
+    if (!sneeze.start()) return;
+    sneezeSound.windup();
+    session.act('sneeze');
   };
   const startPickup = () => {
     pickLeft = HAT.pickSeconds;
@@ -478,12 +495,18 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     actors.length = fixedActors;
     for (const b of snowWorld.balls) actors.push(drawableFor(b));
     for (const s of snowWorld.snowmen) actors.push(drawableFor(s));
+    // 친구들: 위치·상태를 주고받고 함께 그린다
+    session.tick(dt, layerOffsetX(camera, LAYER_FACTORS.main));
+    for (const d of session.drawables()) actors.push(d);
     stillTime = walking && !character.moving && !snowPlay.busy ? stillTime + dt : 0;
     drawLayers(ctx, camera, layers);
     drawSoundButton(ctx, sound.started && !sound.muted);
     if (debug) {
       drawDebugOverlay(ctx, camera, character, zones, fps, [describeState(character.state.get()), `cold ${cold.value.toFixed(0)}  B: friend  H: santa  N: sneeze  R: roof snow  T: slow${slowMotion ? ' ON' : ''}`]);
       roofSnow.drawDebug(ctx, camera);
+      ctx.fillStyle = '#7fd6ff';
+      ctx.font = '7px monospace';
+      ctx.fillText(session.debugLine(), 200, 262);
     }
 
     // 힌트도 고른 상호작용 하나만

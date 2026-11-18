@@ -49,8 +49,14 @@ export interface SnowmanPlayDeps {
   takePile?: (x: number, y: number, halfW: number) => number;
   sounds?: SnowmanSoundHooks;
   random?: () => number;
-  /** 눈사람 주인 이름 (저장·공유) */
-  owner: string;
+  /** 눈사람 주인 (서버에 들어가 있으면 내 접속 id) */
+  owner: string | (() => string);
+  /** 서버에 알린다: 굴리는 눈덩이(자주), 놓았거나 합쳐진 결과, 없어진 것 */
+  sync?: {
+    rolling(ball: Ball): void;
+    put(thing: SnowThing): void;
+    del(thing: SnowThing): void;
+  };
   /** 눈사람 목록이 바뀌면 저장한다 (기본: localStorage) */
   save?: (world: SnowWorld) => void;
 }
@@ -133,7 +139,8 @@ export interface SnowmanPlay {
 export function createSnowmanPlay(character: Character, world: SnowWorld, deps: SnowmanPlayDeps): SnowmanPlay {
   const sounds = deps.sounds ?? silentSnowmanSounds;
   const random = deps.random ?? Math.random;
-  const save = deps.save ?? ((w: SnowWorld) => saveSnowmen(w.saved(deps.owner)));
+  const owner = () => (typeof deps.owner === 'function' ? deps.owner() : deps.owner);
+  const save = deps.save ?? ((w: SnowWorld) => saveSnowmen(w.saved(owner())));
   let phase: Phase = 'idle';
   let timer = 0;
   let ball: Ball | null = null;
@@ -184,7 +191,8 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
       snowman = l.onto;
     } else {
       if (l.bottom) world.removeBall(l.bottom);
-      snowman = world.addSnowman(Math.round(l.base.x), Math.round(l.base.y), l.tiers, deps.owner);
+      snowman = world.addSnowman(Math.round(l.base.x), Math.round(l.base.y), l.tiers, owner());
+      deps.sync?.del(l.bottom!);
     }
     // 거의 같은 크기면 위 눈덩이가 흔들흔들하다 자리를 잡는다
     const n = l.tiers.length;
@@ -194,6 +202,9 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
     sparkle(snowman.x, snowman.y - height * 0.6, M.sparkles[kind], kind === 'giant' ? 60 : kind === 'medium' ? 40 : 22);
     sounds.chime(kind);
     save(world);
+    // 서버에: 올린 눈덩이는 없어지고, 눈사람이 생겼다(또는 한 단 늘었다)
+    deps.sync?.del(l.ball);
+    deps.sync?.put(snowman);
     character.facing = snowman.x >= character.x ? 'right' : 'left';
     // 큰 눈덩이를 올렸으면 주저앉아 헉헉, 미니는 쪼그려 들여다보고, 아니면 뿌듯하게 두 손
     const after: Phase = kind === 'mini' ? 'peek' : 'cheer';
@@ -245,6 +256,7 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
     // 그 자리에 놓는다. 올릴 수 없는 것에 대고 있었으면 고개를 갸우뚱
     ball.x = Math.round(ball.x);
     ball.y = Math.round(ball.y);
+    deps.sync?.put(ball);
     const refused = target !== null;
     ball = null;
     target = null;
@@ -330,6 +342,7 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
     }
     character.moving = moved > 0;
     character.animTime += dt;
+    deps.sync?.rolling(b);
     if (moved <= 0) return;
     // 굴러간 만큼 눈을 걷어 커진다 (눈이 없는 곳에서는 안 커진다). 지붕 눈 더미 위에서는 2배
     const fp = footprint(b.d);
@@ -432,6 +445,8 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
     nearestBall() {
       let best: { ball: Ball; distance: number } | null = null;
       for (const b of world.balls) {
+        // 다른 사람이 굴리는 중인 것은 이어 굴릴 수 없다
+        if (b.heldBy) continue;
         // 눈덩이 가장자리까지 (깊이 쪽은 납작하게 본다)
         const distance = Math.max(0, Math.hypot(b.x - character.x, (b.y - character.y) * 1.5) - b.d * 0.4);
         if (!best || distance < best.distance) best = { ball: b, distance };
@@ -474,7 +489,7 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
           const by = character.y + o.y;
           if (!ballFits(bx, by, B.startSize) || world.touching(ballRect(bx, by, B.startSize))) continue;
           character.facing = side > 0 ? 'right' : 'left';
-          beginRoll(world.addBall(bx, by, B.startSize, deps.owner));
+          beginRoll(world.addBall(bx, by, B.startSize, owner()));
           return;
         }
         phase = 'idle';
@@ -536,7 +551,7 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
       debugIndex++;
       const side = character.facing === 'right' ? 1 : -1;
       const o = pushOffset(side, 0, d);
-      if (ballFits(character.x + o.x, character.y + o.y, d)) world.addBall(Math.round(character.x + o.x), Math.round(character.y + o.y), d, deps.owner);
+      if (ballFits(character.x + o.x, character.y + o.y, d)) deps.sync?.put(world.addBall(Math.round(character.x + o.x), Math.round(character.y + o.y), d, owner()));
     },
   };
 }

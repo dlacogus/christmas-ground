@@ -572,6 +572,8 @@ export interface CarouselProp extends DepthDrawable {
   update(dt: number): void;
   /** 회전목마가 돌아간 시간 (탈 것 위치는 이 시간으로 정해진다) */
   time(): number;
+  /** 시계를 맞춘다 (서버 시각 기준으로 모두 같은 각도가 되게) */
+  setTime(next: number): void;
   /** 지금 타고 있는 사람들 (매 프레임 넘긴다) */
   setRiders(riders: readonly RiderView[]): void;
   /** 주변 바닥에 번지는 불빛 (시설보다 먼저, 바닥 위에 그린다) */
@@ -646,6 +648,9 @@ export function createCarousel(): CarouselProp {
       time += dt;
     },
     time: () => time,
+    setTime(next: number) {
+      time = next;
+    },
     setRiders(next: readonly RiderView[]) {
       riders = next;
     },

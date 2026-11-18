@@ -51,6 +51,8 @@ export interface CarouselPlay {
   hint(touch: boolean): PlayHint | null;
   /** ?debug=1: 가짜 친구를 마차에 앉히거나 내보낸다 */
   toggleFriend(): void;
+  /** 서버가 자리를 허락하지 않았다 (다른 사람이 먼저 앉음): 내려서 입구 앞에 선다 */
+  kick(): void;
 }
 
 const entryPoint = () => INTERACTION_POINTS.find((p) => p.id === 'CAROUSEL_ENTRY')!;
@@ -114,6 +116,7 @@ export function createCarouselPlay(character: Character, zone: CarouselZone): Ca
     update() {
       const time = zone.rideTime();
       me.bald = character.hat.get() !== 'on';
+      me.outfit = character.outfit;
       const events: PlayEvent[] = [];
       const result = updateBoarding(boarding, seats, time, me);
       if (result === 'boarded') {
@@ -169,6 +172,16 @@ export function createCarouselPlay(character: Character, zone: CarouselZone): Ca
       if (!nearEntry(character)) return null;
       if (pickMount(seats, zone.rideTime(), MY_ID, false) < 0) return { text: '자리가 없어요', anchor: 'arch' };
       return touch ? { text: '회전목마를 탭', anchor: 'arch' } : { text: 'Space 타기', sub: '꾹 누르면 마차', anchor: 'arch' };
+    },
+    kick() {
+      if (boarding.phase !== 'riding') return;
+      leave(seats, MY_ID);
+      boarding.phase = 'none';
+      boarding.exitRequested = false;
+      const entry = entryPoint();
+      character.x = entry.x;
+      character.y = entry.y;
+      character.state.set({ kind: 'walk' });
     },
     toggleFriend() {
       if (findSeat(seats, FRIEND_ID)) {

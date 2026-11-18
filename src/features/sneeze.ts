@@ -220,6 +220,10 @@ export interface Hat extends DepthDrawable {
   canPickUp(x: number, y: number): boolean;
   /** 주워서 다시 쓴다 */
   putOn(): void;
+  /** (친구 모자) 머리에서 to로 날아가 떨어진다 — 떨어질 자리는 그 친구 화면에서 이미 정해졌다 */
+  flyTo(from: { x: number; y: number }, to: { x: number; y: number }): void;
+  /** (친구 모자) 이미 떨어져 있던 모자를 그 자리에 둔다 */
+  placeAt(to: { x: number; y: number }): void;
 }
 
 type HatMode = 'on' | 'flying' | 'bouncing' | 'sliding' | 'resting';
@@ -369,6 +373,25 @@ export function createHat(character: Character, random: () => number = Math.rand
     },
     canPickUp(px, py) {
       return mode === 'resting' && Math.hypot(px - x, py - y) <= H.pickRadius;
+    },
+    flyTo(start, end) {
+      from = { x: start.x, y: start.y };
+      to = { x: end.x, y: end.y };
+      dir = to.x >= from.x ? 1 : -1;
+      onIce = false;
+      bouncesLeft = H.bounceMin;
+      bounceIndex = 0;
+      mode = 'flying';
+      t = 0;
+      x = from.x;
+      y = from.y;
+      z = H.headHeight;
+      character.hat.set({ x: to.x, y: to.y });
+    },
+    placeAt(end) {
+      x = end.x;
+      y = end.y;
+      rest();
     },
     putOn() {
       mode = 'on';

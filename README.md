@@ -10,7 +10,7 @@ Node.js가 필요하다.
 
 ```bash
 npm install
-npm run dev     # 개발 서버 실행 후 브라우저에서 표시된 주소로 접속
+npm run dev     # 화면(vite)과 실시간 서버(wrangler dev)를 같이 띄운다. 표시된 주소(http://localhost:5173)로 접속
 npm run build   # 타입 검사 + dist/ 에 빌드
 npm test        # 테스트 (vitest)
 npm run deploy  # 빌드해서 Cloudflare Workers(christmas-square)에 정적 사이트로 올림

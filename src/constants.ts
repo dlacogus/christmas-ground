@@ -2096,7 +2096,38 @@ export const OUTFITS = {
   red: { coat: '#c7423f', coatShade: '#97302f', scarf: '#f0e3c2', scarfShade: '#cdbb93' },
   green: { coat: '#3f8f5f', coatShade: '#2d6b46', scarf: '#d9434f', scarfShade: '#a52f3b' },
   plum: { coat: '#8a4f8c', coatShade: '#663868', scarf: '#f2c14e', scarfShade: '#c99a2e' },
+  // 입장할 때 고르는 목도리 색 6가지 (코트는 같은 낙타색)
+  scarf0: { coat: '#d39a4f', coatShade: '#a8743a', scarf: '#3aa36b', scarfShade: '#2a7a50' },
+  scarf1: { coat: '#d39a4f', coatShade: '#a8743a', scarf: '#d9434f', scarfShade: '#a52f3b' },
+  scarf2: { coat: '#d39a4f', coatShade: '#a8743a', scarf: '#4f7fd9', scarfShade: '#385fa8' },
+  scarf3: { coat: '#d39a4f', coatShade: '#a8743a', scarf: '#f2c14e', scarfShade: '#c99a2e' },
+  scarf4: { coat: '#d39a4f', coatShade: '#a8743a', scarf: '#a86fd0', scarfShade: '#7f4fa3' },
+  scarf5: { coat: '#d39a4f', coatShade: '#a8743a', scarf: '#f3ead6', scarfShade: '#cfc2a4' },
 } as const satisfies Record<string, OutfitColors>;
 
 export type OutfitName = keyof typeof OUTFITS;
+
+/** 실시간 서버 (Cloudflare Durable Object 'Plaza') */
+export const NET = {
+  /** 동시 접속 최대 인원, 닉네임 최대 글자 수, 고를 수 있는 목도리 색 수 */
+  maxPlayers: 8,
+  nameMax: 8,
+  scarves: 6,
+  /** 위치: 움직이는 동안 초당 최대 이만큼, 굴리는 눈덩이는 초당 최대 이만큼 */
+  positionsPerSecond: 8,
+  ballsPerSecond: 5,
+  /** 친구 캐릭터는 받은 위치를 이만큼 뒤따라 부드럽게 이어 그린다 (초) */
+  renderDelay: 0.1,
+  /** 서버 검사: 메시지 크기 상한 (바이트), 한 사람이 초당 보낼 수 있는 메시지 수 */
+  maxMessageBytes: 2048,
+  maxMessagesPerSecond: 20,
+  /** 끊기면 이 간격(초)으로 다시 접속을 시도한다 (마지막 값을 되풀이) */
+  reconnectSeconds: [1, 2, 4, 8],
+  /** 이만큼 아무 입력이 없으면 연결을 끊는다 (초) */
+  idleSeconds: 600,
+  /** 머리 위 닉네임 높이 (발밑에서 위로), 들어오고 나갈 때 눈가루 개수 */
+  nameAbove: 38,
+  puffCount: 10,
+  storageKey: 'christmas-square.profile',
+} as const;
 export const DEFAULT_OUTFIT: OutfitName = 'camel';

@@ -209,6 +209,11 @@ export interface RoofSnow {
   fillAndDrop(roof: number): void;
   /** 바닥 눈 더미에서 (x, y) 둘레 가로 ±halfW의 눈을 걷는다 (눈덩이를 굴릴 때). 걷은 넓이(px²)를 돌려준다 */
   takePile(x: number, y: number, halfW: number): number;
+  /**
+   * 서버 시각(초)에 맞춘다: 지붕마다 쌓인 양을 시각과 고정 시드만으로 계산해, 모든 사람 화면에서 같은 지붕이 같은 때 떨어진다
+   * (메시지는 주고받지 않는다). 매 프레임 부른다.
+   */
+  syncTo(seconds: number): void;
   /** 지금 가장 빠르게 미끄러지는 눈 판 (소리용). 없으면 null */
   sliding(): { speed: number; x: number; y: number } | null;
   /** 지붕 눈(오두막 바로 앞)과 떠 있는 것들(깊이 띠별)을 y 정렬해 그린다 */
@@ -254,6 +259,9 @@ export function createRoofSnow(seed = SCENERY_SEED + R.seedOffset): RoofSnow {
       meltRate: 0,
     };
   });
+
+  /** syncTo: 지붕마다 마지막으로 본 주기 번호 */
+  const syncedCycle: (number | undefined)[] = [];
 
   // ── 풀
   const pool: Particle[] = Array.from({ length: R.poolSize }, () => ({
@@ -734,6 +742,22 @@ export function createRoofSnow(seed = SCENERY_SEED + R.seedOffset): RoofSnow {
         }
       }
       return taken;
+    },
+    syncTo(seconds) {
+      roofs.forEach((roof, index) => {
+        // 주기 = 가득 차는 시간. 시작 위상은 지붕마다 다르다 (시드로 정해진 fillSeconds에서)
+        const turns = seconds / roof.fillSeconds + (roof.fillSeconds % 1) + index * 0.37;
+        const cycle = Math.floor(turns);
+        const last = syncedCycle[index];
+        syncedCycle[index] = cycle;
+        roof.level = turns - cycle;
+        // 주기가 넘어가는 순간이 떨어지는 때
+        if (last !== undefined && cycle > last && roof.slabs.length === 0) {
+          roof.depth.set(roof.cap);
+          startSlide(index);
+          roof.level = turns - cycle;
+        }
+      });
     },
     sliding() {
       let best: { speed: number; x: number; y: number } | null = null;

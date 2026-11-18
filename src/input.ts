@@ -1,4 +1,4 @@
-// 키보드(방향키/WASD, 스페이스, Esc)와 탭 입력.
+// 키보드(방향키/WASD, 스페이스, Esc)와 탭 입력. 누르고 있는 손가락 위치(스케이트)도 따라간다.
 
 import type { MoveInput } from './character/character';
 import { CAROUSEL } from './constants';
@@ -28,6 +28,10 @@ export interface InputActions {
 
 export interface Input {
   direction(): MoveInput;
+  /** 스페이스를 지금 누르고 있나 (스핀) */
+  spaceHeld(): boolean;
+  /** 손가락·마우스를 누르고 있는 곳 (내부 해상도 화면 좌표). 안 누르면 null */
+  pointer(): { sx: number; sy: number } | null;
   /** 지난번 읽은 뒤로 일어난 한 번짜리 입력 */
   takeActions(): InputActions;
 }
@@ -39,6 +43,8 @@ export interface HoldKey {
   up(): 'tap' | null;
   /** 매 프레임: 누른 채로 threshold를 넘긴 순간 한 번 'hold' */
   poll(now: number): 'hold' | null;
+  /** 지금 누르고 있나 */
+  isDown(): boolean;
 }
 
 export function createHoldKey(threshold: number): HoldKey {
@@ -59,6 +65,9 @@ export function createHoldKey(threshold: number): HoldKey {
       if (downAt === null || fired || now - downAt < threshold) return null;
       fired = true;
       return 'hold';
+    },
+    isDown() {
+      return downAt !== null;
     },
   };
 }
@@ -96,17 +105,38 @@ export function createInput(
     if (e.code === ACTION_KEY && space.up() === 'tap') actions.tap = true;
     held.delete(e.code);
   });
+  let pointer: { sx: number; sy: number } | null = null;
   window.addEventListener('blur', () => {
     held.clear();
     space.up();
+    pointer = null;
   });
 
-  canvas.addEventListener('pointerdown', (e) => {
+  const toScreen = (e: PointerEvent) => {
     const rect = canvas.getBoundingClientRect();
-    const sx = ((e.clientX - rect.left) / rect.width) * screenWidth;
-    const sy = ((e.clientY - rect.top) / rect.height) * screenHeight;
-    onTap(sx, sy);
+    return {
+      sx: ((e.clientX - rect.left) / rect.width) * screenWidth,
+      sy: ((e.clientY - rect.top) / rect.height) * screenHeight,
+    };
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    const p = toScreen(e);
+    pointer = p;
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // 잡지 못해도 누르고 있는 동안은 pointermove로 따라간다
+    }
+    onTap(p.sx, p.sy);
   });
+  canvas.addEventListener('pointermove', (e) => {
+    if (pointer) pointer = toScreen(e);
+  });
+  for (const type of ['pointerup', 'pointercancel'] as const) {
+    canvas.addEventListener(type, () => {
+      pointer = null;
+    });
+  }
 
   const any = (keys: string[]) => keys.some((k) => held.has(k));
   return {
@@ -115,6 +145,12 @@ export function createInput(
         x: (any(RIGHT_KEYS) ? 1 : 0) - (any(LEFT_KEYS) ? 1 : 0),
         y: (any(DOWN_KEYS) ? 1 : 0) - (any(UP_KEYS) ? 1 : 0),
       };
+    },
+    spaceHeld() {
+      return space.isDown();
+    },
+    pointer() {
+      return pointer;
     },
     takeActions() {
       if (space.poll(seconds()) === 'hold') actions.hold = true;

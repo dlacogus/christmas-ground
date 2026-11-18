@@ -2,15 +2,15 @@
 // 얼음은 거울처럼 링크 뒤 가로등을 비춘다: 발밑을 기준으로 뒤집힌 자리에 등 불빛이 세로로 길게 맺히고,
 // 표면의 잔 흠집 때문에 둘레로 옅은 빛이 알갱이처럼 흩어진다. 뒤집힌 기둥은 아주 옅고 흐리게만 비친다.
 // 단단한 얼음판이라 물처럼 흔들리지 않는다.
-// 앞 울타리 입구는 닫힌 문 + '준비 중' 자물쇠 그림 팻말.
+// 앞 울타리에는 나무 문이 둘: 왼쪽 입구(RINK_GATE에서 스케이트를 신고 들어간다), 오른쪽 출구(RINK_EXIT로 벗고 나온다).
 
 import { layerOffsetX, type Camera } from '../camera';
-import { LAYER_FACTORS, REFLECTION as F, RINK as K, RINK_COLORS as C, SCREEN_WIDTH } from '../constants';
+import { LAYER_FACTORS, REFLECTION as F, RINK as K, RINK_COLORS as C, RINK_GATE_COLORS as G, SCREEN_WIDTH } from '../constants';
 import { createRng, randRange, type Rng } from '../random';
 import { lazyBuffer } from '../scenery/buffer';
-import { RINK_GATE_OFFSET, getObstacle } from '../world';
+import { RINK_EXIT_OFFSET, RINK_GATE_OFFSET, getObstacle } from '../world';
 import type { DepthDrawable } from '../zones/zone';
-import { dither, mixColor, stampPixels } from './pixel';
+import { dither, mixColor } from './pixel';
 
 // ───────────── 모양 (순수) ─────────────
 
@@ -54,9 +54,15 @@ export function onIce(x: number, y: number): boolean {
   return e !== null && y > e.top && y < e.bottom;
 }
 
-/** 닫힌 입구 문의 x 범위 (앞 울타리 위) */
+/** 입구 문의 x 범위 (앞 울타리 위) */
 export function gateSpan(): { left: number; right: number } {
   const center = rinkBounds().left + RINK_GATE_OFFSET;
+  return { left: center - K.gateWidth / 2, right: center + K.gateWidth / 2 };
+}
+
+/** 출구 문의 x 범위 (앞 울타리 위) */
+export function exitSpan(): { left: number; right: number } {
+  const center = rinkBounds().right - RINK_EXIT_OFFSET;
   return { left: center - K.gateWidth / 2, right: center + K.gateWidth / 2 };
 }
 
@@ -242,64 +248,65 @@ function paintSides(ctx: CanvasRenderingContext2D, oy: number, fromY: number, to
   }
 }
 
-/** '준비 중' 팻말: 글자 대신 자물쇠 그림 (S 고리, L 몸통, l 그늘, D 열쇠 구멍) */
-const PADLOCK: readonly string[] = [
-  '..SSS..',
-  '.S...S.',
-  '.S...S.',
-  'LLLLLLL',
-  'LLLDLLl',
-  'LLLDLLl',
-  'lllllll',
-];
-
-function paintGate(ctx: CanvasRenderingContext2D, oy: number): void {
+/** 문 아치 꼭대기 y (화면): 기둥 꼭대기에서 가운데로 갈수록 둥글게 솟는다 */
+export function gateArchTopAt(g: { left: number; right: number }, x: number): number {
   const b = rinkBounds();
-  const g = gateSpan();
+  const postTop = b.bottom - K.fenceHeight - K.gatePostRise;
+  const half = (g.right - g.left) / 2 + 1;
+  const u = (x - (g.left + g.right) / 2) / half;
+  return postTop - Math.round(K.gateArchLift * Math.sqrt(Math.max(0, 1 - u * u)));
+}
+
+/** 입구·출구 문: 칠한 문짝 + 크림색 버팀목, 높은 기둥, 기둥 사이 전구 달린 아치 */
+function paintGate(ctx: CanvasRenderingContext2D, oy: number, g: { left: number; right: number }, kind: 'enter' | 'exit'): void {
+  const b = rinkBounds();
+  const colors = G[kind];
   const foot = b.bottom - 1 - oy;
   const top = foot - K.fenceHeight + 1;
   // 문짝: 세로 판자 + 대각선 버팀목
   for (let x = g.left; x < g.right; x++) {
-    ctx.fillStyle = (x - g.left) % 3 === 0 ? C.fenceDark : C.gate;
+    ctx.fillStyle = (x - g.left) % 3 === 0 ? colors.doorDark : colors.door;
     ctx.fillRect(x - b.left, top + 1, 1, K.fenceHeight - 1);
     const t = (x - g.left) / (g.right - g.left - 1);
-    ctx.fillStyle = C.fenceLight;
+    ctx.fillStyle = G.brace;
     ctx.fillRect(x - b.left, top + 1 + Math.round(t * (K.fenceHeight - 3)), 1, 1);
   }
-  // 양쪽 문 기둥 (더 높이, 위에 눈)
-  for (const x of [g.left - 1, g.right]) {
-    ctx.fillStyle = C.fenceDark;
-    ctx.fillRect(x - b.left, top - K.gatePostRise, 1, K.fenceHeight + K.gatePostRise);
-    ctx.fillStyle = C.snow;
-    ctx.fillRect(x - b.left, top - K.gatePostRise, 1, 1);
+  ctx.fillStyle = G.brace;
+  ctx.fillRect(g.left - b.left, top + 1, g.right - g.left, 1);
+  // 양쪽 문 기둥 (2px, 위에 눈)
+  const postTop = top - K.gatePostRise;
+  for (const x of [g.left - 2, g.right]) {
+    ctx.fillStyle = G.post;
+    ctx.fillRect(x - b.left, postTop, 2, foot - postTop + 1);
   }
-  // 문 가운데 걸린 팻말
-  const signLeft = Math.round((g.left + g.right) / 2 - K.signWidth / 2) - b.left;
-  const signTop = top - K.signRise;
-  ctx.fillStyle = C.signBorder;
-  ctx.fillRect(signLeft, signTop, K.signWidth, K.signHeight);
-  ctx.fillStyle = C.signBoard;
-  ctx.fillRect(signLeft + 1, signTop + 1, K.signWidth - 2, K.signHeight - 2);
-  stampPixels(
-    ctx,
-    PADLOCK,
-    { S: C.lockShackle, L: C.lockBody, l: C.lockShade, D: C.lockHole },
-    signLeft + Math.floor((K.signWidth - PADLOCK[0].length) / 2),
-    signTop + Math.floor((K.signHeight - PADLOCK.length) / 2),
-  );
+  // 아치: 기둥 꼭대기를 잇는 둥근 띠, 위에 눈, 아래에 전구
+  for (let x = g.left - 2; x < g.right + 2; x++) {
+    const y = gateArchTopAt(g, x) - oy;
+    ctx.fillStyle = colors.arch;
+    ctx.fillRect(x - b.left, y, 1, K.gateArchThickness);
+    ctx.fillStyle = colors.archDark;
+    ctx.fillRect(x - b.left, y + K.gateArchThickness, 1, 1);
+    ctx.fillStyle = C.snow;
+    ctx.fillRect(x - b.left, y - 1, 1, 1);
+    if ((x - g.left + 2) % K.gateBulbEvery === 1) {
+      ctx.fillStyle = G.bulb;
+      ctx.fillRect(x - b.left, y + K.gateArchThickness + 1, 1, 1);
+    }
+  }
 }
 
 /** 앞 울타리 (아랫선 + 양옆 아래쪽 절반 + 입구 문) */
 function paintFrontFence(ctx: CanvasRenderingContext2D, rng: Rng, oy: number): void {
   const b = rinkBounds();
-  const g = gateSpan();
+  const gates = [gateSpan(), exitSpan()];
   paintSides(ctx, oy, b.midY, rinkEdgeAt(b.left)!.bottom);
   for (let x = b.left; x < b.right; x++) {
-    if (x >= g.left && x < g.right) continue;
+    if (gates.some((g) => x >= g.left && x < g.right)) continue;
     const { wood, rise } = fenceWood(x, b.left);
     paintFenceColumn(ctx, x - b.left, rinkEdgeAt(x)!.bottom - oy, rise, rng() < K.fenceSnowChance, wood);
   }
-  paintGate(ctx, oy);
+  paintGate(ctx, oy, gates[0], 'enter');
+  paintGate(ctx, oy, gates[1], 'exit');
 }
 
 // ───────────── 링크 소품 ─────────────
@@ -322,7 +329,7 @@ interface Sparkle {
 export function createIceRink(seed: number): IceRink {
   const b = rinkBounds();
   const width = b.right - b.left;
-  const above = K.fenceHeight + K.signRise + K.gatePostRise + 2;
+  const above = K.fenceHeight + K.gatePostRise + K.gateArchLift + 3;
   const iceBuffer = lazyBuffer(width, b.bottom - b.top + 1, (ctx) => paintIce(ctx, createRng(seed)));
   const backBuffer = lazyBuffer(width, b.midY - b.top + above + 1, (ctx) => paintBackFence(ctx, createRng(seed + 1), b.top - above));
   const frontBuffer = lazyBuffer(width, b.bottom - b.midY + above + 1, (ctx) =>

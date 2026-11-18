@@ -101,8 +101,13 @@ export const RINK_RIGHT = 1398;
 /** 바닥 띠 윗선에서 뒤 울타리까지 */
 export const RINK_SETBACK = 20;
 export const RINK_DEPTH = 104;
-/** 울타리 왼쪽 끝에서 입구(닫힌 문) 가운데까지 — 둥근 모서리를 지나 곧은 부분에 */
+/** 울타리 왼쪽 끝에서 입구 문 가운데까지 — 둥근 모서리를 지나 곧은 부분에 (광장 쪽) */
 export const RINK_GATE_OFFSET = 60;
+/** 울타리 오른쪽 끝에서 출구 문 가운데까지 (입구 반대편 끝) */
+export const RINK_EXIT_OFFSET = 60;
+/** 입구·출구 팻말 기둥: 문 가운데에서 옆으로 (입구는 오른쪽, 출구는 왼쪽 — 둘 다 링크 안쪽 방향), 앞 울타리에서 앞으로 */
+export const RINK_SIGN_SIDE = 16;
+export const RINK_SIGN_FRONT = 3;
 
 /** 스케이트장 오른쪽 끝을 막는 전나무 줄 (이 x부터 못 들어간다) */
 export const RINK_FIR_LINE_X = 1404;
@@ -152,7 +157,6 @@ export const LAMPS = [
   { x: 196, y: 252, heads: 2 },
   { x: 1110, y: 126, heads: 1 },
   { x: 1270, y: 126, heads: 1 },
-  { x: 992, y: 252, heads: 2 },
 ] as const;
 /** 가로등 받침이 바닥을 차지하는 크기 */
 export const LAMP_FOOT_HALF_WIDTH = 3;
@@ -258,6 +262,11 @@ export const INTERACTION_POINTS: readonly InteractionPoint[] = [
   {
     id: 'RINK_GATE',
     x: RINK_LEFT + RINK_GATE_OFFSET,
+    y: WALK_AREA.y + RINK_SETBACK + RINK_DEPTH + INTERACTION_FRONT_GAP,
+  },
+  {
+    id: 'RINK_EXIT',
+    x: RINK_RIGHT - RINK_EXIT_OFFSET,
     y: WALK_AREA.y + RINK_SETBACK + RINK_DEPTH + INTERACTION_FRONT_GAP,
   },
 ];

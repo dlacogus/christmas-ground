@@ -42,25 +42,60 @@ export function getSpriteCanvas(pose: PoseName, index: number, facing: Facing, o
   return canvas;
 }
 
+/** 그리는 방법을 바꿀 때 (스케이트·벤치 등) */
+export interface DrawOptions {
+  /** 자세와 프레임 (없으면 걷기/서기) */
+  pose?: PoseName;
+  index?: number;
+  facing?: Facing;
+  /** 몸을 발밑보다 이만큼 위에 그린다 (점프, 앉기). 그림자는 발밑에 남는다 */
+  lift?: number;
+  /** 윗몸을 이만큼 옆으로 기울인다 (+ = 오른쪽) */
+  lean?: number;
+  shadow?: boolean;
+}
+
+/** 윗몸만 기울여 그리는 줄 범위: [시작 줄, 끝 줄, 기우는 비율] (머리는 많이, 허리는 반만) */
+const LEAN_SLICES: readonly [number, number, number][] = [
+  [0, 16, 1],
+  [16, 24, 0.5],
+  [24, CHARACTER.spriteHeight, 0],
+];
+
+/** 스프라이트를 윗몸만 기울여 찍는다 */
+export function drawLeaning(ctx: CanvasRenderingContext2D, sprite: HTMLCanvasElement, left: number, top: number, lean: number): void {
+  if (lean === 0) {
+    ctx.drawImage(sprite, left, top);
+    return;
+  }
+  const W = CHARACTER.spriteWidth;
+  for (const [from, to, ratio] of LEAN_SLICES) {
+    ctx.drawImage(sprite, 0, from, W, to - from, left + Math.round(lean * ratio), top + from, W, to - from);
+  }
+}
+
 /** 발밑 (x, y) 기준으로 그림자 → 캐릭터 → 입김 순서로 그린다 */
-export function drawCharacter(ctx: CanvasRenderingContext2D, ch: Character, offsetX: number): void {
+export function drawCharacter(ctx: CanvasRenderingContext2D, ch: Character, offsetX: number, options: DrawOptions = {}): void {
   const footX = Math.round(ch.x) - offsetX;
   const footY = Math.round(ch.y);
 
-  ctx.save();
-  ctx.globalAlpha = CHARACTER.shadowAlpha;
-  ctx.fillStyle = COLORS.shadow;
-  ctx.fillRect(
-    footX - CHARACTER.shadowWidth / 2,
-    footY - CHARACTER.shadowHeight / 2,
-    CHARACTER.shadowWidth,
-    CHARACTER.shadowHeight,
-  );
-  ctx.restore();
+  if (options.shadow !== false) {
+    ctx.save();
+    ctx.globalAlpha = CHARACTER.shadowAlpha;
+    ctx.fillStyle = COLORS.shadow;
+    ctx.fillRect(
+      footX - CHARACTER.shadowWidth / 2,
+      footY - CHARACTER.shadowHeight / 2,
+      CHARACTER.shadowWidth,
+      CHARACTER.shadowHeight,
+    );
+    ctx.restore();
+  }
 
-  const { pose, index } = getCharacterFrame(ch);
-  const sprite = getSpriteCanvas(pose, index, ch.facing, ch.outfit);
-  ctx.drawImage(sprite, footX - CHARACTER.spriteWidth / 2, footY - CHARACTER.spriteHeight);
+  const frame = options.pose ? { pose: options.pose, index: options.index ?? 0 } : getCharacterFrame(ch);
+  const sprite = getSpriteCanvas(frame.pose, frame.index, options.facing ?? ch.facing, ch.outfit);
+  const lift = Math.round(options.lift ?? 0);
+  drawLeaning(ctx, sprite, footX - CHARACTER.spriteWidth / 2, footY - CHARACTER.spriteHeight - lift, options.lean ?? 0);
 
   drawPuffs(ctx, ch.puffs, offsetX);
 }

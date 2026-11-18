@@ -8,7 +8,17 @@
 import { CHARACTER } from '../constants';
 
 export type Facing = 'left' | 'right';
-export type PoseName = 'idle' | 'walk' | 'glide' | 'ride' | 'rideWave' | 'sit' | 'sitWave';
+export type PoseName =
+  | 'idle'
+  | 'walk'
+  | 'glide'
+  | 'skateGlide'
+  | 'crouch'
+  | 'fallen'
+  | 'ride'
+  | 'rideWave'
+  | 'sit'
+  | 'sitWave';
 
 const TRANSPARENT = '.';
 
@@ -95,6 +105,28 @@ const LEGS_GLIDE_TUCK: readonly string[] = [
   '....KKKKKKKKKK..',
 ];
 
+/** 쪼그려 앉기 (스케이트 신기, 넘어졌다 일어나기): 무릎을 벌리고 몸을 3px 낮춘다 */
+const LEGS_CROUCH: readonly string[] = [
+  '................',
+  '................',
+  '................',
+  '....lll..LLLL...',
+  '...ffff..FFFFF..',
+  '...ffff..FFFFF..',
+];
+const CROUCH_DROP = 3;
+
+/** 엉덩방아: 몸을 낮추고 두 다리를 앞으로 뻗었다 (날이 위로 들림) */
+const LEGS_FALLEN: readonly string[] = [
+  '................',
+  '................',
+  '................',
+  '............LLF.',
+  '...........LLLFK',
+  '..........llllFK',
+];
+const FALLEN_DROP = 5;
+
 /** 말 위에 앉은 자세: 허벅지는 앞으로, 종아리는 말 옆구리로 내려온다 */
 const LEGS_RIDE: readonly string[] = [
   '.....LLLLLL.....',
@@ -146,6 +178,21 @@ const WAVE_ARMS: readonly (readonly string[])[] = [
 /** 흔드는 동안에는 옆에 늘어뜨린 손(장갑)을 코트로 덮는다 */
 const HANGING_HAND_ROWS = [21, 22];
 const HANGING_HAND_COLUMN = 14;
+
+/** 두 팔을 살짝 벌린다 (스케이트 글라이드): 옆에 늘어뜨린 손을 지우고 몸 바깥쪽 조금 위에 손을 둔다 */
+function armsOut(frame: readonly string[], bodyShift: number): string[] {
+  const grid = frame.map((row) => [...row]);
+  const hand = 21 + bodyShift;
+  for (const r of [hand, hand + 1]) {
+    for (const c of [1, 14]) if (grid[r]?.[c] === 'M') grid[r][c] = TRANSPARENT;
+  }
+  const sleeve = hand - 1;
+  grid[sleeve][0] = 'o';
+  grid[sleeve][15] = 'o';
+  grid[hand][0] = 'M';
+  grid[hand][15] = 'M';
+  return grid.map((row) => row.join(''));
+}
 
 /** 앉은 자세에 손 흔드는 팔을 얹는다 */
 function withWave(frame: readonly string[], arm: readonly string[]): string[] {
@@ -201,6 +248,12 @@ export const POSES: Readonly<Record<PoseName, readonly string[][]>> = {
   ],
   // 스케이트 미끄럼 2프레임: 뒷발 뻗기 → 모으며 살짝 웅크림
   glide: [compose(LEGS_GLIDE_REACH, 0, 0), compose(LEGS_GLIDE_TUCK, 1, 0)],
+  // 내 스케이트: 두 발을 모으고 두 팔을 살짝 벌린 글라이드 (밀어낼 때는 위 glide 2프레임)
+  skateGlide: [armsOut(compose(LEGS_GLIDE_TUCK, 1, 0), 1)],
+  // 쪼그려 앉기 2프레임 (신는 동안 머리가 까딱)
+  crouch: [compose(LEGS_CROUCH, CROUCH_DROP, 0), compose(LEGS_CROUCH, CROUCH_DROP, 1)],
+  // 엉덩방아
+  fallen: [armsOut(compose(LEGS_FALLEN, FALLEN_DROP, 0), FALLEN_DROP)],
   // 회전목마: 말 위에 앉기 / 마차 의자에 앉기, 각각 손 흔드는 두 장
   ride: [compose(LEGS_RIDE, 0, 0)],
   rideWave: WAVE_ARMS.map((arm) => withWave(compose(LEGS_RIDE, 0, 0), arm)),

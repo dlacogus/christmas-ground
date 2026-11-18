@@ -1,10 +1,11 @@
 // NPC 스케이터: 캐릭터와 같은 스프라이트·비율, 다른 옷 색. 링크 가운데를 도는 타원을 미끄러져 돈다.
 // 발을 구르지 않는 미끄럼 자세 2장. 한 명은 30초마다 비틀거리다 균형을 잡는다. 지나간 자리에 얼음 자국.
+// 내 캐릭터가 얼음 위에 있으면 조금 비켜 돌고, 부딪히면 살짝 밀려나며 잠깐 느려진다.
 
 import { layerOffsetX, type Camera } from '../camera';
 import { getSpriteCanvas } from '../character/render';
 import { POSES, type Facing } from '../character/sprites';
-import { CHARACTER, COLORS, LAYER_FACTORS, SKATERS as S, type OutfitName } from '../constants';
+import { CHARACTER, COLORS, LAYER_FACTORS, SKATE, SKATERS as S, type OutfitName } from '../constants';
 import type { DepthDrawable } from '../zones/zone';
 import { rinkBounds, rinkEdgeAt } from './iceRink';
 
@@ -77,6 +78,31 @@ export interface Skater extends DepthDrawable {
   drawTrail(ctx: CanvasRenderingContext2D, camera: Camera): void;
   /** 얼음에 뒤집혀 비친 모습 (발밑 아래로, 멀어질수록 옅게) */
   drawReflection(ctx: CanvasRenderingContext2D, camera: Camera): void;
+  /** 얼음 위 내 캐릭터 발밑 (없으면 null) — 가까우면 조금 비켜 돈다 */
+  setAvoid(x: number, y: number): void;
+  clearAvoid(): void;
+  /** 부딪혔다: (nx, ny) = 밀려날 방향 (단위 벡터) */
+  bump(nx: number, ny: number): void;
+}
+
+/** 스프라이트를 발밑 아래로 뒤집어, 멀어질수록 옅게 얼음에 비춘다 */
+export function drawSpriteReflection(ctx: CanvasRenderingContext2D, sprite: HTMLCanvasElement, x: number, y: number, offsetX: number): void {
+  const edge = rinkEdgeAt(Math.round(x));
+  if (!edge) return;
+  const footY = Math.round(y);
+  const height = Math.min(S.reflectionHeight, edge.bottom - footY);
+  if (height <= 0) return;
+  const W = CHARACTER.spriteWidth;
+  const H = CHARACTER.spriteHeight;
+  ctx.save();
+  ctx.translate(Math.round(x) - offsetX - W / 2, footY);
+  ctx.scale(1, -1);
+  // 두 줄씩 뒤집어 찍으며 발에서 멀어질수록 옅게
+  for (let i = 0; i < height; i += 2) {
+    ctx.globalAlpha = S.reflectionAlpha * (1 - i / S.reflectionHeight);
+    ctx.drawImage(sprite, 0, H - i - 2, W, 2, 0, -i - 2, W, 2);
+  }
+  ctx.restore();
 }
 
 /** 윗몸만 기울여 그리는 줄 범위: [시작 줄, 기우는 비율] (머리는 많이, 허리는 반만) */
@@ -93,8 +119,51 @@ export function createSkater(spec: SkaterSpec): Skater {
   const trail: TrailMark[] = [];
   const omega = (Math.PI * 2) / spec.period;
 
-  const state = () => skaterPose(spec, angle);
+  // 원래 타원 자리에서 비켜난 정도 (피하기 + 부딪혀 밀려남)
+  let offX = 0;
+  let offY = 0;
+  let bumpVx = 0;
+  let bumpVy = 0;
+  let slowLeft = 0;
+  let avoid: { x: number; y: number } | null = null;
+
+  const state = () => {
+    const p = skaterPose(spec, angle);
+    return { x: p.x + offX, y: p.y + offY, facing: p.facing };
+  };
   const wobble = () => (spec.wobbles ? wobbleProgress(time) : null);
+
+  const updateOffset = (dt: number) => {
+    let tx = 0;
+    let ty = 0;
+    if (avoid) {
+      const base = skaterPose(spec, angle);
+      const dx = base.x - avoid.x;
+      const dy = base.y - avoid.y;
+      const d = Math.hypot(dx, dy);
+      if (d < SKATE.avoidRadius) {
+        const push = SKATE.avoidPush * (1 - d / SKATE.avoidRadius);
+        tx = d > 0 ? (dx / d) * push : push;
+        ty = d > 0 ? (dy / d) * push : 0;
+      }
+    }
+    const ease = Math.min(1, SKATE.avoidEase * dt);
+    offX += (tx - offX) * ease + bumpVx * dt;
+    offY += (ty - offY) * ease + bumpVy * dt;
+    const decay = Math.exp(-SKATE.npcBumpDecay * dt);
+    bumpVx *= decay;
+    bumpVy *= decay;
+    const len = Math.hypot(offX, offY);
+    if (len > SKATE.npcMaxOffset) {
+      offX *= SKATE.npcMaxOffset / len;
+      offY *= SKATE.npcMaxOffset / len;
+    }
+    // 얼음 밖으로는 밀려나지 않는다
+    const p = skaterPose(spec, angle);
+    const edge = rinkEdgeAt(Math.round(p.x + offX));
+    if (!edge) offX = 0;
+    else offY = Math.min(Math.max(offY, edge.top + 2 - p.y), edge.bottom - 2 - p.y);
+  };
 
   return {
     spec,
@@ -113,7 +182,10 @@ export function createSkater(spec: SkaterSpec): Skater {
     },
     update(dt: number) {
       time += dt;
-      angle += omega * dt * (wobble() !== null ? S.wobbleSpeedFactor : 1);
+      const slow = slowLeft > 0 ? SKATE.npcSlowFactor : 1;
+      slowLeft = Math.max(0, slowLeft - dt);
+      angle += omega * dt * (wobble() !== null ? S.wobbleSpeedFactor : 1) * slow;
+      updateOffset(dt);
       updateTrail(trail, dt);
       trailTimer -= dt;
       if (trailTimer <= 0) {
@@ -134,23 +206,19 @@ export function createSkater(spec: SkaterSpec): Skater {
     },
     drawReflection(ctx: CanvasRenderingContext2D, camera: Camera) {
       const { x, y, facing } = state();
-      const edge = rinkEdgeAt(Math.round(x));
-      if (!edge) return;
-      const footY = Math.round(y);
-      const height = Math.min(S.reflectionHeight, edge.bottom - footY);
-      if (height <= 0) return;
       const sprite = getSpriteCanvas('glide', Math.floor(time / S.glideFrameDuration) % POSES.glide.length, facing, spec.outfit);
-      const W = CHARACTER.spriteWidth;
-      const H = CHARACTER.spriteHeight;
-      ctx.save();
-      ctx.translate(Math.round(x) - layerOffsetX(camera, LAYER_FACTORS.main) - W / 2, footY);
-      ctx.scale(1, -1);
-      // 두 줄씩 뒤집어 찍으며 발에서 멀어질수록 옅게
-      for (let i = 0; i < height; i += 2) {
-        ctx.globalAlpha = S.reflectionAlpha * (1 - i / S.reflectionHeight);
-        ctx.drawImage(sprite, 0, H - i - 2, W, 2, 0, -i - 2, W, 2);
-      }
-      ctx.restore();
+      drawSpriteReflection(ctx, sprite, x, y, layerOffsetX(camera, LAYER_FACTORS.main));
+    },
+    setAvoid(x: number, y: number) {
+      avoid = { x, y };
+    },
+    clearAvoid() {
+      avoid = null;
+    },
+    bump(nx: number, ny: number) {
+      bumpVx = nx * SKATE.npcBumpSpeed;
+      bumpVy = ny * SKATE.npcBumpSpeed;
+      slowLeft = SKATE.npcSlowSeconds;
     },
     draw(ctx: CanvasRenderingContext2D, camera: Camera) {
       const { x, y, facing } = state();

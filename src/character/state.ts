@@ -1,13 +1,15 @@
 // 캐릭터가 지금 무엇을 하고 있는지를 하나의 값으로 관리한다.
 //   walk    — 걸어 다닌다
 //   riding  — 회전목마를 탄다 (어느 탈 것 mount의 어느 자리 slot인지)
-//   skating — 스케이트를 탄다 (속도 vx, vy) — 나중에 쓴다
+//   skating — 스케이트를 탄다 (속도 vx, vy, 초당 px을 정수로)
+//   sitting — 벤치에 앉아 있다 (어느 벤치 bench의 어느 자리 slot인지)
 // 상태가 바뀌면 onChange로 알린다. 나중에 네트워크로 보낼 때 이 알림에 붙이면 된다.
 
 export type CharacterState =
   | { kind: 'walk' }
   | { kind: 'riding'; mount: number; slot: number }
-  | { kind: 'skating'; vx: number; vy: number };
+  | { kind: 'skating'; vx: number; vy: number }
+  | { kind: 'sitting'; bench: number; slot: number };
 
 export type StateListener = (next: CharacterState, previous: CharacterState) => void;
 
@@ -23,6 +25,7 @@ export function sameState(a: CharacterState, b: CharacterState): boolean {
   if (a.kind === 'walk' && b.kind === 'walk') return true;
   if (a.kind === 'riding' && b.kind === 'riding') return a.mount === b.mount && a.slot === b.slot;
   if (a.kind === 'skating' && b.kind === 'skating') return a.vx === b.vx && a.vy === b.vy;
+  if (a.kind === 'sitting' && b.kind === 'sitting') return a.bench === b.bench && a.slot === b.slot;
   return false;
 }
 

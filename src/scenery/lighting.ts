@@ -5,6 +5,7 @@
 import { CLOCK_TOWER, LIGHTING as L, LIGHTING_COLORS as C, SCREEN_HEIGHT, SCREEN_WIDTH, TREE } from '../constants';
 import { carouselGeometry } from '../props/carousel';
 import { gateGeometry } from '../props/carouselEntrance';
+import { exitSpan, gateArchTopAt, gateSpan } from '../props/iceRink';
 import { hutRoofHeight } from '../props/marketHut';
 import { dither, fillPixelCircle, fillPixelEllipse } from '../props/pixel';
 import { lanternCenters } from '../props/streetLamp';
@@ -150,6 +151,10 @@ export function createGroundLight(rng: Rng) {
     softEllipse(ctx, gate.cx, (gate.footY + gate.carpetEndY) / 2, L.gatePoolRadiusX, L.gatePoolRadiusY, L.gatePoolAlpha, C.gold);
     // 링크 전구 줄 빛이 앞쪽 바닥에 번진다
     softEllipse(ctx, rink.x + rink.w / 2, rink.y + rink.h + 4, rink.w / 2, L.rinkSpillRadiusY, L.rinkSpillAlpha, C.rinkHaze);
+    // 링크 입구·출구 아치 전구 빛이 문 앞 바닥에
+    for (const g of [gateSpan(), exitSpan()]) {
+      softEllipse(ctx, (g.left + g.right) / 2, rink.y + rink.h + 2, L.rinkGatePoolRadiusX, L.rinkGatePoolRadiusY, L.rinkGatePoolAlpha, C.warm);
+    }
     ctx.restore();
   });
 
@@ -164,6 +169,10 @@ export function createGroundLight(rng: Rng) {
       for (const c of lanternCenters(lamp)) softEllipse(ctx, lamp.x + c.dx, c.y, L.lampHaloRadius, L.lampHaloRadius, L.lampHaloAlpha, C.warm);
     }
     softEllipse(ctx, rink.x + rink.w / 2, rink.y - 40, rink.w / 2, 46, L.rinkHazeAlpha, C.rinkHaze);
+    for (const g of [gateSpan(), exitSpan()]) {
+      const cx = (g.left + g.right) / 2;
+      softEllipse(ctx, cx, gateArchTopAt(g, cx) + 3, L.rinkGateHaloRadius, L.rinkGateHaloRadius, L.rinkGateHaloAlpha, C.warm);
+    }
     const carousel = carouselGeometry();
     const gate = gateGeometry();
     softEllipse(ctx, gate.cx, gate.springY, L.gateHaloRadius, L.gateHaloRadius, L.gateHaloAlpha, C.gold);

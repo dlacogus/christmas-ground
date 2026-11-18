@@ -2,7 +2,7 @@ import { createCamera, layerOffsetX, snapCamera, updateCamera, type Camera } fro
 import { createCharacter, setWalkTarget } from './character/character';
 import { drawCharacter } from './character/render';
 import type { CharacterState } from './character/state';
-import { CAROUSEL, FOOTPRINTS, HINT, LAYER_FACTORS, SANTA, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
+import { BENCH_SIT, CAROUSEL, CHARACTER, FOOTPRINTS, HINT, LAYER_FACTORS, SANTA, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
 import { createFpsMeter, drawDebugOverlay } from './debug';
 import { createInput } from './input';
 import { createLayers, drawLayers, updateLayers } from './layers';
@@ -16,6 +16,7 @@ import { advanceStepTimer, createFootsteps, createStepTimer } from './audio/foot
 import { createMusicBox } from './audio/musicBox';
 import { createRinkSounds } from './audio/rinkSounds';
 import { createSoundSystem } from './audio/soundSystem';
+import { createSkateSounds } from './audio/skateSounds';
 import { createWind } from './audio/wind';
 import { createHint } from './ui/hint';
 import { drawSoundButton, hitSoundButton } from './ui/soundButton';
@@ -23,12 +24,16 @@ import { carouselGeometry } from './props/carousel';
 import { gateGeometry } from './props/carouselEntrance';
 import { CAROUSEL_GATE, CAROUSEL_X, SPAWN, TREE_X, WALK_AREA, getObstacle } from './world';
 import { createWorldZones } from './zones';
-import { createCarouselPlay, nearEntry, onCarousel } from './zones/carouselPlay';
+import { benchAt, createBenchPlay } from './zones/benchPlay';
+import { createCarouselPlay, nearEntry, onCarousel, type PlayHint } from './zones/carouselPlay';
+import { createSkatePlay } from './zones/skatePlay';
+import { rinkBounds } from './props/iceRink';
 import type { DepthDrawable } from './zones/zone';
 
 function describeState(state: CharacterState): string {
   if (state.kind === 'riding') return `state riding mount ${state.mount} slot ${state.slot}`;
-  if (state.kind === 'skating') return `state skating ${state.vx.toFixed(1)}, ${state.vy.toFixed(1)}`;
+  if (state.kind === 'skating') return `state skating ${state.vx}, ${state.vy}`;
+  if (state.kind === 'sitting') return `state sitting bench ${state.bench} slot ${state.slot}`;
   return 'state walk';
 }
 
@@ -56,15 +61,25 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   const wind = createWind();
   // 오르골은 회전목마 판 가운데에서 울린다
   const musicBox = createMusicBox({ x: CAROUSEL_X, y: carouselGeometry().platformY });
+  const skateSounds = createSkateSounds();
   const sound = createSoundSystem([
     createAmbience(),
     musicBox,
+    skateSounds,
     // 스케이트 날 소리·웃음은 링크 울타리 상자 어디서든 가까운 곳에서 들린다
     createRinkSounds(getObstacle('rink')),
     footsteps,
     wind,
   ]);
   const stepTimer = createStepTimer();
+
+  // 스케이트 타기와 벤치 앉기
+  const skate = createSkatePlay(character, world.rink.skaters, skateSounds);
+  world.rink.setIceOverlay((c, cam) => skate.drawOnIce(c, cam));
+  const bench = createBenchPlay(character);
+  const rinkBox = rinkBounds();
+  /** 화면에서 링크(울타리 위 스케이터 포함)를 눌렀나 (맵 좌표) */
+  const onRink = (x: number, y: number) => x >= rinkBox.left && x < rinkBox.right && y >= rinkBox.top - CHARACTER.spriteHeight && y <= rinkBox.bottom;
 
   // 상태가 바뀔 때 알림을 받는다 — 나중에 네트워크로 보낼 자리. 지금은 타는 동안 오르골을 키우는 데만 쓴다
   character.state.onChange((next) => musicBox.setRiding(next.kind === 'riding'));
@@ -77,13 +92,35 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       return;
     }
     const worldX = sx + layerOffsetX(camera, LAYER_FACTORS.main);
+    // 스케이트를 타는 동안: 입구에서 멈췄으면 벗고, 아니면 누르고 있는 쪽으로 민다 (매 프레임 따로 읽는다)
+    if (skate.active) {
+      skate.tapWhileSkating();
+      return;
+    }
+    // 앉아 있으면 일어난다
+    if (bench.seated) {
+      bench.standUp();
+      return;
+    }
     // 회전목마를 탭하면 타거나 내린다. 타는 동안에는 어디를 탭해도 내리기
     if (play.boarding.phase === 'riding' || onCarousel(worldX, sy)) {
       play.tapCarousel();
       return;
     }
+    if (play.boarding.phase !== 'none') return;
+    // 링크를 탭하면 입구로 걸어가서 스케이트를 신는다
+    if (onRink(worldX, sy)) {
+      skate.tapRink();
+      return;
+    }
+    // 벤치를 탭하면 걸어가서 앉는다
+    const tappedBench = benchAt(worldX, sy);
+    if (tappedBench >= 0) {
+      bench.tapBench(tappedBench);
+      return;
+    }
     // 바닥을 탭했을 때만 그 자리로 걸어간다
-    if (sy < WALK_AREA.y || play.boarding.phase !== 'none') return;
+    if (sy < WALK_AREA.y) return;
     setWalkTarget(character, worldX, sy);
   });
   for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, () => sound.unlock());
@@ -97,8 +134,11 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     },
     draw(c: CanvasRenderingContext2D, cam: Camera) {
       // 타는 동안에는 회전목마가 탈 것과 함께 그린다
-      if (character.state.get().kind === 'riding') return;
-      drawCharacter(c, character, layerOffsetX(cam, LAYER_FACTORS.main));
+      const kind = character.state.get().kind;
+      if (kind === 'riding') return;
+      if (skate.active) skate.drawCharacter(c, cam);
+      else if (kind === 'sitting') bench.draw(c, cam);
+      else drawCharacter(c, character, layerOffsetX(cam, LAYER_FACTORS.main));
     },
   };
   // 눈 위 발자국 (입구 카펫과 벽돌이 드러난 곳에는 남지 않는다)
@@ -128,9 +168,19 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     lastTime = now;
 
     const actions = input.takeActions();
+    const dir = input.direction();
     if (debug && actions.debugFriend) play.toggleFriend();
-    play.handleInput(dt, input.direction(), actions);
+    if (skate.active) {
+      const p = input.pointer();
+      const pointerWorld = p ? { x: p.sx + layerOffsetX(camera, LAYER_FACTORS.main), y: p.sy } : null;
+      skate.handleInput(dir, actions, input.spaceHeld(), pointerWorld);
+    } else if (bench.seated) {
+      bench.handleSeated(dt, dir, actions);
+    } else if (play.boarding.phase !== 'none' || !(skate.handleWalking(actions, dir) || bench.handleWalking(actions, dir))) {
+      play.handleInput(dt, dir, actions);
+    }
     for (const zone of zones) zone.update(dt);
+    skate.update(dt);
     for (const event of play.update()) {
       if (event === 'passedFront') wind.whoosh();
       // 올라타는 순간 입구 오른쪽 줄이 잠깐 풀린다
@@ -144,12 +194,13 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     updateCamera(camera, riding ? CAROUSEL_X : character.x, dt);
     updateLayers(layers, dt, camera);
     sound.setListener(character.x, character.y);
-    if (advanceStepTimer(stepTimer, dt, !riding && character.moving)) footsteps.step();
+    const walking = character.state.get().kind === 'walk' && !skate.active;
+    if (advanceStepTimer(stepTimer, dt, walking && character.moving)) footsteps.step();
     // 걸은 거리만큼 발자국을 남긴다 (타고 내릴 때처럼 한 번에 멀리 옮겨지면 찍지 않는다)
     const movedX = character.x - lastX;
     const movedY = character.y - lastY;
     const moved = Math.hypot(movedX, movedY);
-    if (riding || moved > FOOTPRINTS.stride) walked = 0;
+    if (!walking || moved > FOOTPRINTS.stride) walked = 0;
     else if (moved > 0) {
       walked += moved;
       if (walked >= FOOTPRINTS.stride) {
@@ -167,7 +218,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     drawSoundButton(ctx, sound.started && !sound.muted);
     if (debug) drawDebugOverlay(ctx, camera, character, zones, fps, [describeState(character.state.get()), 'B: friend  N: santa']);
 
-    const h = play.hint(touch);
+    const h: PlayHint | null = skate.hint(touch) ?? bench.hint(touch) ?? play.hint(touch);
     if (!h) hint.show(null);
     else if (h.anchor === 'bottom') hint.show({ text: h.text, sub: h.sub, sx: SCREEN_WIDTH / 2, sy: HINT.bottomY });
     else if (h.anchor === 'arch') {
@@ -175,7 +226,9 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       hint.show({ text: h.text, sub: h.sub, sx: CAROUSEL_X - layerOffsetX(camera, LAYER_FACTORS.main), sy: gateGeometry().ornamentTopY - HINT.aboveArch });
     }
     else {
-      const above = riding ? CAROUSEL.riderAboveSeat + (HINT.aboveHead - CAROUSEL.riderAboveSeat) / 2 : HINT.aboveHead;
+      const above = riding
+        ? CAROUSEL.riderAboveSeat + (HINT.aboveHead - CAROUSEL.riderAboveSeat) / 2
+        : HINT.aboveHead + (bench.seated ? BENCH_SIT.lift : 0);
       hint.show({ text: h.text, sub: h.sub, sx: character.x - layerOffsetX(camera, LAYER_FACTORS.main), sy: character.y - above });
     }
 

@@ -948,13 +948,13 @@ export const RINK = {
   /** sin 값이 이보다 크면 반짝, 더 크면 십자 */
   sparkleOn: 0.82,
   sparkleCross: 0.96,
-  /** 닫힌 입구 문 폭, 문 기둥이 울타리보다 솟는 높이 */
-  gateWidth: 16,
-  gatePostRise: 4,
-  /** '준비 중' 팻말 (자물쇠 그림) 크기, 문 위로 솟는 높이 */
-  signWidth: 13,
-  signHeight: 12,
-  signRise: 5,
+  /** 입구·출구 문 폭, 문 기둥이 울타리보다 솟는 높이 (기둥 위에 전구 아치를 얹는다) */
+  gateWidth: 18,
+  gatePostRise: 14,
+  /** 아치 가운데가 기둥 꼭대기보다 더 솟는 높이, 아치 두께, 전구 간격 */
+  gateArchLift: 4,
+  gateArchThickness: 2,
+  gateBulbEvery: 3,
 } as const;
 
 /**
@@ -1059,6 +1059,200 @@ export const SKATERS = {
   reflectionAlpha: 0.3,
 } as const;
 
+// ───────────── 스케이트 타기 (skate tuning) ─────────────
+
+/** 내 캐릭터가 얼음 위에서 타는 움직임과 기술. 속도는 px/초, 가속은 px/초² */
+export const SKATE = {
+  // 미끄럼
+  accel: 90,
+  maxSpeed: 120,
+  /** 입력이 없을 때 천천히 줄어드는 정도 */
+  friction: 25,
+  /** 반대 방향키 브레이크 */
+  brake: 140,
+  /** 입력 방향과 움직이는 방향의 cos가 이보다 작으면 '반대 방향' = 브레이크 */
+  brakeCos: -0.5,
+  /** 이보다 느리면 멈춘 것으로 본다 (브레이크·방향 판정) */
+  stopSpeed: 2,
+
+  // 들어가기·나가기
+  /** 입구(RINK_GATE)에서 이 거리 안이면 스케이트를 신을 수 있다 (출구 RINK_EXIT 앞에서는 안내만) */
+  gateRadius: 18,
+  /** 주저앉아 신는 연출 시간 */
+  putOnSeconds: 0.8,
+  crouchFrameSeconds: 0.2,
+  /** 출구 안쪽(얼음 위)에서 이 거리 안이고 이보다 느리면 벗을 수 있다. 입구 안쪽에서도 이 거리 안이면 출구를 안내한다 */
+  exitRadius: 24,
+  exitMaxSpeed: 20,
+
+  // 링크 벽 (울타리 선 안쪽으로 남기는 여유: 옆, 뒤, 앞)
+  marginX: 7,
+  marginTop: 4,
+  marginBottom: 4,
+  /** 벽에 닿으면 튕기고 속도가 이 비율로 */
+  bounce: 0.5,
+  /** 벽으로 이보다 빠르게 부딪히면 넘어진다 */
+  fallImpact: 90,
+  /** 넘어져 있는 시간, 그 끝에서 일어나는 동작 시간, 넘어진 동안 미끄러지다 멈추는 감속 */
+  fallSeconds: 1.2,
+  getUpSeconds: 0.35,
+  fallBrake: 220,
+  /** 머리 위를 도는 작은 별 */
+  starCount: 3,
+  starRadiusX: 6,
+  starRadiusY: 2,
+  starPeriod: 0.7,
+  starAboveHead: 3,
+
+  // 다른 스케이터와 부딪히기
+  bumpRadiusX: 9,
+  bumpRadiusY: 4,
+  /** 부딪힌 뒤 내 속도가 남는 비율, 서로 밀어내는 속도 */
+  bumpKeep: 0.5,
+  bumpPush: 30,
+  bumpCooldown: 0.6,
+  /** 부딪힌 NPC: 밀려나는 속도와 잦아드는 빠르기, 느려지는 시간과 비율 */
+  npcBumpSpeed: 40,
+  npcBumpDecay: 3,
+  npcSlowSeconds: 1,
+  npcSlowFactor: 0.5,
+  /** NPC가 나를 피해 도는 거리와 최대로 비켜나는 px, 따라가는 빠르기 */
+  avoidRadius: 32,
+  avoidPush: 10,
+  avoidEase: 3,
+  npcMaxOffset: 16,
+
+  // 기술
+  /** 점프: 이 속도 이상일 때, 떠오르는 높이와 시간 */
+  jumpMinSpeed: 40,
+  jumpHeight: 6,
+  jumpSeconds: 0.5,
+  /** 스핀: 이보다 느릴 때, 도는 동안 멈추는 감속, 좌우가 바뀌는 간격 */
+  spinMaxSpeed: 40,
+  spinBrake: 200,
+  spinFlipSeconds: 0.07,
+  /** 이보다 오래 돌면 어지러워 비틀거린다 */
+  dizzyAfter: 4,
+  dizzySeconds: 1.6,
+  dizzyLean: 2,
+  dizzySwings: 5,
+
+  // 자세
+  pushFrameSeconds: 0.18,
+  /** 이보다 빠르면 몸을 앞으로 숙인다 */
+  fastSpeed: 80,
+  leanFast: 2,
+  /** 엉덩방아: 윗몸이 뒤로 젖혀지는 px */
+  leanFallen: 2,
+
+  // 얼음 자국
+  trailSeconds: 3,
+  trailMax: 400,
+  /** 자국 점 사이 거리 (px) */
+  trailSpacing: 1,
+  trailAlpha: 0.85,
+  /** 스핀 자리 동그라미 */
+  ringRadiusX: 4,
+  ringRadiusY: 2,
+  ringPoints: 16,
+
+  // 브레이크 얼음 가루
+  sprayEvery: 0.02,
+  sprayLife: 0.35,
+  sprayMax: 30,
+  sprayMinSpeed: 30,
+  sprayGravity: 90,
+
+  /** 얼음에 들어선 뒤 아래쪽에 조작 안내를 띄우는 시간 */
+  tipsSeconds: 5,
+  /** 모바일: 손가락이 캐릭터에서 이만큼은 떨어져야 그쪽으로 민다 */
+  pointerDeadZone: 6,
+} as const;
+
+export const SKATE_COLORS = {
+  spray: '#ffffff',
+  star: '#ffe27a',
+  trail: '#f4fbff',
+} as const;
+
+/** 스케이트 소리 (얼음 위 내 캐릭터) */
+export const SKATE_SOUND = {
+  noiseSeconds: 1,
+  /** 미끄러지는 사사삭: 속도에 따라 커지고 높아진다 */
+  glideVolume: 0.22,
+  glideMinHz: 2200,
+  glideHzPerSpeed: 14,
+  glideQ: 0.9,
+  /** 사삭거리는 떨림 (속도가 빠를수록 잦다) */
+  flutterMinHz: 3,
+  flutterHzPerSpeed: 0.06,
+  flutterDepth: 0.45,
+  smoothing: 0.08,
+  /** 브레이크 '스윽' */
+  brakeVolume: 0.35,
+  brakeStartHz: 3200,
+  brakeEndHz: 1100,
+  brakeSeconds: 0.35,
+  brakeQ: 1.4,
+  /** 착지 '탁' */
+  landVolume: 0.45,
+  landClickHz: 2600,
+  landClickSeconds: 0.03,
+  landThumpHz: 170,
+  landThumpSeconds: 0.07,
+  /** 넘어질 때 '쿵' */
+  fallVolume: 0.7,
+  fallStartHz: 120,
+  fallEndHz: 42,
+  fallSeconds: 0.28,
+  fallNoiseHz: 320,
+} as const;
+
+/** 벤치에 앉기 */
+export const BENCH_SIT = {
+  /** 벤치 가운데에서 두 자리까지 */
+  seatOffset: 9,
+  /** 벤치 앞 이 거리 안에서 앉을 수 있다 (자리 앞 지점 기준) */
+  sitRadius: 14,
+  /** 자리 앞 지점 = 벤치 발밑에서 앞으로 */
+  frontGap: 6,
+  /** 앉은 캐릭터를 발밑보다 위로 올려 그리는 px (엉덩이가 앉는 판에 닿게) */
+  lift: 4,
+  /** 일어나면 벤치 앞 이만큼에 선다 */
+  standGap: 6,
+  waveSeconds: 1,
+  waveFrameSeconds: 0.18,
+} as const;
+
+/** 입구·출구 문 색: 문짝을 칠하고(입구 초록, 출구 빨강) 같은 색 아치를 올린다 */
+export const RINK_GATE_COLORS = {
+  enter: { door: '#2f7a52', doorDark: '#1f5a3c', arch: '#3f9a62', archDark: '#2a6e45' },
+  exit: { door: '#a8323a', doorDark: '#7a2129', arch: '#c8343e', archDark: '#8e2129' },
+  brace: '#f3e3bd',
+  post: '#3a2416',
+  bulb: '#ffe9a8',
+} as const;
+
+/** 입구·출구 팻말: 짙은 원목 작은 판에 색 화살표만 (입구 초록 ↑ = 안으로, 출구 빨강 ↓ = 밖으로) */
+export const RINK_SIGN = {
+  postHeight: 18,
+  postWidth: 2,
+  boardHeight: 11,
+  /** 화살표 양옆 여백 */
+  paddingX: 2,
+} as const;
+
+export const RINK_SIGN_COLORS = {
+  post: '#4a2f1c',
+  postShade: '#321f12',
+  board: '#5e3d24',
+  boardLight: '#7d5433',
+  boardShade: '#3c2515',
+  enter: '#5fd38a',
+  exit: '#ff6a5a',
+  snow: '#e8eef8',
+} as const;
+
 /** 링크 색 */
 export const RINK_COLORS = {
   scratch: '#c6e4f3',
@@ -1069,12 +1263,6 @@ export const RINK_COLORS = {
   fenceLight: '#8a5a38',
   snow: '#e8eef8',
   gate: '#7a4e30',
-  signBoard: '#e8dcc0',
-  signBorder: '#4a3020',
-  lockBody: '#e2b23e',
-  lockShade: '#b0862a',
-  lockShackle: '#b9c4dc',
-  lockHole: '#3a2a22',
 } as const;
 
 // ───────────── 조명·분위기 ─────────────
@@ -1125,6 +1313,12 @@ export const LIGHTING = {
   rinkSpillRadiusY: 20,
   rinkSpillAlpha: 0.14,
   /** 회전목마 입구: 아치 둘레 작은 빛, 카펫 위로 타원처럼 번지는 금빛 — 회전목마 둘레에서 가장 밝은 곳 */
+  /** 스케이트장 입구·출구 아치 전구 빛 (번짐, 문 앞 바닥) */
+  rinkGateHaloRadius: 16,
+  rinkGateHaloAlpha: 0.2,
+  rinkGatePoolRadiusX: 18,
+  rinkGatePoolRadiusY: 6,
+  rinkGatePoolAlpha: 0.22,
   gateHaloRadius: 30,
   gateHaloAlpha: 0.2,
   gatePoolRadiusX: 30,

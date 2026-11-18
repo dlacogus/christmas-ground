@@ -228,6 +228,15 @@ export const GROUND = {
   driftMaxWidth: 16,
   driftMaxHeight: 3,
   driftRowInset: 2,
+  /** 판석 위에 쌓인 눈: 바닥의 이 비율을 눈이 덮는다 (벽돌 : 눈 = 1 : 9) */
+  snowCoverRatio: 0.9,
+  /** 눈 덩어리 크기 (가로·세로 px, 멀리서 납작하게 보이도록 가로가 길다)와 잔무늬 세기 */
+  snowCellX: 72,
+  snowCellY: 22,
+  snowDetail: 0,
+  /** 눈 위 밝은 결이 차지하는 비율 */
+  snowLightRatio: 0,
+  snowSeedOffset: 900,
 } as const;
 
 export const GROUND_COLORS = {
@@ -238,6 +247,10 @@ export const GROUND_COLORS = {
   curbShadow: '#3a3c52',
   snow: '#e8eef8',
   snowShade: '#b9c4dc',
+  /** 판석 위에 쌓인 눈 (밤이라 살짝 푸르게), 눈이 끝나는 가장자리 그늘 */
+  snowCover: '#d2dbee',
+  snowCoverLight: '#e2e9f6',
+  snowCoverEdge: '#a3afcc',
 } as const;
 
 // ───────────── 앞 눈 더미 (레이어 1.3) ─────────────
@@ -495,8 +508,10 @@ export const STREET_LAMP = {
   /** 기둥 장식 고리 = 발밑에서 위로 */
   collarAbove: 40,
   /** 리스 가운데 = 발밑에서 위로 */
-  wreathAbove: 26,
-  wreathRadius: 3,
+  wreathAbove: 27,
+  /** 리스 반지름·굵기 (가로등 키 58에 지름 11 — 등갓보다 조금 크게) */
+  wreathRadius: 5,
+  wreathThickness: 2.4,
   armHalfWidth: 7,
   lanternWidth: 6,
   lanternHeight: 8,
@@ -512,7 +527,10 @@ export const LAMP_COLORS = {
   glow: '#ffcf7a',
   wreath: '#2b6249',
   wreathDark: '#1f4a3a',
+  wreathLight: '#3f8a62',
+  berry: '#e8b84a',
   bow: '#d23a3a',
+  bowDark: '#a02a30',
 } as const;
 
 // ───────────── 회전목마 구역 ─────────────

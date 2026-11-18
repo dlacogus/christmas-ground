@@ -1,7 +1,7 @@
 // 바닥 (레이어 1): 눈 덮인 연석 + 어긋나게 깐 판석 (멀리 작게, 가까이 크게) + 구석의 눈
 
-import { GROUND, GROUND_COLORS as G, SCREEN_HEIGHT } from '../constants';
-import { pick, randInt, type Rng } from '../random';
+import { GROUND, GROUND_COLORS as G, SCENERY_SEED, SCREEN_HEIGHT } from '../constants';
+import { createRng, pick, randInt, type Rng } from '../random';
 import { STREET_LINE_Y, WALK_AREA } from '../world';
 import { drawSlice, lazyBuffer } from './buffer';
 
@@ -69,6 +69,74 @@ export function generateDrifts(rng: Rng, width: number): Drift[] {
   return drifts;
 }
 
+/** 부드럽게 이어지는 무작위 값 (격자 사이를 매끄럽게 잇는다). 0~1 */
+function smoothNoise(rng: Rng, width: number, height: number, cellX: number, cellY: number): Float32Array {
+  const cols = Math.ceil(width / cellX) + 2;
+  const rows = Math.ceil(height / cellY) + 2;
+  const lattice = Float32Array.from({ length: cols * rows }, () => rng());
+  const out = new Float32Array(width * height);
+  const ease = (t: number) => t * t * (3 - 2 * t);
+  for (let y = 0; y < height; y++) {
+    const gy = Math.floor(y / cellY);
+    const ty = ease(y / cellY - gy);
+    for (let x = 0; x < width; x++) {
+      const gx = Math.floor(x / cellX);
+      const tx = ease(x / cellX - gx);
+      const i = gy * cols + gx;
+      const a = lattice[i] + (lattice[i + 1] - lattice[i]) * tx;
+      const b = lattice[i + cols] + (lattice[i + cols + 1] - lattice[i + cols]) * tx;
+      out[y * width + x] = a + (b - a) * ty;
+    }
+  }
+  return out;
+}
+
+/** values 가운데 ratio만큼이 그 아래에 놓이는 값 */
+function quantile(values: Float32Array, ratio: number): number {
+  const sorted = Float32Array.from(values).sort();
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * ratio))];
+}
+
+/**
+ * 판석 위에 쌓인 눈 지도 (width x height). 0 = 벽돌이 드러난 곳, 1 = 눈, 2 = 눈 위 밝은 결.
+ * 눈이 덮는 넓이는 정확히 GROUND.snowCoverRatio — 드러난 벽돌은 덩어리져 군데군데 남는다.
+ */
+export function generateSnowCover(rng: Rng, width: number, height: number): Uint8Array {
+  const big = smoothNoise(rng, width, height, GROUND.snowCellX, GROUND.snowCellY);
+  const small = smoothNoise(rng, width, height, Math.ceil(GROUND.snowCellX / 4), Math.ceil(GROUND.snowCellY / 3));
+  const value = big.map((v, i) => v + small[i] * GROUND.snowDetail);
+  const bare = quantile(value, 1 - GROUND.snowCoverRatio);
+  const light = quantile(small, 1 - GROUND.snowLightRatio);
+  const cover = new Uint8Array(width * height);
+  for (let i = 0; i < cover.length; i++) cover[i] = value[i] < bare ? 0 : GROUND.snowLightRatio > 0 && small[i] >= light ? 2 : 1;
+  return cover;
+}
+
+/** 눈 지도를 판석 위에 찍는다. 눈이 끝나는 아래 가장자리는 그늘 한 줄 */
+function paintSnowCover(ctx: CanvasRenderingContext2D, width: number, top: number): void {
+  const height = WALK_AREA.h;
+  const cover = generateSnowCover(createRng(SCENERY_SEED + GROUND.snowSeedOffset), width, height);
+  const colors = [G.snowCoverEdge, G.snowCover, G.snowCoverLight];
+  for (let y = 0; y < height; y++) {
+    let runStart = 0;
+    let runKind = -1;
+    for (let x = 0; x <= width; x++) {
+      let kind = -1;
+      if (x < width && cover[y * width + x] > 0) {
+        const below = y + 1 < height ? cover[(y + 1) * width + x] : 1;
+        kind = below === 0 ? 0 : cover[y * width + x];
+      }
+      if (kind === runKind) continue;
+      if (runKind >= 0) {
+        ctx.fillStyle = colors[runKind];
+        ctx.fillRect(runStart, top + y, x - runStart, 1);
+      }
+      runStart = x;
+      runKind = kind;
+    }
+  }
+}
+
 function paintGround(ctx: CanvasRenderingContext2D, width: number, slabs: readonly Slab[], drifts: readonly Drift[]): void {
   const top = STREET_LINE_Y;
   const walkTop = WALK_AREA.y - top;
@@ -98,6 +166,9 @@ function paintGround(ctx: CanvasRenderingContext2D, width: number, slabs: readon
       ctx.fillRect(s.x - 1, y + s.h - 1, 2, 1);
     }
   }
+
+  // 판석 위에 쌓인 눈
+  paintSnowCover(ctx, width, walkTop);
 
   // 아래쪽 눈둑
   ctx.fillStyle = G.snowShade;

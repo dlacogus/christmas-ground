@@ -349,7 +349,21 @@ export function createSession(deps: SessionDeps): Session {
   character.hat.onChange(() => sendState());
   character.holding.onChange(() => sendState());
   /** 모자 색·주인이 바뀌었으면 (남의 모자를 썼다) 알린다 */
-  let sentHat = '';
+  let sentHatColor: number | null = character.hatColor;
+  let sentHatOwner: string | null = character.hatOwner;
+  type Tag = { id: string; name: string; sx: number; sy: number };
+  /** 내 모자를 쓴 사람(wearer)이 모자 주인(owner) 가까이 있으면 주인 머리 위에 '?!' */
+  const noticeOwner = (tags: Tag[], offsetX: number, wearer: { x: number; y: number }, owner: string | null | undefined) => {
+    if (!owner) return;
+    if (owner === profile?.name) {
+      if (Math.hypot(wearer.x - character.x, wearer.y - character.y) <= HAT_GIFT.noticeRadius) tags.push({ id: 'notice-me', name: '?!', sx: character.x - offsetX, sy: character.y - NET.nameAbove - 6 });
+      return;
+    }
+    for (const o of remotes.all()) {
+      if (o.info.name !== owner || Math.hypot(wearer.x - o.ch.x, wearer.y - o.ch.y) > HAT_GIFT.noticeRadius) continue;
+      tags.push({ id: `notice-${o.info.id}`, name: '?!', sx: o.ch.x - offsetX, sy: o.ch.y - NET.nameAbove - 8 });
+    }
+  };
 
   // 10분 동안 아무 입력이 없으면 연결을 끊는다
   for (const type of ['keydown', 'pointerdown'] as const) window.addEventListener(type, () => (lastInput = seconds()));
@@ -472,9 +486,9 @@ export function createSession(deps: SessionDeps): Session {
       net.send({ t: 'act', a });
     },
     tick(dt, offsetX, labels = []) {
-      const hatKey = `${character.hatColor}|${character.hatOwner}`;
-      if (hatKey !== sentHat) {
-        sentHat = hatKey;
+      if (character.hatColor !== sentHatColor || character.hatOwner !== sentHatOwner) {
+        sentHatColor = character.hatColor;
+        sentHatOwner = character.hatOwner;
         sendState();
       }
       const now = seconds();
@@ -482,7 +496,7 @@ export function createSession(deps: SessionDeps): Session {
       remotes.update(dt, now);
       const tags = remotes.names(offsetX);
       // 잠깐 뜨는 글자 ('영차', '짝!')
-      labels.forEach((l, i) => tags.push({ id: `label-${i}`, name: l.text, sx: l.x - offsetX, sy: l.y }));
+      for (let i = 0; i < labels.length; i++) tags.push({ id: `label-${i}`, name: labels[i].text, sx: labels[i].x - offsetX, sy: labels[i].y });
       // 남이 놓고 간 눈덩이 곁에 가면 만든 사람 닉네임이 작게 뜬다
       for (const b of snowWorld.balls) {
         if (b.heldBy || b === deps.rolling() || b.makers.length === 0) continue;
@@ -491,20 +505,8 @@ export function createSession(deps: SessionDeps): Session {
         tags.push({ id: `ball-${b.netId}`, name: b.makers.map((m) => m.name).join(' · '), sx: b.x - offsetX, sy: b.y - b.d - 5 });
       }
       // 내 모자를 쓴 사람이 가까이 있으면 모자 주인 머리 위에 '?!'
-      const myName = profile?.name;
-      const notice = (wearer: { x: number; y: number }, owner: string | null | undefined) => {
-        if (!owner) return;
-        if (owner === myName) {
-          if (Math.hypot(wearer.x - character.x, wearer.y - character.y) <= HAT_GIFT.noticeRadius) tags.push({ id: 'notice-me', name: '?!', sx: character.x - offsetX, sy: character.y - NET.nameAbove - 6 });
-          return;
-        }
-        for (const o of remotes.all()) {
-          if (o.info.name !== owner || Math.hypot(wearer.x - o.ch.x, wearer.y - o.ch.y) > HAT_GIFT.noticeRadius) continue;
-          tags.push({ id: `notice-${o.info.id}`, name: '?!', sx: o.ch.x - offsetX, sy: o.ch.y - NET.nameAbove - 8 });
-        }
-      };
-      if (character.hat.get() === 'on') notice(character, character.hatOwner);
-      for (const r of remotes.all()) if (r.info.hat === 'on') notice(r.ch, r.info.ho);
+      if (character.hatOwner && character.hat.get() === 'on') noticeOwner(tags, offsetX, character, character.hatOwner);
+      for (const r of remotes.all()) if (r.info.ho && r.info.hat === 'on') noticeOwner(tags, offsetX, r.ch, r.info.ho);
       ui.names(tags);
       if (net.status !== 'online') return;
       // 회전목마 각도와 지붕 눈이 떨어지는 때를 서버 시각에 맞춘다 (모두 같은 화면)

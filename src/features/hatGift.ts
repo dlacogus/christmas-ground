@@ -132,6 +132,8 @@ export function createHatGift(character: Character, hat: Hat, world: SnowWorld, 
   /** 하트: 나에게서 눈사람 쪽으로 */
   let heart: { from: { x: number; y: number }; to: { x: number; y: number }; t: number } | null = null;
 
+  const giveResult = { snowman: null as unknown as Snowman, distance: 0 };
+  const takeResult = { snowman: null as unknown as Snowman, distance: 0, kind: 'back' as 'back' | 'take' };
   const myHat = (): SnowmanHat => ({ name: character.hatOwner ?? deps.me().name, color: character.hatColor ?? deps.me().scarf });
   const headOf = (s: Snowman) => ({ x: s.x, y: s.y - snowmanHeight(s.tiers) });
   const wear = (h: SnowmanHat) => {
@@ -187,25 +189,45 @@ export function createHatGift(character: Character, hat: Hat, world: SnowWorld, 
       return phase !== 'idle';
     },
     drawables: [overlay],
+    // 아래 둘은 걸어 다니는 동안 매 프레임 불린다: 결과 객체를 하나씩 두고 다시 쓴다
     nearestToGive() {
       if (!canGiveHat(character.hat.get(), character.holding.get())) return null;
-      let best: { snowman: Snowman; distance: number } | null = null;
+      let best: Snowman | null = null;
+      let bestDistance = Infinity;
       for (const s of world.snowmen) {
         if (s.melt >= 0 || s.headless) continue;
         const distance = snowmanDistance(character, s);
-        if (!best || distance < best.distance) best = { snowman: s, distance };
+        if (distance < bestDistance) {
+          best = s;
+          bestDistance = distance;
+        }
       }
-      return best;
+      if (!best) return null;
+      giveResult.snowman = best;
+      giveResult.distance = bestDistance;
+      return giveResult;
     },
     nearestToTake() {
-      let best: { snowman: Snowman; distance: number; kind: 'back' | 'take' } | null = null;
+      // 모자를 쓰고 있으면 가져올 수 없다 (대부분의 시간): 찾지 않는다
+      const mine = character.hat.get();
+      if (mine === 'on') return null;
+      const name = deps.me().name;
+      let best: Snowman | null = null;
+      let bestDistance = Infinity;
       for (const s of world.snowmen) {
-        const kind = takeKind(character.hat.get(), s.hat, deps.me().name);
-        if (!kind) continue;
+        if (!s.hat) continue;
         const distance = snowmanDistance(character, s);
-        if (!best || distance < best.distance) best = { snowman: s, distance, kind };
+        if (distance < bestDistance) {
+          best = s;
+          bestDistance = distance;
+        }
       }
-      return best;
+      const kind = best ? takeKind(mine, best.hat, name) : null;
+      if (!best || !kind) return null;
+      takeResult.snowman = best;
+      takeResult.distance = bestDistance;
+      takeResult.kind = kind;
+      return takeResult;
     },
     give(s) {
       if (phase !== 'idle' || !canGiveHat(character.hat.get(), character.holding.get())) return false;

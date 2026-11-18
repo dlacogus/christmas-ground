@@ -48,6 +48,8 @@ export interface SnowmanSoundHooks {
   chime(kind: SnowmanKind): void;
 }
 
+const NO_LABELS: readonly { x: number; y: number; text: string }[] = [];
+
 export const silentSnowmanSounds: SnowmanSoundHooks = { squeak() {}, grunt() {}, chime() {} };
 
 export interface SnowmanPlayDeps {
@@ -146,7 +148,7 @@ export interface SnowmanPlay {
   /** 곁에서 누가 하이파이브를 청했다: 두 손을 든다 */
   cheer(): void;
   /** 머리 위에 잠깐 뜨는 글자 ('영차', '짝!') — 월드 좌표 */
-  labels(): { x: number; y: number; text: string }[];
+  labels(): readonly { x: number; y: number; text: string }[];
   /** 닿아 있는 눈덩이·눈사람과, 올릴 수 있나 */
   readonly target: SnowThing | null;
   readonly canStack: boolean;
@@ -596,11 +598,14 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
       timer = COPUSH.highFiveSeconds;
     },
     labels() {
-      const out: { x: number; y: number; text: string }[] = [];
-      const head = (p: { x: number; y: number }) => ({ x: p.x, y: p.y - CHARACTER.spriteHeight - 4 });
       // 둘이 밀 때 '영차'가 두 사람 머리 위에 번갈아 뜬다
       const shared = phase === 'help' ? helping : ball && ball.holders.length > 1 ? ball : null;
-      if (shared && (character.moving || stuck)) {
+      const chanting = shared !== null && (character.moving || stuck);
+      // 띄울 글자가 없으면 아무것도 만들지 않는다 (매 프레임 불린다)
+      if (!chanting && highFive <= 0) return NO_LABELS;
+      const out: { x: number; y: number; text: string }[] = [];
+      const head = (p: { x: number; y: number }) => ({ x: p.x, y: p.y - CHARACTER.spriteHeight - 4 });
+      if (shared && chanting) {
         const mine = Math.floor(time / COPUSH.chantEvery) % 2 === 0;
         const other = deps.partner?.(shared) ?? null;
         const at = mine || !other ? head(character) : head(other);

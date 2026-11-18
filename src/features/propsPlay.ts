@@ -61,12 +61,14 @@ export interface PropsPlay {
   /** 눈사람 위에 '♥ 닉네임'을 3초 띄운다 */
   showHeart(snowman: Snowman, name: string): void;
   /** 머리 위에 잠깐 뜨는 글자 — 맵 좌표 */
-  labels(): { x: number; y: number; text: string }[];
+  labels(): readonly { x: number; y: number; text: string }[];
   /** 진열대와 고르는 화면 */
   readonly drawables: readonly DepthDrawable[];
   /** 바닥에 내려놓은 소품들 */
   readonly ground: readonly GroundProp[];
 }
+
+const NO_LABELS: readonly { x: number; y: number; text: string }[] = [];
 
 /** 노점 앞에 서는 자리 */
 export function stallFront(stall: number): { x: number; y: number } {
@@ -144,6 +146,11 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
     if (!mine) hearts.push({ snowman: s, name: deps.me(), left: PROPS.heartSeconds });
   };
 
+  /** 노점 앞 자리 (미리 계산)와, 가까운 것 찾기의 결과를 담아 다시 쓰는 객체 */
+  const fronts = STALLS.map((_, s) => stallFront(s));
+  const stallResult = { index: 0, distance: Infinity, x: 0, y: 0 };
+  const groundResult = { item: null as unknown as GroundProp, distance: 0 };
+  const snowmanResult = { snowman: null as unknown as Snowman, distance: 0 };
   const distanceToSnowman = (s: Snowman) => Math.max(0, Math.hypot(s.x - character.x, (s.y - character.y) * 1.5) - s.tiers[0] / 2);
 
   const shelf: DepthDrawable = {
@@ -214,39 +221,57 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
     },
     ground,
     drawables: [shelf, menu],
+    // 아래 셋은 걸어 다니는 동안 매 프레임 불린다: 결과 객체를 하나씩 두고 다시 쓴다
     nearestStall() {
       let best = 0;
       let bestDistance = Infinity;
-      for (let s = 0; s < STALLS.length; s++) {
-        const p = stallFront(s);
-        const d = Math.hypot(p.x - character.x, (p.y - character.y) * 1.5);
+      for (let s = 0; s < fronts.length; s++) {
+        const d = Math.hypot(fronts[s].x - character.x, (fronts[s].y - character.y) * 1.5);
         if (d < bestDistance) {
           best = s;
           bestDistance = d;
         }
       }
-      const p = stallFront(best);
-      return { index: best, distance: bestDistance, x: p.x, y: p.y };
+      stallResult.index = best;
+      stallResult.distance = bestDistance;
+      stallResult.x = fronts[best].x;
+      stallResult.y = fronts[best].y;
+      return stallResult;
     },
     nearestGround() {
-      let best: { item: GroundProp; distance: number } | null = null;
+      let best: GroundProp | null = null;
+      let bestDistance = Infinity;
       for (const item of ground) {
         const distance = Math.hypot(item.x - character.x, item.y - character.y);
-        if (!best || distance < best.distance) best = { item, distance };
+        if (distance < bestDistance) {
+          best = item;
+          bestDistance = distance;
+        }
       }
-      return best;
+      if (!best) return null;
+      groundResult.item = best;
+      groundResult.distance = bestDistance;
+      return groundResult;
     },
     nearestSnowman() {
       const prop = holding();
       if (!prop) return null;
-      let best: { snowman: Snowman; distance: number } | null = null;
+      const slot = PROP_SLOT[prop];
+      let best: Snowman | null = null;
+      let bestDistance = Infinity;
       for (const s of world.snowmen) {
-        if (s.melt >= 0 || !canAttach(s.props, prop) || (s.hat && PROP_SLOT[prop] === 'head')) continue;
-        if (s.headless && (PROP_SLOT[prop] === 'head' || PROP_SLOT[prop] === 'face')) continue;
+        if (s.melt >= 0 || !canAttach(s.props, prop) || (s.hat && slot === 'head')) continue;
+        if (s.headless && (slot === 'head' || slot === 'face')) continue;
         const distance = distanceToSnowman(s);
-        if (!best || distance < best.distance) best = { snowman: s, distance };
+        if (distance < bestDistance) {
+          best = s;
+          bestDistance = distance;
+        }
       }
-      return best;
+      if (!best) return null;
+      snowmanResult.snowman = best;
+      snowmanResult.distance = bestDistance;
+      return snowmanResult;
     },
     open(index) {
       if (phase !== 'idle') return;
@@ -428,6 +453,7 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
       hearts.push({ snowman, name, left: PROPS.heartSeconds });
     },
     labels() {
+      if (hearts.length === 0) return NO_LABELS;
       return hearts.map((h) => ({ x: h.snowman.x, y: h.snowman.y - snowmanHeight(h.snowman.tiers) - 8, text: `♥ ${h.name}` }));
     },
   };

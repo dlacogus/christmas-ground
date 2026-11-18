@@ -83,6 +83,11 @@ export class Plaza extends DurableObject<Env> {
     );
   }
 
+  /** 그 눈사람이 있나 (전체를 읽지 않고 한 줄만 조회한다) */
+  private hasSnowman(id: string): boolean {
+    return this.ctx.storage.sql.exec("SELECT 1 FROM objects WHERE id = ? AND kind = 'snowman' LIMIT 1", id).toArray().length > 0;
+  }
+
   private remove(id: string): void {
     this.ctx.storage.sql.exec('DELETE FROM objects WHERE id = ?', id);
   }
@@ -224,7 +229,7 @@ export class Plaza extends DurableObject<Env> {
         break;
       case 'hit':
         // 그 눈사람이 있을 때만 모두에게 알린다 (던진 사람에게도 — 확인)
-        if (this.objects().some((o) => o.id === message.id && o.kind === 'snowman')) this.broadcast({ t: 'hit', id: message.id, by: me.id, n: message.n, dir: message.dir });
+        if (this.hasSnowman(message.id)) this.broadcast({ t: 'hit', id: message.id, by: me.id, n: message.n, dir: message.dir });
         break;
       case 'splat':
         this.broadcast({ t: 'splat', from: me.id, to: message.to, head: message.head, dir: message.dir });

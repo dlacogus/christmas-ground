@@ -288,6 +288,9 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
   /** 이 접속에서 만든 것들의 id 앞머리 (다른 사람 것과 겹치지 않게) */
   const prefix = Math.floor(random() * 0xffffff).toString(36) + Date.now().toString(36).slice(-4);
 
+  /** 장애물 목록: 한 번 만들어 두고 다시 쓴다 */
+  const obstaclePool: Rect[] = [];
+  const obstacleList: Rect[] = [];
   const world: SnowWorld = {
     balls,
     snowmen,
@@ -338,10 +341,21 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
       }
     },
     obstacles(except = null) {
-      const rects: Rect[] = [];
-      for (const b of balls) if (b !== except && b.d > B.obstacleSize) rects.push(ballRect(b.x, b.y, b.d));
-      for (const s of snowmen) if (s.melt < 0.6) rects.push(snowmanRect(s));
-      return rects;
+      // 매 프레임 불린다: 배열과 사각형을 새로 만들지 않고 값만 고쳐 쓴다 (ballRect와 같은 식)
+      let n = 0;
+      const add = (x: number, y: number, d: number) => {
+        const depth = Math.max(B.minDepth, d * B.footprintDepth);
+        const r = (obstaclePool[n] ??= { x: 0, y: 0, w: 0, h: 0 });
+        r.x = x - d * 0.4;
+        r.y = y - depth;
+        r.w = d * 0.8;
+        r.h = depth;
+        obstacleList[n++] = r;
+      };
+      for (const b of balls) if (b !== except && b.d > B.obstacleSize) add(b.x, b.y, b.d);
+      for (const s of snowmen) if (s.melt < 0.6) add(s.x, s.y, s.tiers[0]);
+      obstacleList.length = n;
+      return obstacleList;
     },
     touching(rect, except = null) {
       for (const b of balls) if (b !== except && rectsOverlap(rect, ballRect(b.x, b.y, b.d))) return b;

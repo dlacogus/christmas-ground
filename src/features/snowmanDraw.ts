@@ -7,7 +7,7 @@ import { LAYER_FACTORS, OUTFITS, SCREEN_WIDTH, SNOWBALL as B, SNOWMAN as M, SNOW
 import type { DepthDrawable } from '../zones/zone';
 import { drawSnowmanBeanie } from './hatGift';
 import { drawAttachedProps, PROP_SLOT } from './props';
-import { snowmanHeight, snowmanKind, snowmanLook, tierBase, type Ball, type Snowman, type SnowmanKind, type SnowThing } from './snowman';
+import { snowmanHeight, snowmanKind, snowmanLook, tierBase, type Ball, type Snowman, type SnowmanKind, type SnowmanLook, type SnowThing } from './snowman';
 import type { BallFace } from '../shared/protocol';
 
 const sprites = new Map<number, HTMLCanvasElement>();
@@ -98,10 +98,20 @@ function line(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number,
 }
 
 /** 눈사람. sx = 화면에서 발밑 x */
+/** 눈사람 생김새는 한 번 만들어 두고, 시드·종류·만든 사람 수가 바뀔 때만 다시 만든다 (매 프레임 새로 만들지 않게) */
+const looks = new WeakMap<Snowman, { seed: number; kind: SnowmanKind; makers: number; look: SnowmanLook }>();
+function lookOf(s: Snowman, kind: SnowmanKind): SnowmanLook {
+  const cached = looks.get(s);
+  if (cached && cached.seed === s.seed && cached.kind === kind && cached.makers === s.makers.length) return cached.look;
+  const look = snowmanLook(s.seed, kind, s.makers);
+  looks.set(s, { seed: s.seed, kind, makers: s.makers.length, look });
+  return look;
+}
+
 export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowman): void {
   const y = Math.round(s.y);
   const kind = snowmanKind(snowmanHeight(s.tiers));
-  const look = snowmanLook(s.seed, kind, s.makers);
+  const look = lookOf(s, kind);
   // 녹는 중이면 전체가 낮아진다
   const melt = Math.max(0, s.melt);
   const tiers = s.tiers.map((d) => Math.max(2, Math.round(d * (1 - 0.75 * melt))));

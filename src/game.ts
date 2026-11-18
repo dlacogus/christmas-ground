@@ -470,7 +470,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     const snowBusy = snowPlay.busy;
     snowPlay.update(dt, rollDir, holding);
     // 노점 소품: 눈 굴리기·스케이트를 시작하면 발밑에 내려놓는다
-    if (propsPlay.holding && (skate.active || snowPlay.busy)) propsPlay.putDown();
+    if (propsPlay.holding && (skate.active || snowPlay.phase === 'gather' || snowPlay.phase === 'roll' || snowPlay.phase === 'help')) propsPlay.putDown();
     const propsBusy = propsPlay.busy || hatGift.busy || throwPlay.busy;
     propsPlay.update(dt, dir, actions);
     hatGift.update(dt);
@@ -641,7 +641,9 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     for (const s of snowWorld.snowmen) actors.push(drawableFor(s));
     // 친구들: 위치·상태를 주고받고 함께 그린다
     for (const item of propsPlay.ground) actors.push(item.drawable);
-    session.tick(dt, layerOffsetX(camera, LAYER_FACTORS.main), snowPlay.labels().concat(propsPlay.labels()));
+    const pushLabels = snowPlay.labels();
+    const heartLabels = propsPlay.labels();
+    session.tick(dt, layerOffsetX(camera, LAYER_FACTORS.main), heartLabels.length === 0 ? pushLabels : pushLabels.length === 0 ? heartLabels : pushLabels.concat(heartLabels));
     for (const d of session.drawables()) actors.push(d);
     stillTime = walking && !character.moving && !snowPlay.busy ? stillTime + dt : 0;
     drawLayers(ctx, camera, layers);

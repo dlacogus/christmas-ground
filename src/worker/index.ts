@@ -7,7 +7,7 @@
 // - 눈덩이·눈사람은 SQLite 테이블 objects(id, kind, data JSON, updated_at)에, 결과가 바뀔 때만 쓴다.
 
 import { DurableObject } from 'cloudflare:workers';
-import { allowMessage, expiredObjects, isFull, leavePlaza, newSession, seatsOf, trySit, type Session } from '../shared/plazaCore';
+import { allowMessage, expiredObjects, holdersOf, isFull, leavePlaza, newSession, releaseHold, seatsOf, trySit, tryGrab, type Session } from '../shared/plazaCore';
 import { parseClientMessage, type ServerMessage, type WireObject } from '../shared/protocol';
 
 interface Env {
@@ -172,7 +172,30 @@ export class Plaza extends DurableObject<Env> {
           this.broadcast({ t: 'seats', seats: seatsOf(this.sessions().map((s) => s.session)) });
         }
         break;
+      case 'grab': {
+        // 잡기는 서버가 허락한다 (한 눈덩이에 최대 2명). 잡힌 눈덩이는 저장소에서 빼 둔다 — 놓일 때 다시 쓴다 (녹는 시계도 그때부터)
+        const all = this.sessions().map((s) => (s.ws === ws ? session : s.session));
+        if (tryGrab(all, session, message.id, now)) {
+          ws.serializeAttachment(session);
+          this.remove(message.id);
+          this.broadcast({ t: 'holders', id: message.id, holders: holdersOf(all, message.id) });
+        } else this.send(ws, { t: 'grabDenied', id: message.id });
+        break;
+      }
+      case 'drop':
+        if (releaseHold(session, message.id)) {
+          session.rolling = null;
+          ws.serializeAttachment(session);
+          this.broadcast({ t: 'holders', id: message.id, holders: holdersOf(this.sessions().map((s) => s.session), message.id) });
+        }
+        break;
+      case 'push':
+        // 같이 미는 사람의 방향 입력은 전달만 한다
+        if (session.holding?.id === message.id) this.broadcast({ t: 'push', id: message.id, from: me.id, dx: message.dx, dy: message.dy }, ws);
+        break;
       case 'ball':
+        // 눈덩이를 움직이는 것은 먼저 잡은 사람뿐
+        if (holdersOf(this.sessions().map((s) => (s.ws === ws ? session : s.session)), message.id)[0] !== me.id) break;
         // 굴리는 동안은 전달만 하고 저장하지 않는다 (나가면 이 모습으로 놓인다)
         session.rolling = { id: message.id, x: message.x, y: message.y, d: message.d, roll: message.roll, seed: message.seed };
         this.broadcast({ ...message, owner: me.id }, ws);
@@ -181,6 +204,14 @@ export class Plaza extends DurableObject<Env> {
         const object = { id: message.id, kind: message.kind, data: message.data, updatedAt: now } as WireObject;
         this.put(object);
         if (session.rolling?.id === message.id) session.rolling = null;
+        // 놓였다: 잡고 있던 사람은 모두 손을 뗀 것으로
+        for (const s of this.sessions()) {
+          const other = s.ws === ws ? session : s.session;
+          if (other.holding?.id !== message.id) continue;
+          other.holding = null;
+          if (s.ws !== ws) s.ws.serializeAttachment(other);
+        }
+        this.broadcast({ t: 'holders', id: message.id, holders: [] });
         this.broadcast({ t: 'put', object }, ws);
         this.cleanup(now);
         break;
@@ -200,9 +231,12 @@ export class Plaza extends DurableObject<Env> {
     const session = ws.deserializeAttachment() as Session | null;
     if (!session?.player) return;
     const id = session.player.id;
-    const { seatFreed, dropped } = leavePlaza(session, Date.now());
+    const others = this.sessions().filter((s) => s.ws !== ws).map((s) => s.session);
+    const { seatFreed, dropped, released } = leavePlaza(session, Date.now(), others);
     session.player = null;
     ws.serializeAttachment(session);
+    // 같이 밀던 눈덩이: 남은 사람이 이어받는다
+    if (released) this.broadcast({ t: 'holders', id: released, holders: holdersOf(others, released) }, ws);
     // 굴리던 눈덩이는 그 자리에 놓인 것으로
     if (dropped) {
       this.put(dropped);

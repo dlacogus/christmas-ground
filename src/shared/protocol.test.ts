@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { NET, SNOWBALL, SNOWMAN } from '../constants';
 import { MAP_WIDTH } from '../world';
-import { allowMessage, expiredObjects, isFull, leavePlaza, newSession, seatsOf, trySit, type Session } from './plazaCore';
+import { allowMessage, expiredObjects, holdersOf, isFull, leavePlaza, newSession, releaseHold, seatsOf, tryGrab, trySit, type Session } from './plazaCore';
 import { cleanName, emptySeats, parseClientMessage, seatCount, type WireObject, type WirePlayer } from './protocol';
 
 const send = (m: unknown) => parseClientMessage(JSON.stringify(m));
@@ -119,12 +119,43 @@ describe('광장 서버 규칙', () => {
     a.rolling = { id: 'a-3', x: 520, y: 236, d: 18, roll: 2, seed: 9 };
     const result = leavePlaza(a, 5000);
     expect(result.seatFreed).toBe(true);
+    expect(result.released).toBeNull();
     expect(result.dropped).toEqual({ id: 'a-3', kind: 'ball', data: { x: 520, y: 236, d: 18, roll: 2, seed: 9, owner: 'a' }, updatedAt: 5000 });
     expect(a.seat).toBeNull();
     expect(a.rolling).toBeNull();
     expect(seatsOf(sessions.filter((s) => s !== a))).toEqual(emptySeats());
     // 아무것도 안 하던 사람은 뒤처리할 것이 없다
-    expect(leavePlaza(b, 5000)).toEqual({ seatFreed: false, dropped: null });
+    expect(leavePlaza(b, 5000)).toEqual({ seatFreed: false, dropped: null, released: null });
+  });
+
+  it('눈덩이 잡기: 최대 2명, 먼저 잡은 사람이 움직이고, 한 명이 놓으면 다른 한 명이 이어받는다', () => {
+    const a = joined('a');
+    const b = joined('b');
+    const c = joined('c');
+    const sessions = [a, b, c];
+    expect(tryGrab(sessions, a, 'ball-1', 100)).toBe(true);
+    expect(tryGrab(sessions, b, 'ball-1', 200)).toBe(true);
+    expect(tryGrab(sessions, c, 'ball-1', 300)).toBe(false);
+    expect(holdersOf(sessions, 'ball-1')).toEqual(['a', 'b']);
+    // 다시 잡아도 순서는 그대로
+    expect(tryGrab(sessions, a, 'ball-1', 999)).toBe(true);
+    expect(holdersOf(sessions, 'ball-1')).toEqual(['a', 'b']);
+    // 먼저 잡은 사람이 놓으면 두 번째 사람이 이어받는다
+    expect(releaseHold(a, 'ball-1')).toBe(true);
+    expect(holdersOf(sessions, 'ball-1')).toEqual(['b']);
+    // 자리가 났으니 세 번째 사람도 잡을 수 있다
+    expect(tryGrab(sessions, c, 'ball-1', 400)).toBe(true);
+    expect(holdersOf(sessions, 'ball-1')).toEqual(['b', 'c']);
+    expect(releaseHold(a, 'ball-1')).toBe(false);
+    // 같이 밀던 사람이 나가면 눈덩이는 바닥에 놓이지 않고 남은 사람이 이어받는다
+    b.rolling = { id: 'ball-1', x: 500, y: 240, d: 30, roll: 0, seed: 1 };
+    const left = leavePlaza(b, 5000, sessions);
+    expect(left.released).toBe('ball-1');
+    expect(left.dropped).toBeNull();
+    expect(holdersOf(sessions, 'ball-1')).toEqual(['c']);
+    // 혼자 밀던 사람이 나가면 그 자리에 놓인다
+    c.rolling = { id: 'ball-1', x: 510, y: 240, d: 31, roll: 0, seed: 1 };
+    expect(leavePlaza(c, 6000, sessions).dropped?.id).toBe('ball-1');
   });
 
   it('녹는 시간 정리: 5분 넘게 놓아둔 눈덩이, 12개를 넘는 오래된 눈사람', () => {

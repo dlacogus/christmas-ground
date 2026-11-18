@@ -4,7 +4,7 @@
 import { layerOffsetX } from '../camera';
 import { createCharacter, type Character } from '../character/character';
 import { drawCharacter } from '../character/render';
-import { BENCH_SIT, CAROUSEL, LAYER_FACTORS, NET, ROOF_SNOW_COLORS, SCREEN_WIDTH, SKATE, type OutfitName } from '../constants';
+import { BENCH_SIT, CAROUSEL, COPUSH, LAYER_FACTORS, NET, ROOF_SNOW_COLORS, SCREEN_WIDTH, SKATE, type OutfitName } from '../constants';
 import { createSnowHits, type SnowHits } from '../features/roofSnow';
 import { createHat, createSneeze, type Hat, type Sneeze } from '../features/sneeze';
 import type { Act, ServerMessage, WireHat, WirePlayer, WireState } from '../shared/protocol';
@@ -34,6 +34,8 @@ export interface Remote {
   /** 점프한 뒤 지난 시간 (안 뛰는 중이면 -1) */
   jump: number;
   spinning: boolean;
+  /** 두 손을 들고 있는 남은 시간 (하이파이브) */
+  cheerLeft: number;
 }
 
 interface Puff {
@@ -72,6 +74,7 @@ export function samplePosition(samples: readonly Sample[], renderTime: number): 
 export interface RemotePlayers {
   readonly count: number;
   get(id: string): Remote | undefined;
+  all(): Iterable<Remote>;
   /** 들어왔다 (puff = 눈가루가 포슬 하며 나타난다) */
   add(player: WirePlayer, now: number, puff: boolean): void;
   remove(id: string): void;
@@ -135,7 +138,8 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number): Remot
             const lift = r.jump >= 0 ? SKATE.jumpHeight * Math.sin((Math.PI * r.jump) / SKATE.jumpSeconds) : 0;
             drawCharacter(ctx, r.ch, ox, { pose: 'skateGlide', lift });
           }
-        } else drawCharacter(ctx, r.ch, ox);
+        } else if (r.cheerLeft > 0) drawCharacter(ctx, r.ch, ox, { pose: 'cheer', index: 0 });
+        else drawCharacter(ctx, r.ch, ox);
         r.hits.drawOver(ctx, footX, footY, ox);
       }
       r.sneeze.draw(ctx, ox);
@@ -170,6 +174,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number): Remot
     else if (a === 'spin') r.spinning = true;
     else if (a === 'spinEnd') r.spinning = false;
     else if (a === 'wave') r.occupant.waveLeft = CAROUSEL.waveSeconds;
+    else if (a === 'highfive' || a === 'cheer') r.cheerLeft = COPUSH.highFiveSeconds;
   };
 
   return {
@@ -177,6 +182,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number): Remot
       return remotes.size;
     },
     get: (id) => remotes.get(id),
+    all: () => remotes.values(),
     add(player, now, puff) {
       const ch = createCharacter(player.x, player.y, outfitOf(player.scarf));
       ch.facing = player.f ? 'right' : 'left';
@@ -191,6 +197,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number): Remot
         fallLeft: 0,
         jump: -1,
         spinning: false,
+        cheerLeft: 0,
       };
       remotes.set(player.id, r);
       applyState(r, player.state, player.hat, false);
@@ -254,6 +261,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number): Remot
         r.hits.follow(ch.x, ch.y);
         r.hits.update(dt);
         r.fallLeft = Math.max(0, r.fallLeft - dt);
+        r.cheerLeft = Math.max(0, r.cheerLeft - dt);
         if (r.jump >= 0) {
           r.jump += dt;
           if (r.jump >= SKATE.jumpSeconds) r.jump = -1;

@@ -2,7 +2,7 @@
 // 서버(Durable Object 'Plaza')는 받은 메시지를 parseClientMessage로 확인하고, 다른 사람들에게 전달만 한다.
 // 브라우저·Worker 어느 쪽에서도 돌아가게 DOM도 Cloudflare API도 쓰지 않는다.
 
-import { CAROUSEL, CARRIAGE, NET, SNOWBALL, SNOWMAN } from '../constants';
+import { CAROUSEL, CARRIAGE, COPUSH, NET, SNOWBALL, SNOWMAN } from '../constants';
 import { MAP_HEIGHT, MAP_WIDTH } from '../world';
 
 // ───────────── 공통 ─────────────
@@ -18,7 +18,7 @@ export type WireState =
 export type WireHat = 'on' | { x: number; y: number };
 
 /** 한 번짜리 동작 — 친구 화면에서도 같은 연출이 나온다 */
-export const ACTS = ['sneeze', 'snowman', 'fall', 'wave', 'jump', 'spin', 'spinEnd'] as const;
+export const ACTS = ['sneeze', 'snowman', 'fall', 'wave', 'jump', 'spin', 'spinEnd', 'highfive', 'cheer'] as const;
 export type Act = (typeof ACTS)[number];
 
 export interface WirePlayer {
@@ -34,6 +34,12 @@ export interface WirePlayer {
   hat: WireHat;
 }
 
+/** 만든 사람 (접속 id는 나가면 바뀌므로 닉네임과 목도리 색으로 적는다) */
+export interface Maker {
+  name: string;
+  scarf: number;
+}
+
 /** 놓여 있는 눈덩이 */
 export interface BallData {
   x: number;
@@ -42,6 +48,8 @@ export interface BallData {
   roll: number;
   seed: number;
   owner: string;
+  /** 처음 만든 사람 + 이어서 굴린 사람들 (최대 4명) */
+  makers?: Maker[];
 }
 
 /** 눈사람 */
@@ -51,6 +59,8 @@ export interface SnowmanData {
   tiers: number[];
   seed: number;
   owner: string;
+  /** 눈덩이를 굴린 사람들 (2명 이상이면 줄무늬 목도리) */
+  makers?: Maker[];
 }
 
 export type WireObject =
@@ -75,6 +85,11 @@ export type ClientMessage =
   | { t: 'stand' }
   /** 굴리는 눈덩이 (초당 최대 5번, 저장하지 않는다) */
   | { t: 'ball'; id: string; x: number; y: number; d: number; roll: number; seed: number }
+  /** 눈덩이를 잡겠다 (새로 뭉쳤거나, 놓인 것을 이어 굴리거나, 남이 미는 것을 같이 밀거나) / 손을 뗐다 */
+  | { t: 'grab'; id: string }
+  | { t: 'drop'; id: string }
+  /** 같이 미는 사람의 방향 입력 (눈덩이 위치는 먼저 잡은 사람 화면이 계산한다) */
+  | { t: 'push'; id: string; dx: number; dy: number }
   /** 결과가 바뀔 때만: 놓기·합치기 (저장한다) / 없어짐 */
   | { t: 'put'; id: string; kind: 'ball'; data: BallData }
   | { t: 'put'; id: string; kind: 'snowman'; data: SnowmanData }
@@ -97,7 +112,12 @@ export type ServerMessage =
   | { t: 'seatDenied' }
   | { t: 'ball'; owner: string; id: string; x: number; y: number; d: number; roll: number; seed: number }
   | { t: 'put'; object: WireObject }
-  | { t: 'del'; id: string };
+  | { t: 'del'; id: string }
+  /** 이 눈덩이를 지금 밀고 있는 사람들 (먼저 잡은 순서, 최대 2명) */
+  | { t: 'holders'; id: string; holders: string[] }
+  /** 잡을 수 없다 (이미 둘이 밀고 있다) */
+  | { t: 'grabDenied'; id: string }
+  | { t: 'push'; id: string; from: string; dx: number; dy: number };
 
 // ───────────── 검사 ─────────────
 
@@ -141,10 +161,19 @@ export function validHat(v: unknown): v is WireHat {
   return inMap(h.x, h.y);
 }
 
+export function validMakers(v: unknown): v is Maker[] | undefined {
+  if (v === undefined) return true;
+  return (
+    Array.isArray(v) &&
+    v.length <= COPUSH.maxMakers &&
+    v.every((m) => typeof m === 'object' && m !== null && cleanName((m as Maker).name) !== null && isInt((m as Maker).scarf, 0, NET.scarves - 1))
+  );
+}
+
 export function validBall(v: unknown): v is BallData {
   if (typeof v !== 'object' || v === null) return false;
   const b = v as Record<string, unknown>;
-  return inMap(b.x, b.y) && isSize(b.d) && isNum(b.roll) && isNum(b.seed) && isId(b.owner);
+  return inMap(b.x, b.y) && isSize(b.d) && isNum(b.roll) && isNum(b.seed) && isId(b.owner) && validMakers(b.makers);
 }
 
 export function validSnowman(v: unknown): v is SnowmanData {
@@ -157,7 +186,8 @@ export function validSnowman(v: unknown): v is SnowmanData {
     s.tiers.length <= SNOWMAN.maxTiers &&
     s.tiers.every(isSize) &&
     isNum(s.seed) &&
-    isId(s.owner)
+    isId(s.owner) &&
+    validMakers(s.makers)
   );
 }
 
@@ -203,6 +233,11 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return isId(m.id) && inMap(m.x, m.y) && isSize(m.d) && isNum(m.roll) && isNum(m.seed)
         ? { t: 'ball', id: m.id, x: m.x as number, y: m.y as number, d: m.d, roll: m.roll, seed: m.seed }
         : null;
+    case 'grab':
+    case 'drop':
+      return isId(m.id) ? { t: m.t, id: m.id } : null;
+    case 'push':
+      return isId(m.id) && isNum(m.dx) && isNum(m.dy) && Math.abs(m.dx) <= 1 && Math.abs(m.dy) <= 1 ? { t: 'push', id: m.id, dx: m.dx, dy: m.dy } : null;
     case 'put':
       if (!isId(m.id)) return null;
       if (m.kind === 'ball' && validBall(m.data)) return { t: 'put', id: m.id, kind: 'ball', data: m.data };

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createCharacter } from '../character/character';
-import { SNOWBALL, SNOWMAN, SNOW_FIELD } from '../constants';
+import { COPUSH, SNOWBALL, SNOWMAN, SNOW_FIELD } from '../constants';
 import { nearestInteraction } from '../input/interact';
 import { createSnowField } from '../scenery/snowField';
 import { MAP_WIDTH, WALK_AREA } from '../world';
 import {
+  addMaker,
+  combinePush,
+  mergeMakers,
   createSnowWorld,
   fitsScreen,
   grow,
@@ -327,5 +330,138 @@ describe('스페이스 우선순위', () => {
       ]),
     ).toBe('carousel');
     expect(nearestInteraction([{ id: 'ball', distance: SNOWBALL.continueRadius + 1, radius: SNOWBALL.continueRadius }])).toBeNull();
+  });
+});
+
+describe('둘이 같이 밀기 · 이어서 굴리기', () => {
+  it('두 사람의 방향을 더한다: 같은 쪽이면 2배, 한 명이면 1배, 반대면 제자리', () => {
+    expect(combinePush(right, right)).toMatchObject({ x: 1, y: 0, factor: 2, stuck: false });
+    expect(combinePush(right, null)).toMatchObject({ x: 1, y: 0, factor: 1, stuck: false });
+    expect(combinePush(null, left)).toMatchObject({ x: -1, y: 0, factor: 1, stuck: false });
+    expect(combinePush(right, left)).toMatchObject({ factor: 0, stuck: true });
+    expect(combinePush(null, null)).toMatchObject({ factor: 0, stuck: false });
+    // 비스듬히 다른 쪽으로 밀면 그 사이로, 조금 빠르게
+    const diagonal = combinePush(right, { x: 0, y: 1 });
+    expect(diagonal.factor).toBeCloseTo(Math.SQRT2, 5);
+    expect(diagonal.x).toBeCloseTo(diagonal.y, 5);
+  });
+
+  it('둘이 같은 쪽으로 밀면 두 배 빨리 굴러가고, 반대로 밀면 둘 다 버틴다', () => {
+    const distance = (helper: { x: number; y: number } | null) => {
+      const { ch, world, play, run } = setup();
+      ch.y = 262;
+      const ball = world.addBall(ch.x + 40, ch.y, 40, 'me');
+      play.continueWith(ball);
+      run(1, right);
+      if (helper) {
+        ball.holders = ['me', 'friend'];
+        play.setHelperDir(helper);
+      }
+      const from = ball.x;
+      run(1, right);
+      return { moved: ball.x - from, play };
+    };
+    const alone = distance(null).moved;
+    const together = distance(right).moved;
+    expect(alone).toBeGreaterThan(10);
+    expect(together).toBeCloseTo(alone * 2, 0);
+    // 큰 눈덩이: 혼자 15px/s 가까이 느린 것을 둘이면 두 배로
+    expect(rollSpeed(64) * 2).toBe(30);
+    const against = distance(left);
+    expect(against.moved).toBeCloseTo(0, 5);
+    // 버티는 동안은 제자리에서 발을 동동
+    expect(against.play.pose()?.pose).toBe('push');
+  });
+
+  it('먼저 잡은 사람이 놓아도 같이 밀던 사람이 있으면 눈덩이는 놓이지 않고 이어받는다', () => {
+    const calls: string[] = [];
+    const ch = createCharacter(START.x, START.y);
+    const world = createSnowWorld(() => 0.5);
+    const play = createSnowmanPlay(ch, world, {
+      field: field(),
+      owner: 'me',
+      random: () => 0.5,
+      save: () => {},
+      sync: { rolling: () => {}, put: () => calls.push('put'), del: () => calls.push('del'), grab: () => calls.push('grab'), drop: () => calls.push('drop') },
+    });
+    const ball = world.addBall(ch.x + 14, ch.y, 10, 'me');
+    play.continueWith(ball);
+    expect(calls).toEqual(['grab']);
+    ball.holders = ['me', 'friend'];
+    play.update(DT, none, false);
+    expect(calls).toEqual(['grab', 'drop']);
+    expect(play.busy).toBe(false);
+    expect(ball.heldBy).toBe('friend');
+    expect(world.balls).toContain(ball);
+    // 혼자 밀다 놓으면 그 자리에 놓인다
+    ball.holders = [];
+    ball.heldBy = null;
+    play.continueWith(ball);
+    play.update(DT, none, false);
+    expect(calls).toEqual(['grab', 'drop', 'grab', 'put']);
+  });
+
+  it('같이 밀던 사람은 방향만 보내다가, 먼저 잡은 사람이 놓으면 이어받아 굴린다', () => {
+    const pushes: string[] = [];
+    const ch = createCharacter(START.x, START.y);
+    const world = createSnowWorld(() => 0.5);
+    const leader = { x: START.x + 30, y: START.y, facing: 'right' as const };
+    const play = createSnowmanPlay(ch, world, {
+      field: field(),
+      owner: 'me',
+      random: () => 0.5,
+      save: () => {},
+      sync: { rolling: () => {}, put: () => {}, del: () => {}, push: (_b, d) => pushes.push(`${d.x},${d.y}`) },
+      partner: () => leader,
+    });
+    const ball = world.addBall(leader.x + 20, leader.y, 20, 'friend');
+    ball.heldBy = 'friend';
+    ball.holders = ['friend'];
+    expect(play.joinAsHelper(ball)).toBe(true);
+    expect(play.helping).toBe(ball);
+    play.update(DT, right, true);
+    // 먼저 잡은 사람 곁에 붙고, 눈덩이는 내가 움직이지 않는다
+    expect(Math.abs(ch.x - leader.x)).toBeLessThan(5);
+    expect(ball.x).toBe(leader.x + 20);
+    expect(pushes).toEqual(['1,0']);
+    // 둘까지만
+    ball.holders = ['friend', 'me'];
+    const third = createSnowmanPlay(createCharacter(START.x, START.y), world, { field: field(), owner: 'c', save: () => {} });
+    expect(third.joinAsHelper(ball)).toBe(false);
+    // 이어받기
+    play.promote();
+    expect(play.rolling).toBe(ball);
+    expect(play.helping).toBeNull();
+    expect(ball.heldBy).toBeNull();
+  });
+
+  it('만든 사람 기록: 처음 만든 사람 + 이어서 굴린 사람들 (최대 4명), 같이 만든 눈사람은 줄무늬 목도리', () => {
+    const makers = [{ name: '산타', scarf: 1 }];
+    expect(addMaker(makers, { name: '산타', scarf: 1 })).toBe(false);
+    expect(addMaker(makers, { name: '루돌프', scarf: 3 })).toBe(true);
+    addMaker(makers, { name: '셋', scarf: 0 });
+    addMaker(makers, { name: '넷', scarf: 2 });
+    expect(addMaker(makers, { name: '다섯', scarf: 4 })).toBe(false);
+    expect(makers).toHaveLength(COPUSH.maxMakers);
+    expect(mergeMakers([{ name: 'a', scarf: 0 }], [{ name: 'b', scarf: 1 }, { name: 'a', scarf: 0 }]).map((m) => m.name)).toEqual(['a', 'b']);
+
+    // 남이 놓고 간 눈덩이를 이어 굴리면 나도 만든 사람으로 적힌다
+    const ch = createCharacter(START.x, START.y);
+    const world = createSnowWorld(() => 0.5);
+    const play = createSnowmanPlay(ch, world, { field: field(), owner: 'me', random: () => 0.5, save: () => {}, me: () => ({ name: '루돌프', scarf: 3 }) });
+    const lying = world.addBall(ch.x + 90, ch.y, 24, 'friend');
+    lying.makers = [{ name: '산타', scarf: 1 }];
+    const mine = world.addBall(ch.x + 14, ch.y, 10, 'friend');
+    mine.makers = [{ name: '산타', scarf: 1 }];
+    play.continueWith(mine);
+    expect(mine.makers.map((m) => m.name)).toEqual(['산타', '루돌프']);
+    for (let t = 0; t < 4; t += DT) play.update(DT, right, true);
+    play.update(DT, none, false);
+    for (let t = 0; t < SNOWMAN.liftSmall + 0.1; t += DT) play.update(DT, none, false);
+    const s = world.snowmen[0];
+    expect(s.makers.map((m) => m.name).sort()).toEqual(['루돌프', '산타']);
+    expect(snowmanLook(s.seed, 'medium', s.makers).stripes).toEqual(expect.arrayContaining([1, 3]));
+    // 혼자 만든 눈사람은 줄무늬가 아니다
+    expect(snowmanLook(s.seed, 'medium', [{ name: '산타', scarf: 1 }]).stripes).toBeNull();
   });
 });

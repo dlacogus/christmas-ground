@@ -3,12 +3,14 @@
 // - '영차': 낮은 톤 두 번
 // - 완성 종소리 화음: 미니는 작고 높은 '딩', 엄청 큰 눈사람은 길고 낮은 화음
 
-import { SNOWBALL, SNOWMAN_SOUND as K } from '../constants';
+import { COPUSH, SNOWBALL, SNOWMAN_SOUND as K } from '../constants';
 import type { SnowmanKind } from '../features/snowman';
 import { createNoiseBuffer, type SoundPart } from './soundSystem';
 
 export interface SnowmanSounds extends SoundPart {
-  squeak(d: number): void;
+  squeak(d: number, loud?: boolean): void;
+  /** 하이파이브 '짝!' */
+  clap(): void;
   grunt(): void;
   chime(kind: SnowmanKind): void;
 }
@@ -25,7 +27,23 @@ export function createSnowmanSounds(): SnowmanSounds {
       out = dest;
       noise = createNoiseBuffer(ctx, K.noiseSeconds);
     },
-    squeak(d) {
+    clap() {
+      if (!ready()) return;
+      const ctx = audio!;
+      const now = ctx.currentTime;
+      const src = ctx.createBufferSource();
+      src.buffer = noise;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1700;
+      filter.Q.value = 0.9;
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(K.chimeVolume * 2, now);
+      env.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
+      src.connect(filter).connect(env).connect(out!);
+      src.start(now, 0, 0.1);
+    },
+    squeak(d, loud = false) {
       if (!ready()) return;
       const ctx = audio!;
       const now = ctx.currentTime;
@@ -43,7 +61,7 @@ export function createSnowmanSounds(): SnowmanSounds {
       filter.frequency.linearRampToValueAtTime(hz * 0.7, now + length);
       const env = ctx.createGain();
       env.gain.setValueAtTime(0, now);
-      env.gain.linearRampToValueAtTime(K.squeakVolume * (0.6 + big * 0.6), now + 0.01);
+      env.gain.linearRampToValueAtTime(K.squeakVolume * (0.6 + big * 0.6) * (loud ? COPUSH.loudSqueak : 1), now + 0.01);
       env.gain.exponentialRampToValueAtTime(0.0001, now + length);
       src.connect(filter).connect(env).connect(out!);
       src.start(now, Math.random() * (K.noiseSeconds - length), length);

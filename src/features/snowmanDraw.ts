@@ -3,7 +3,7 @@
 // 눈사람은 눈덩이를 쌓고 그 위에 얼굴·팔·단추·목도리·양동이 모자를 얹는다 (크기에 맞춰 늘어난다).
 
 import { layerOffsetX } from '../camera';
-import { LAYER_FACTORS, SCREEN_WIDTH, SNOWBALL as B, SNOWMAN as M, SNOWMAN_COLORS as C } from '../constants';
+import { LAYER_FACTORS, OUTFITS, SCREEN_WIDTH, SNOWBALL as B, SNOWMAN as M, SNOWMAN_COLORS as C, type OutfitName } from '../constants';
 import type { DepthDrawable } from '../zones/zone';
 import { snowmanHeight, snowmanKind, snowmanLook, tierBase, type Ball, type Snowman, type SnowThing } from './snowman';
 
@@ -98,7 +98,7 @@ function line(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number,
 export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowman): void {
   const y = Math.round(s.y);
   const kind = snowmanKind(snowmanHeight(s.tiers));
-  const look = snowmanLook(s.seed, kind);
+  const look = snowmanLook(s.seed, kind, s.makers);
   // 녹는 중이면 전체가 낮아진다
   const melt = Math.max(0, s.melt);
   const tiers = s.tiers.map((d) => Math.max(2, Math.round(d * (1 - 0.75 * melt))));
@@ -157,13 +157,29 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowma
   }
 
   // 목도리: 머리와 몸통 사이를 두르고 한쪽으로 늘어진다
-  if (look.scarf !== null && top > 0 && hr >= 3) {
+  if ((look.scarf !== null || look.stripes) && top > 0 && hr >= 2) {
     const neck = y - Math.round(tierBase(tiers, top)) - 1;
-    const half = Math.round(hr * 0.9);
+    const half = Math.max(2, Math.round(hr * 0.9));
     const thick = kind === 'giant' ? 3 : 2;
-    ctx.fillStyle = C.scarves[look.scarf];
-    ctx.fillRect(hx - half, neck - thick + 1, half * 2 + 1, thick);
-    ctx.fillRect(hx - f * Math.round(half * 0.6), neck, thick, Math.round(hr * 0.9) + 2);
+    const tail = Math.round(hr * 0.9) + 2;
+    const tailX = hx - f * Math.round(half * 0.6);
+    if (look.stripes) {
+      // 같이 만든 눈사람: 만든 사람들 목도리 색이 번갈아 나오는 줄무늬
+      const stripe = kind === 'giant' ? 3 : 2;
+      const colorAt = (k: number) => OUTFITS[`scarf${look.stripes![Math.floor(k / stripe) % look.stripes!.length]}` as OutfitName].scarf;
+      for (let k = 0; k <= half * 2; k++) {
+        ctx.fillStyle = colorAt(k);
+        ctx.fillRect(hx - half + k, neck - thick + 1, 1, thick);
+      }
+      for (let k = 0; k < tail; k++) {
+        ctx.fillStyle = colorAt(k);
+        ctx.fillRect(tailX, neck + k, thick, 1);
+      }
+    } else {
+      ctx.fillStyle = C.scarves[look.scarf!];
+      ctx.fillRect(hx - half, neck - thick + 1, half * 2 + 1, thick);
+      ctx.fillRect(tailX, neck, thick, tail);
+    }
   }
 
   // 얼굴: 석탄 눈 두 개, 당근 코(바라보는 쪽), 석탄 점 웃음
@@ -256,7 +272,16 @@ export function drawableFor(thing: SnowThing): DepthDrawable {
         const sx = Math.round(thing.x) - layerOffsetX(camera, LAYER_FACTORS.main);
         const reach = (thing.kind === 'ball' ? thing.d : thing.tiers[0]) + 12;
         if (sx < -reach || sx > SCREEN_WIDTH + reach) return;
-        if (thing.kind === 'ball') drawBall(ctx, sx, Math.round(thing.y), (thing as Ball).d, thing.roll, thing.seed);
+        if (thing.kind === 'ball') {
+          const ball = thing as Ball;
+          drawBall(ctx, sx, Math.round(ball.y), ball.d, ball.roll, ball.seed);
+          // 만든 사람 수만큼 아주 작은 목도리 색 점 (누구 건지 알 수 있게)
+          const top = Math.round(ball.y) - Math.round(ball.d) - 3;
+          ball.makers.forEach((m, i) => {
+            ctx.fillStyle = OUTFITS[`scarf${m.scarf}` as OutfitName].scarf;
+            ctx.fillRect(sx - ball.makers.length + i * 2, top, 1, 1);
+          });
+        }
         else drawSnowman(ctx, sx, thing);
       },
     };

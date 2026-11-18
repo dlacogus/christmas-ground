@@ -194,6 +194,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     snowWorld,
     roofSnow,
     rolling: () => snowPlay.rolling,
+    snowPlay: () => snowPlay,
     legacy: loadSnowmen(),
   });
   const snowPlay = createSnowmanPlay(character, snowWorld, {
@@ -202,6 +203,9 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     sounds: snowmanSounds,
     owner: () => session.owner(),
     sync: session.sync,
+    me: () => session.me(),
+    partner: (ball) => session.partner(ball),
+    nearCoMaker: (snowman) => session.nearCoMaker(snowman),
     save: () => {},
   });
   /** 스페이스 한 번으로 굴리기 시작해 굴리는 중인가 (다시 누르면 놓는다) */
@@ -345,12 +349,12 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     const press = input.pointer();
     const pressing = press !== null && press.sy >= WALK_AREA.y;
     const spacePressed = actions.tap || actions.hold;
-    if (snowPlay.phase !== 'gather' && snowPlay.phase !== 'roll') keyRolling = false;
-    if (keyRolling && snowPlay.rolling && spacePressed) keyRolling = false;
+    if (snowPlay.phase !== 'gather' && snowPlay.phase !== 'roll' && snowPlay.phase !== 'help') keyRolling = false;
+    if (keyRolling && (snowPlay.rolling || snowPlay.helping) && spacePressed) keyRolling = false;
     const holding = keyRolling || pressing;
     holdTime = pressing ? holdTime + dt : 0;
     let rollDir = dir;
-    if (dir.x === 0 && dir.y === 0 && pressing && snowPlay.rolling) {
+    if (dir.x === 0 && dir.y === 0 && pressing && (snowPlay.rolling || snowPlay.helping)) {
       const dx = press.sx + layerOffsetX(camera, LAYER_FACTORS.main) - character.x;
       const dy = press.sy - character.y;
       const d = Math.hypot(dx, dy);
@@ -417,7 +421,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       let startedRolling = false;
       const longPress = holdTime >= SNOWBALL.holdSeconds;
       if (spacePressed || longPress) {
-        if (choice === 'ball' && nearBall) startedRolling = snowPlay.continueWith(nearBall.ball);
+        // 남이 밀고 있는 눈덩이면 같이 밀고, 놓여 있는 것이면 (누가 놓고 간 것이든) 이어 굴린다
+        if (choice === 'ball' && nearBall) startedRolling = nearBall.ball.heldBy ? snowPlay.joinAsHelper(nearBall.ball) : snowPlay.continueWith(nearBall.ball);
         else if (choice === null) startedRolling = snowPlay.start();
         if (startedRolling && spacePressed) keyRolling = true;
       }
@@ -496,7 +501,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     for (const b of snowWorld.balls) actors.push(drawableFor(b));
     for (const s of snowWorld.snowmen) actors.push(drawableFor(s));
     // 친구들: 위치·상태를 주고받고 함께 그린다
-    session.tick(dt, layerOffsetX(camera, LAYER_FACTORS.main));
+    session.tick(dt, layerOffsetX(camera, LAYER_FACTORS.main), snowPlay.labels());
     for (const d of session.drawables()) actors.push(d);
     stillTime = walking && !character.moving && !snowPlay.busy ? stillTime + dt : 0;
     drawLayers(ctx, camera, layers);
@@ -513,7 +518,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     let h: PlayHint | null;
     if (snowPlay.busy) h = snowPlay.hint(touch);
     else if (choice === 'ball' && nearBall) {
-      h = { text: touch ? '길게 눌러 이어 굴리기' : 'Space 이어 굴리기', anchor: 'point', at: { x: nearBall.ball.x, y: nearBall.ball.y - nearBall.ball.d - 8 } };
+      const together = nearBall.ball.heldBy !== null;
+      h = { text: touch ? (together ? '길게 눌러 같이 밀기' : '길게 눌러 이어 굴리기') : together ? 'Space 같이 밀기' : 'Space 이어 굴리기', anchor: 'point', at: { x: nearBall.ball.x, y: nearBall.ball.y - nearBall.ball.d - 8 } };
     } else if (choice === 'hat') h = { text: touch ? '탭해서 줍기' : 'Space 줍기', anchor: 'point', at: { x: hat.x, y: hat.y - HAT.hintAbove } };
     else if (choice === 'skate' || choice === 'exit') h = skate.hint(touch);
     else if (choice === 'bench') h = bench.hint(touch);

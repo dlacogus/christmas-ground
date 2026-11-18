@@ -6,7 +6,8 @@
 // 친구 눈사람도 보이고, 친구가 굴린 눈덩이에 내가 올릴 수도 있다 (눈덩이의 pushers = 같이 미는 사람 수만큼 빨리 굴러간다).
 // 그리기는 snowmanDraw.ts, 조작은 snowmanPlay.ts.
 
-import { SNOWBALL as B, SNOWMAN as M } from '../constants';
+import { COPUSH, SNOWBALL as B, SNOWMAN as M } from '../constants';
+import type { Maker } from '../shared/protocol';
 import { OBSTACLES, WALK_AREA, rectsOverlap, type Rect } from '../world';
 
 // ───────────── 눈덩이 ─────────────
@@ -73,6 +74,49 @@ export interface Ball {
   heldBy: string | null;
   /** 서버에 알렸나 (놓았거나, 서버에서 받은 것) */
   synced: boolean;
+  /** 처음 만든 사람 + 이어서 굴린 사람들 */
+  makers: Maker[];
+  /** 지금 밀고 있는 사람들의 접속 id (먼저 잡은 순서, 최대 2명) */
+  holders: string[];
+}
+
+// ───────────── 둘이 같이 밀기 ─────────────
+
+export interface PushDir {
+  x: number;
+  y: number;
+}
+
+/**
+ * 두 사람의 방향 입력을 더한다. 같은 쪽으로 밀면 2배, 한 사람만 밀면 1배, 서로 반대면 제자리에서 버틴다(stuck).
+ * 돌려주는 (x, y)는 굴러갈 방향(단위 벡터), factor는 속도 배율 (0~2).
+ */
+export function combinePush(a: PushDir | null, b: PushDir | null): { x: number; y: number; factor: number; stuck: boolean } {
+  const unit = (d: PushDir | null) => {
+    const len = d ? Math.hypot(d.x, d.y) : 0;
+    return len > 0 ? { x: d!.x / len, y: d!.y / len } : null;
+  };
+  const ua = unit(a);
+  const ub = unit(b);
+  const sx = (ua?.x ?? 0) + (ub?.x ?? 0);
+  const sy = (ua?.y ?? 0) + (ub?.y ?? 0);
+  const size = Math.hypot(sx, sy);
+  if (size < COPUSH.stuckBelow) return { x: 0, y: 0, factor: 0, stuck: ua !== null && ub !== null };
+  return { x: sx / size, y: sy / size, factor: Math.min(COPUSH.maxPushers, size), stuck: false };
+}
+
+/** 만든 사람을 적는다 (같은 닉네임은 한 번만, 최대 4명). 새로 적었으면 true */
+export function addMaker(makers: Maker[], maker: Maker): boolean {
+  if (makers.some((m) => m.name === maker.name) || makers.length >= COPUSH.maxMakers) return false;
+  makers.push({ name: maker.name, scarf: maker.scarf });
+  return true;
+}
+
+/** 합쳐진 눈덩이들의 만든 사람을 모은다 */
+export function mergeMakers(...lists: readonly (readonly Maker[])[]): Maker[] {
+  const out: Maker[] = [];
+  for (const list of lists) for (const m of list) addMaker(out, m);
+  return out;
 }
 
 // ───────────── 눈사람 ─────────────
@@ -136,6 +180,8 @@ export interface Snowman {
   age: number;
   netId: string;
   synced: boolean;
+  /** 눈덩이를 굴린 사람들 (2명 이상이면 줄무늬 목도리를 두른다) */
+  makers: Maker[];
 }
 
 /** 시드로 정해지는 생김새 (눈사람마다 조금씩 다르다) */
@@ -147,6 +193,8 @@ export interface SnowmanLook {
   nose: number;
   armAngle: number;
   scarf: number | null;
+  /** 같이 만든 눈사람: 만든 사람들 목도리 색 줄무늬 (없으면 null) */
+  stripes: number[] | null;
   bucket: boolean;
   buttons: number;
 }
@@ -156,7 +204,7 @@ function hash(seed: number, k: number): number {
   return n - Math.floor(n);
 }
 
-export function snowmanLook(seed: number, kind: SnowmanKind): SnowmanLook {
+export function snowmanLook(seed: number, kind: SnowmanKind, makers: readonly Maker[] = []): SnowmanLook {
   const chance = kind === 'giant' ? M.giantAccessoryChance : kind === 'mini' ? 0 : M.accessoryChance;
   const scarf = hash(seed, 5) < chance;
   return {
@@ -165,6 +213,8 @@ export function snowmanLook(seed: number, kind: SnowmanKind): SnowmanLook {
     nose: 0.8 + hash(seed, 3) * 0.4,
     armAngle: 0.2 + hash(seed, 4) * 0.6,
     scarf: scarf ? Math.floor(hash(seed, 6) * 3) : null,
+    // 굴린 사람이 2명 이상이면 목도리를 꼭 두르고, 그 목도리는 만든 사람들 목도리 색 줄무늬다
+    stripes: makers.length >= 2 ? makers.map((m) => m.scarf) : null,
     // 엄청 큰 눈사람은 목도리나 양동이 모자 (둘 다일 수도)
     bucket: hash(seed, 7) < chance,
     buttons: kind === 'giant' ? 3 : kind === 'medium' ? 2 : 0,
@@ -187,6 +237,7 @@ export interface SavedSnowman {
   tiers: number[];
   seed: number;
   owner: string;
+  makers?: Maker[];
 }
 
 export interface SnowWorld {
@@ -208,7 +259,7 @@ export interface SnowWorld {
   /** 서버 id로 찾는다 */
   findNet(netId: string): SnowThing | null;
   /** 서버에서 받은 눈덩이를 넣거나 고친다. heldBy = 굴리는 사람 (놓인 것이면 null), idle = 놓여 있던 시간(초) */
-  upsertBall(netId: string, data: { x: number; y: number; d: number; roll: number; seed: number; owner: string }, heldBy: string | null, idle?: number): Ball;
+  upsertBall(netId: string, data: { x: number; y: number; d: number; roll: number; seed: number; owner: string; makers?: Maker[] }, heldBy: string | null, idle?: number): Ball;
   /** 서버에서 받은 눈사람을 넣거나 고친다 */
   upsertSnowman(netId: string, data: SavedSnowman): Snowman;
   /** 서버에서 없어졌다: 눈덩이는 바로, 눈사람은 녹기 시작한다 */
@@ -228,7 +279,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
     snowmen,
     addBall(x, y, d, owner, roll = 0) {
       const id = nextId++;
-      const ball: Ball = { kind: 'ball', id, x, y, d, roll, seed: Math.floor(random() * 1e6), owner, idle: 0, pushers: 1, netId: `${prefix}-${id}`, heldBy: null, synced: false };
+      const ball: Ball = { kind: 'ball', id, x, y, d, roll, seed: Math.floor(random() * 1e6), owner, idle: 0, pushers: 1, netId: `${prefix}-${id}`, heldBy: null, synced: false, makers: [], holders: [] };
       balls.push(ball);
       return ball;
     },
@@ -238,7 +289,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
     },
     addSnowman(x, y, tiers, owner, seed = Math.floor(random() * 1e6)) {
       const id = nextId++;
-      const snowman: Snowman = { kind: 'snowman', id, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0, netId: `${prefix}-${id}`, synced: false };
+      const snowman: Snowman = { kind: 'snowman', id, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0, netId: `${prefix}-${id}`, synced: false, makers: [] };
       snowmen.push(snowman);
       // 상한을 넘으면 (아직 안 녹는 것 가운데) 가장 오래된 것부터 녹는다
       const standing = snowmen.filter((s) => s.melt < 0);
@@ -296,6 +347,8 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
         ball.netId = netId;
       }
       Object.assign(ball, { x: data.x, y: data.y, d: data.d, roll: data.roll, seed: data.seed, owner: data.owner, heldBy, idle, synced: true });
+      if (data.makers) ball.makers = data.makers.map((m) => ({ ...m }));
+      if (!heldBy) ball.holders = [];
       return ball;
     },
     upsertSnowman(netId, data) {
@@ -305,6 +358,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
         snowman.netId = netId;
       }
       Object.assign(snowman, { x: data.x, y: data.y, tiers: [...data.tiers], seed: data.seed, owner: data.owner, synced: true });
+      if (data.makers) snowman.makers = data.makers.map((m) => ({ ...m }));
       return snowman;
     },
     removeNet(netId) {

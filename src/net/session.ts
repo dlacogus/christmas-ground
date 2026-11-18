@@ -3,10 +3,12 @@
 // 무료 한도를 아끼게 꼭 필요할 때만 보낸다 — 위치는 움직이는 동안 초당 최대 8번, 상태는 바뀔 때만.
 
 import type { Character } from '../character/character';
-import { NET, SNOWMAN } from '../constants';
+import { COPUSH, NET, SNOWMAN } from '../constants';
+import type { MoveInput } from '../character/character';
+import type { SnowmanPlay } from '../features/snowmanPlay';
 import type { RoofSnow, SnowHits } from '../features/roofSnow';
-import type { Ball, SnowThing, SnowWorld } from '../features/snowman';
-import { emptySeats, type Act, type ServerMessage, type SnowmanData, type WireHat, type WireSeats, type WireState } from '../shared/protocol';
+import type { Ball, Snowman, SnowThing, SnowWorld } from '../features/snowman';
+import { emptySeats, type Act, type Maker, type ServerMessage, type SnowmanData, type WireHat, type WireSeats, type WireState } from '../shared/protocol';
 import { createNetUi, askProfile } from '../ui/netUi';
 import type { CarouselZone } from '../zones/carousel';
 import { MY_ID, type CarouselPlay } from '../zones/carouselPlay';
@@ -27,6 +29,8 @@ export interface SessionDeps {
   roofSnow: RoofSnow;
   /** 지금 내가 굴리는 눈덩이 */
   rolling: () => Ball | null;
+  /** 눈덩이 조작 (같이 밀기: 이어받기·놓치기·하이파이브) */
+  snowPlay: () => SnowmanPlay;
   /** 예전에 이 브라우저에만 저장해 둔 내 눈사람 (처음 접속 때 서버로 옮기고 지운다) */
   legacy: SnowmanData[];
 }
@@ -35,11 +39,25 @@ export interface Session {
   /** 눈사람 주인으로 쓸 내 id (서버에 들어가 있으면 접속 id) */
   owner(): string;
   /** 눈덩이·눈사람을 서버에 알리는 고리 (snowmanPlay에 넘긴다) */
-  readonly sync: { rolling(ball: Ball): void; put(thing: SnowThing): void; del(thing: SnowThing): void };
+  readonly sync: {
+    rolling(ball: Ball): void;
+    put(thing: SnowThing): void;
+    del(thing: SnowThing): void;
+    grab(ball: Ball): void;
+    drop(ball: Ball): void;
+    push(ball: Ball, dir: MoveInput): void;
+    act(a: Act): void;
+  };
+  /** 나 (닉네임과 목도리 색) — 만든 사람으로 적힌다 */
+  me(): Maker;
+  /** 같은 눈덩이를 미는 다른 사람의 지금 자리 */
+  partner(ball: Ball): { x: number; y: number; facing: 'left' | 'right' } | null;
+  /** 이 눈사람을 같이 만든 사람이 내 곁에 있나 (하이파이브) */
+  nearCoMaker(snowman: Snowman): boolean;
   /** 한 번짜리 동작을 알린다 (재채기처럼 게임이 직접 아는 것) */
   act(a: Act): void;
   /** 매 프레임: offsetX = 본 레이어가 왼쪽으로 밀린 정도 */
-  tick(dt: number, offsetX: number): void;
+  tick(dt: number, offsetX: number, labels?: readonly { x: number; y: number; text: string }[]): void;
   /** 친구 캐릭터들 */
   drawables(): readonly DepthDrawable[];
   /** ?debug=1: 접속자 수, 초당 보낸/받은 메시지 수 */
@@ -69,12 +87,12 @@ export function createSession(deps: SessionDeps): Session {
   };
 
   // ── 눈덩이·눈사람
-  const ballData = (b: Ball) => ({ x: b.x, y: b.y, d: b.d, roll: b.roll, seed: b.seed, owner: b.owner });
+  const ballData = (b: Ball) => ({ x: b.x, y: b.y, d: b.d, roll: b.roll, seed: b.seed, owner: b.owner, makers: b.makers });
   const put = (thing: SnowThing) => {
     if (net.status !== 'online') return;
     thing.synced = true;
     if (thing.kind === 'ball') net.send({ t: 'put', id: thing.netId, kind: 'ball', data: ballData(thing) });
-    else net.send({ t: 'put', id: thing.netId, kind: 'snowman', data: { x: thing.x, y: thing.y, tiers: thing.tiers, seed: thing.seed, owner: thing.owner } });
+    else net.send({ t: 'put', id: thing.netId, kind: 'snowman', data: { x: thing.x, y: thing.y, tiers: thing.tiers, seed: thing.seed, owner: thing.owner, makers: thing.makers } });
   };
   let lastBallSent = 0;
 
@@ -90,7 +108,7 @@ export function createSession(deps: SessionDeps): Session {
       if (o.kind === 'ball') snowWorld.upsertBall(o.id, o.data, null, Math.max(0, (message.now - o.updatedAt) / 1000));
       else snowWorld.upsertSnowman(o.id, o.data);
     }
-    for (const r of message.rolling) snowWorld.upsertBall(r.id, { ...r, owner: r.owner }, r.owner);
+    for (const r of message.rolling) snowWorld.upsertBall(r.id, { ...r, owner: r.owner }, r.owner).holders = [r.owner];
     for (const thing of [...snowWorld.balls, ...snowWorld.snowmen]) {
       if (thing.synced || thing === rolling) continue;
       thing.owner = message.id;
@@ -154,9 +172,18 @@ export function createSession(deps: SessionDeps): Session {
         break;
       case 'pos':
       case 'state':
-      case 'act':
         remotes.handle(message, now);
         break;
+      case 'act': {
+        remotes.handle(message, now);
+        // 곁에서 하이파이브를 청하면 나도 두 손을 든다
+        const from = remotes.get(message.id);
+        if (message.a === 'highfive' && from && Math.hypot(from.ch.x - character.x, from.ch.y - character.y) <= COPUSH.highFiveRadius) {
+          deps.snowPlay().cheer();
+          net.send({ t: 'act', a: 'cheer' });
+        }
+        break;
+      }
       case 'seats':
         applySeats(message.seats);
         break;
@@ -165,16 +192,54 @@ export function createSession(deps: SessionDeps): Session {
         deps.play.kick();
         applySeats(lastSeats);
         break;
-      case 'ball':
-        snowWorld.upsertBall(message.id, { ...message, owner: message.owner }, message.owner);
+      case 'ball': {
+        const ball = snowWorld.upsertBall(message.id, { ...message, owner: message.owner }, message.owner);
+        if (ball.holders.length === 0) ball.holders = [message.owner];
         break;
+      }
+      case 'holders': {
+        // 이 눈덩이를 지금 밀고 있는 사람들 (서버가 정한다)
+        const thing = snowWorld.findNet(message.id);
+        if (!thing || thing.kind !== 'ball') break;
+        thing.holders = message.holders;
+        thing.heldBy = message.holders.length > 0 && message.holders[0] !== net.id ? message.holders[0] : null;
+        const play = deps.snowPlay();
+        if (play.rolling === thing) {
+          // 같이 미는 사람이 생겼으면 만든 사람으로 적고, 떠났으면 그 사람의 입력을 지운다
+          const helper = message.holders.find((id) => id !== net.id);
+          const info = helper ? remotes.get(helper)?.info : undefined;
+          if (info && thing.makers.length < COPUSH.maxMakers && !thing.makers.some((m) => m.name === info.name)) thing.makers.push({ name: info.name, scarf: info.scarf });
+          if (!helper) play.setHelperDir(null);
+        } else if (play.helping === thing) {
+          // 먼저 잡은 사람이 손을 뗐으면 내가 이어받고, 눈덩이가 놓였으면 나도 손을 뗀다
+          if (message.holders[0] === net.id) play.promote();
+          else if (!message.holders.includes(net.id ?? '')) play.dismiss();
+        }
+        break;
+      }
+      case 'grabDenied': {
+        const play = deps.snowPlay();
+        const held = play.rolling ?? play.helping;
+        if (held && held.netId === message.id) play.dismiss();
+        break;
+      }
+      case 'push': {
+        const play = deps.snowPlay();
+        if (play.rolling && play.rolling.netId === message.id) play.setHelperDir({ x: message.dx, y: message.dy });
+        break;
+      }
       case 'put':
         if (message.object.kind === 'ball') snowWorld.upsertBall(message.object.id, message.object.data, null);
         else snowWorld.upsertSnowman(message.object.id, message.object.data);
         break;
-      case 'del':
-        if (snowWorld.findNet(message.id) !== deps.rolling()) snowWorld.removeNet(message.id);
+      case 'del': {
+        const thing = snowWorld.findNet(message.id);
+        if (thing === deps.rolling()) break;
+        // 같이 밀던 눈덩이가 눈사람이 되어 없어졌으면 손을 뗀다
+        if (thing && deps.snowPlay().helping === thing) deps.snowPlay().dismiss();
+        snowWorld.removeNet(message.id);
         break;
+      }
       case 'full':
         break;
     }
@@ -285,15 +350,57 @@ export function createSession(deps: SessionDeps): Session {
       del(thing) {
         if (net.status === 'online') net.send({ t: 'del', id: thing.netId });
       },
+      grab(ball) {
+        if (net.status !== 'online') return;
+        // 서버 답을 기다리는 동안은 나를 넣어 둔다
+        const id = net.id ?? '';
+        if (!ball.holders.includes(id)) ball.holders = [...ball.holders, id];
+        net.send({ t: 'grab', id: ball.netId });
+      },
+      drop(ball) {
+        net.send({ t: 'drop', id: ball.netId });
+      },
+      push(ball, dir) {
+        net.send({ t: 'push', id: ball.netId, dx: Math.sign(dir.x), dy: Math.sign(dir.y) });
+      },
+      act(a) {
+        net.send({ t: 'act', a });
+      },
+    },
+    me: () => ({ name: profile?.name ?? '나', scarf: profile?.scarf ?? 0 }),
+    partner(ball) {
+      const other = ball.holders.find((id) => id !== net.id);
+      const r = other ? remotes.get(other) : undefined;
+      return r ? { x: r.ch.x, y: r.ch.y, facing: r.ch.facing } : null;
+    },
+    nearCoMaker(snowman) {
+      const mine = profile?.name;
+      for (const m of snowman.makers) {
+        if (m.name === mine) continue;
+        for (const r of remotes.all()) {
+          if (r.info.name === m.name && Math.hypot(r.ch.x - character.x, r.ch.y - character.y) <= COPUSH.highFiveRadius) return true;
+        }
+      }
+      return false;
     },
     act(a) {
       net.send({ t: 'act', a });
     },
-    tick(dt, offsetX) {
+    tick(dt, offsetX, labels = []) {
       const now = seconds();
       net.tick(dt);
       remotes.update(dt, now);
-      ui.names(remotes.names(offsetX));
+      const tags = remotes.names(offsetX);
+      // 잠깐 뜨는 글자 ('영차', '짝!')
+      labels.forEach((l, i) => tags.push({ id: `label-${i}`, name: l.text, sx: l.x - offsetX, sy: l.y }));
+      // 남이 놓고 간 눈덩이 곁에 가면 만든 사람 닉네임이 작게 뜬다
+      for (const b of snowWorld.balls) {
+        if (b.heldBy || b === deps.rolling() || b.makers.length === 0) continue;
+        if (b.makers.length === 1 && b.makers[0].name === profile?.name) continue;
+        if (Math.hypot(b.x - character.x, b.y - character.y) > COPUSH.nameRadius + b.d / 2) continue;
+        tags.push({ id: `ball-${b.netId}`, name: b.makers.map((m) => m.name).join(' · '), sx: b.x - offsetX, sy: b.y - b.d - 5 });
+      }
+      ui.names(tags);
       if (net.status !== 'online') return;
       // 회전목마 각도와 지붕 눈이 떨어지는 때를 서버 시각에 맞춘다 (모두 같은 화면)
       const serverSeconds = net.serverNow() / 1000;

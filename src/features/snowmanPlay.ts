@@ -6,11 +6,15 @@ import { layerOffsetX, type Camera } from '../camera';
 import { canStandAt, type Character, type MoveInput } from '../character/character';
 import type { DrawOptions } from '../character/render';
 import type { PoseName } from '../character/sprites';
-import { CHARACTER, LAYER_FACTORS, SNOWBALL as B, SNOWMAN as M, SNOWMAN_COLORS as C } from '../constants';
+import { CHARACTER, COPUSH, LAYER_FACTORS, SNOWBALL as B, SNOWMAN as M, SNOWMAN_COLORS as C } from '../constants';
+import type { Act, Maker } from '../shared/protocol';
 import type { SnowField } from '../scenery/snowField';
 import type { PlayHint } from '../zones/carouselPlay';
 import type { DepthDrawable } from '../zones/zone';
 import {
+  addMaker,
+  combinePush,
+  mergeMakers,
   ballFits,
   ballRect,
   fitsScreen,
@@ -34,7 +38,9 @@ import { drawBall } from './snowmanDraw';
 
 export interface SnowmanSoundHooks {
   /** 한 바퀴 굴러갈 때마다 '뽀득' (지름이 클수록 낮고 둔하게) */
-  squeak(d: number): void;
+  squeak(d: number, loud?: boolean): void;
+  /** 하이파이브 '짝!' */
+  clap?(): void;
   /** '영차' */
   grunt(): void;
   /** 완성 종소리 */
@@ -56,12 +62,24 @@ export interface SnowmanPlayDeps {
     rolling(ball: Ball): void;
     put(thing: SnowThing): void;
     del(thing: SnowThing): void;
+    /** 눈덩이를 잡는다 / 손을 뗀다 (서버가 허락한다, 한 눈덩이에 최대 2명) */
+    grab?(ball: Ball): void;
+    drop?(ball: Ball): void;
+    /** 같이 미는 사람의 방향 입력 */
+    push?(ball: Ball, dir: MoveInput): void;
+    act?(a: Act): void;
   };
+  /** 나 (만든 사람으로 적힌다) */
+  me?: () => Maker;
+  /** 같은 눈덩이를 미는 다른 사람의 지금 자리 (없으면 null) */
+  partner?: (ball: Ball) => { x: number; y: number; facing: 'left' | 'right' } | null;
+  /** 이 눈사람을 같이 만든 사람이 지금 내 곁(하이파이브 거리)에 있나 */
+  nearCoMaker?: (snowman: Snowman) => boolean;
   /** 눈사람 목록이 바뀌면 저장한다 (기본: localStorage) */
   save?: (world: SnowWorld) => void;
 }
 
-type Phase = 'idle' | 'gather' | 'roll' | 'lift' | 'pant' | 'cheer' | 'peek' | 'shrug';
+type Phase = 'idle' | 'gather' | 'roll' | 'help' | 'lift' | 'pant' | 'cheer' | 'peek' | 'shrug';
 
 interface Lift {
   /** 들어 올리는 눈덩이 (목록에서 빼고 여기서 그린다) */
@@ -114,6 +132,20 @@ export interface SnowmanPlay {
   /** 캐릭터를 맡고 있나 (굴리기·올리기·기뻐하기 중) */
   readonly busy: boolean;
   readonly rolling: Ball | null;
+  /** 남이 굴리는 눈덩이를 같이 밀고 있으면 그 눈덩이 */
+  readonly helping: Ball | null;
+  /** 남이 미는 눈덩이 곁에 붙어 같이 민다 */
+  joinAsHelper(ball: Ball): boolean;
+  /** (내가 먼저 잡은 사람일 때) 같이 미는 사람의 방향 입력. 없으면 null */
+  setHelperDir(dir: MoveInput | null): void;
+  /** 먼저 잡은 사람이 손을 뗐다: 같이 밀던 내가 이어받아 굴린다 */
+  promote(): void;
+  /** 눈덩이를 놓친다 (서버가 잡기를 거절했거나, 같이 밀던 눈덩이가 놓였다) */
+  dismiss(): void;
+  /** 곁에서 누가 하이파이브를 청했다: 두 손을 든다 */
+  cheer(): void;
+  /** 머리 위에 잠깐 뜨는 글자 ('영차', '짝!') — 월드 좌표 */
+  labels(): { x: number; y: number; text: string }[];
   /** 닿아 있는 눈덩이·눈사람과, 올릴 수 있나 */
   readonly target: SnowThing | null;
   readonly canStack: boolean;
@@ -155,6 +187,16 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
   let time = 0;
   let debugIndex = 0;
   let afterPant: Phase = 'cheer';
+  const meMaker = (): Maker => deps.me?.() ?? { name: owner(), scarf: 0 };
+  /** 같이 미는 사람의 방향 입력 (내가 먼저 잡은 사람일 때) */
+  let helperDir: MoveInput | null = null;
+  /** 내가 같이 밀고 있는 남의 눈덩이 */
+  let helping: Ball | null = null;
+  /** 서로 반대로 밀어 버티는 중 */
+  let stuck = false;
+  let lastPushKey = '';
+  let pushTimer = 0;
+  let highFive = 0;
   let lastCount = world.snowmen.length;
   const bits: Bit[] = [];
 
@@ -186,6 +228,7 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
     const l = lift!;
     lift = null;
     let snowman: Snowman;
+    const makers = mergeMakers(l.onto?.makers ?? [], l.bottom?.makers ?? [], l.ball.makers);
     if (l.onto) {
       l.onto.tiers = l.tiers;
       snowman = l.onto;
@@ -193,6 +236,13 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
       if (l.bottom) world.removeBall(l.bottom);
       snowman = world.addSnowman(Math.round(l.base.x), Math.round(l.base.y), l.tiers, owner());
       deps.sync?.del(l.bottom!);
+    }
+    snowman.makers = makers;
+    // 같이 만든 사람이 곁에 있으면 하이파이브 '짝!'
+    if (makers.length >= 2 && deps.nearCoMaker?.(snowman)) {
+      highFive = COPUSH.highFiveSeconds;
+      sounds.clap?.();
+      deps.sync?.act?.('highfive');
     }
     // 거의 같은 크기면 위 눈덩이가 흔들흔들하다 자리를 잡는다
     const n = l.tiers.length;
@@ -253,6 +303,18 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
       startLift(p);
       return;
     }
+    helperDir = null;
+    stuck = false;
+    // 같이 밀던 사람이 있으면 놓지 않고 손만 뗀다: 그 사람이 이어받아 혼자 민다
+    if (ball.holders.length > 1) {
+      ball.heldBy = ball.holders.find((id) => id !== owner()) ?? null;
+      deps.sync?.drop?.(ball);
+      ball = null;
+      target = null;
+      character.moving = false;
+      phase = 'idle';
+      return;
+    }
     // 그 자리에 놓는다. 올릴 수 없는 것에 대고 있었으면 고개를 갸우뚱
     ball.x = Math.round(ball.x);
     ball.y = Math.round(ball.y);
@@ -272,7 +334,12 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
     target = null;
     rollAcc = 0;
     maxed = b.d >= B.maxSize;
+    helperDir = null;
+    helping = null;
     phase = 'roll';
+    // 만든 사람으로 적고 (처음 만든 사람 + 이어서 굴린 사람들), 서버에 잡았다고 알린다
+    addMaker(b.makers, meMaker());
+    deps.sync?.grab?.(b);
   };
 
   /** 캐릭터를 (dx, dy)만큼, 눈덩이와 함께 옮길 수 있으면 옮긴다 */
@@ -301,12 +368,15 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
       return;
     }
     tilt = Math.max(0, tilt - dt);
-    const len = Math.hypot(dir.x, dir.y);
+    // 방향은 나와 같이 미는 사람의 입력을 더해 정한다: 같은 쪽이면 2배, 반대면 제자리에서 버틴다
+    const combo = combinePush(dir.x !== 0 || dir.y !== 0 ? dir : null, b.holders.length > 1 ? helperDir : null);
+    stuck = combo.stuck;
+    const len = combo.factor;
     let moved = 0;
     let sign = 1;
     if (len > 0) {
-      const ux = dir.x / len;
-      const uy = dir.y / len;
+      const ux = combo.x;
+      const uy = combo.y;
       if (ux > 0.1) character.facing = 'right';
       else if (ux < -0.1) character.facing = 'left';
       sign = Math.abs(ux) >= Math.abs(uy) ? Math.sign(ux) : Math.sign(uy);
@@ -322,7 +392,7 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
         if (ballFits(bx, by, b.d) && !world.touching(ballRect(bx, by, b.d), b)) off = { x: nox, y: noy };
       } else {
         off = want;
-        const speed = rollSpeed(b.d, b.pushers) * dt;
+        const speed = rollSpeed(b.d) * combo.factor * dt;
         const fromX = character.x;
         const fromY = character.y;
         // 닿아 있던 것은 다시 밀어 봐야 닿는다
@@ -354,7 +424,7 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
     rollAcc += turn;
     if (rollAcc >= Math.PI * 2) {
       rollAcc -= Math.PI * 2;
-      sounds.squeak(b.d);
+      sounds.squeak(b.d, b.holders.length > 1);
     }
     // 최대에 닿으면 반짝 하고 더 커지지 않는다
     if (!maxed && b.d >= B.maxSize) {
@@ -370,6 +440,42 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
         bits.push({ x: character.x - dirX * 2, y: character.y - 22, vx: -dirX * 8, vy: -20, age: 0, life: 0.6, color: C.sweat });
       }
     }
+  };
+
+  /** 남이 굴리는 눈덩이를 같이 민다: 눈덩이는 먼저 잡은 사람 화면이 움직이고, 나는 곁에 붙어 방향 입력만 보낸다 */
+  const updateHelp = (dt: number, dir: MoveInput, holding: boolean) => {
+    const b = helping!;
+    if (!holding || !world.balls.includes(b)) {
+      if (world.balls.includes(b)) deps.sync?.drop?.(b);
+      helping = null;
+      character.moving = false;
+      phase = 'idle';
+      return;
+    }
+    const p = deps.partner?.(b) ?? null;
+    if (p) {
+      // 먼저 잡은 사람 곁에 나란히 선다
+      const tx = p.x - (p.facing === 'right' ? 2 : -2);
+      const spots = [p.y + COPUSH.helperDepth, p.y - COPUSH.helperDepth];
+      const ty = spots.find((y) => canStandAt(tx, y, character));
+      if (ty !== undefined) {
+        character.moving = Math.hypot(tx - character.x, ty - character.y) > 0.05;
+        character.x = tx;
+        character.y = ty;
+      } else character.moving = false;
+      character.facing = p.facing;
+    }
+    character.animTime += dt;
+    // 방향 입력은 바뀔 때, 그리고 누르고 있는 동안 가끔 보낸다
+    pushTimer -= dt;
+    const key = `${dir.x},${dir.y}`;
+    if (key !== lastPushKey || (pushTimer <= 0 && (dir.x !== 0 || dir.y !== 0))) {
+      lastPushKey = key;
+      pushTimer = COPUSH.pushEvery;
+      deps.sync?.push?.(b, dir);
+    }
+    // 밀고 있는데 안 움직이면 서로 반대로 미는 중: 발을 동동
+    stuck = (dir.x !== 0 || dir.y !== 0) && !character.moving;
   };
 
   const updateBits = (dt: number) => {
@@ -436,6 +542,60 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
     get target() {
       return target;
     },
+    get helping() {
+      return helping;
+    },
+    joinAsHelper(b) {
+      if (phase !== 'idle' || !world.balls.includes(b) || b.holders.length >= COPUSH.maxPushers) return false;
+      helping = b;
+      lastPushKey = '';
+      pushTimer = 0;
+      character.target = null;
+      phase = 'help';
+      addMaker(b.makers, meMaker());
+      deps.sync?.grab?.(b);
+      return true;
+    },
+    setHelperDir(dir) {
+      helperDir = dir && (dir.x !== 0 || dir.y !== 0) ? dir : null;
+    },
+    promote() {
+      if (phase !== 'help' || !helping) return;
+      const b = helping;
+      b.heldBy = null;
+      beginRoll(b);
+    },
+    dismiss() {
+      if (phase !== 'roll' && phase !== 'help' && phase !== 'gather') return;
+      ball = null;
+      helping = null;
+      target = null;
+      helperDir = null;
+      stuck = false;
+      character.moving = false;
+      phase = 'idle';
+    },
+    cheer() {
+      highFive = COPUSH.highFiveSeconds;
+      sounds.clap?.();
+      if (phase !== 'idle') return;
+      phase = 'cheer';
+      timer = COPUSH.highFiveSeconds;
+    },
+    labels() {
+      const out: { x: number; y: number; text: string }[] = [];
+      const head = (p: { x: number; y: number }) => ({ x: p.x, y: p.y - CHARACTER.spriteHeight - 4 });
+      // 둘이 밀 때 '영차'가 두 사람 머리 위에 번갈아 뜬다
+      const shared = phase === 'help' ? helping : ball && ball.holders.length > 1 ? ball : null;
+      if (shared && (character.moving || stuck)) {
+        const mine = Math.floor(time / COPUSH.chantEvery) % 2 === 0;
+        const other = deps.partner?.(shared) ?? null;
+        const at = mine || !other ? head(character) : head(other);
+        out.push({ ...at, text: '영차' });
+      }
+      if (highFive > 0) out.push({ ...head(character), text: '짝!' });
+      return out;
+    },
     get canStack() {
       return plan() !== null;
     },
@@ -445,10 +605,13 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
     nearestBall() {
       let best: { ball: Ball; distance: number } | null = null;
       for (const b of world.balls) {
-        // 다른 사람이 굴리는 중인 것은 이어 굴릴 수 없다
-        if (b.heldBy) continue;
+        // 다른 사람이 굴리는 중이면 같이 밀 수 있다 (둘까지). 이미 둘이 밀고 있으면 끼어들 수 없다
+        if (b.heldBy && b.holders.length >= COPUSH.maxPushers) continue;
         // 눈덩이 가장자리까지 (깊이 쪽은 납작하게 본다)
-        const distance = Math.max(0, Math.hypot(b.x - character.x, (b.y - character.y) * 1.5) - b.d * 0.4);
+        let distance = Math.max(0, Math.hypot(b.x - character.x, (b.y - character.y) * 1.5) - b.d * 0.4);
+        // 남이 밀고 있으면 그 사람 곁에만 가도 같이 밀 수 있다 (눈덩이는 그 사람 앞에 있어 닿기 어렵다)
+        const pusher = b.heldBy ? (deps.partner?.(b) ?? null) : null;
+        if (pusher) distance = Math.min(distance, Math.max(0, Math.hypot(pusher.x - character.x, pusher.y - character.y) - COPUSH.joinReach));
         if (!best || distance < best.distance) best = { ball: b, distance };
       }
       return best;
@@ -477,7 +640,12 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
         lastCount = world.snowmen.length;
         save(world);
       }
+      highFive = Math.max(0, highFive - dt);
       if (phase === 'idle') return;
+      if (phase === 'help') {
+        updateHelp(dt, dir, holding);
+        return;
+      }
       if (phase === 'gather') {
         timer -= dt;
         if (timer > 0) return;
@@ -516,6 +684,7 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
       } else phase = 'idle';
     },
     hint(touch) {
+      if (phase === 'help') return { text: touch ? '손을 떼면 놓기' : 'Space 놓기', anchor: 'bottom' };
       if (phase !== 'roll') return null;
       if (target && plan()) return { text: touch ? '손을 떼면 올리기' : 'Space 올리기', anchor: 'head' };
       // 올릴 수 없는 것에 대고 있으면 힌트 없이 고개만 갸우뚱
@@ -537,6 +706,12 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
         if (l.style === 'small') return { pose: 'push', index: 1 };
         if (l.style === 'medium') return { pose: 'push', index: 1, lean: -dirX + (Math.floor(time / 0.04) % 2), lift: 0 };
         return { pose: 'push' as PoseName, index: walkFrame, lean: dirX * B.leanLarge + (Math.floor(time / 0.05) % 2) };
+      }
+      // 서로 반대로 밀어 버티는 중: 제자리에서 부르르 떨며 발을 동동
+      if (stuck) return { pose: 'push', index: Math.floor(time / 0.07), lean: Math.floor(time / 0.05) % 2 === 0 ? 1 : -1 };
+      if (phase === 'help') {
+        const tier = sizeTier(helping!.d);
+        return { pose: 'push', index: character.moving ? walkFrame : 1, lean: tier === 'small' ? 0 : dirX * (tier === 'medium' ? B.leanMedium : B.leanLarge) };
       }
       // 굴리는 중: 중간은 몸을 숙이고 두 팔로, 큼은 어깨로 밀며 낑낑
       const tier = sizeTier(ball!.d);

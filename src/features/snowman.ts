@@ -7,7 +7,7 @@
 // 그리기는 snowmanDraw.ts, 조작은 snowmanPlay.ts.
 
 import { COPUSH, SNOWBALL as B, SNOWMAN as M } from '../constants';
-import type { AttachedProp, Maker, SnowmanHat } from '../shared/protocol';
+import type { AttachedProp, BallFace, Maker, SnowmanHat } from '../shared/protocol';
 import { OBSTACLES, WALK_AREA, rectsOverlap, type Rect } from '../world';
 
 // ───────────── 눈덩이 ─────────────
@@ -78,6 +78,8 @@ export interface Ball {
   makers: Maker[];
   /** 지금 밀고 있는 사람들의 접속 id (먼저 잡은 순서, 최대 2명) */
   holders: string[];
+  /** 눈사람에서 떨어진 머리면 얼굴이 붙어 있다 */
+  face: BallFace | null;
 }
 
 // ───────────── 둘이 같이 밀기 ─────────────
@@ -186,6 +188,11 @@ export interface Snowman {
   props: AttachedProp[];
   /** 누가 씌워 준 털모자 (주인 닉네임, 색) */
   hat: SnowmanHat | null;
+  /** 머리가 떨어져 몸통만 남았다 */
+  headless: boolean;
+  /** 머리를 맞은 횟수와 마지막으로 맞은 때 (초) — 30초 지나면 0부터 */
+  hits: number;
+  hitAt: number;
 }
 
 /** 시드로 정해지는 생김새 (눈사람마다 조금씩 다르다) */
@@ -244,6 +251,7 @@ export interface SavedSnowman {
   makers?: Maker[];
   props?: AttachedProp[];
   hat?: SnowmanHat | null;
+  headless?: boolean;
 }
 
 export interface SnowWorld {
@@ -265,7 +273,7 @@ export interface SnowWorld {
   /** 서버 id로 찾는다 */
   findNet(netId: string): SnowThing | null;
   /** 서버에서 받은 눈덩이를 넣거나 고친다. heldBy = 굴리는 사람 (놓인 것이면 null), idle = 놓여 있던 시간(초) */
-  upsertBall(netId: string, data: { x: number; y: number; d: number; roll: number; seed: number; owner: string; makers?: Maker[] }, heldBy: string | null, idle?: number): Ball;
+  upsertBall(netId: string, data: { x: number; y: number; d: number; roll: number; seed: number; owner: string; makers?: Maker[]; face?: BallFace | null }, heldBy: string | null, idle?: number): Ball;
   /** 서버에서 받은 눈사람을 넣거나 고친다 */
   upsertSnowman(netId: string, data: SavedSnowman): Snowman;
   /** 서버에서 없어졌다: 눈덩이는 바로, 눈사람은 녹기 시작한다 */
@@ -285,7 +293,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
     snowmen,
     addBall(x, y, d, owner, roll = 0) {
       const id = nextId++;
-      const ball: Ball = { kind: 'ball', id, x, y, d, roll, seed: Math.floor(random() * 1e6), owner, idle: 0, pushers: 1, netId: `${prefix}-${id}`, heldBy: null, synced: false, makers: [], holders: [] };
+      const ball: Ball = { kind: 'ball', id, x, y, d, roll, seed: Math.floor(random() * 1e6), owner, idle: 0, pushers: 1, netId: `${prefix}-${id}`, heldBy: null, synced: false, makers: [], holders: [], face: null };
       balls.push(ball);
       return ball;
     },
@@ -295,7 +303,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
     },
     addSnowman(x, y, tiers, owner, seed = Math.floor(random() * 1e6)) {
       const id = nextId++;
-      const snowman: Snowman = { kind: 'snowman', id, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0, netId: `${prefix}-${id}`, synced: false, makers: [], props: [], hat: null };
+      const snowman: Snowman = { kind: 'snowman', id, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0, netId: `${prefix}-${id}`, synced: false, makers: [], props: [], hat: null, headless: false, hits: 0, hitAt: -999 };
       snowmen.push(snowman);
       // 상한을 넘으면 (아직 안 녹는 것 가운데) 가장 오래된 것부터 녹는다
       const standing = snowmen.filter((s) => s.melt < 0);
@@ -354,6 +362,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
       }
       Object.assign(ball, { x: data.x, y: data.y, d: data.d, roll: data.roll, seed: data.seed, owner: data.owner, heldBy, idle, synced: true });
       if (data.makers) ball.makers = data.makers.map((m) => ({ ...m }));
+      if ('face' in data) ball.face = data.face ? { ...data.face } : null;
       if (!heldBy) ball.holders = [];
       return ball;
     },
@@ -367,6 +376,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
       if (data.makers) snowman.makers = data.makers.map((m) => ({ ...m }));
       if (data.props) snowman.props = data.props.map((a) => ({ ...a }));
       snowman.hat = data.hat ? { ...data.hat } : null;
+      snowman.headless = data.headless === true;
       return snowman;
     },
     removeNet(netId) {

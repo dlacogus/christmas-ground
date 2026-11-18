@@ -6,6 +6,7 @@ import { createCharacter, type Character } from '../character/character';
 import { drawCharacter } from '../character/render';
 import { BENCH_SIT, CAROUSEL, COPUSH, FOOTPRINTS, LAYER_FACTORS, NET, ROOF_SNOW_COLORS, SCREEN_WIDTH, SKATE, type OutfitName, type PropId } from '../constants';
 import { drawHeldProp } from '../features/props';
+import { drawFaceSnow } from '../features/snowmanDraw';
 import { createSnowHits, type SnowHits } from '../features/roofSnow';
 import { createHat, createSneeze, type Hat, type Sneeze } from '../features/sneeze';
 import type { Act, ServerMessage, WireHat, WirePlayer, WireState } from '../shared/protocol';
@@ -39,6 +40,8 @@ export interface Remote {
   cheerLeft: number;
   /** 마지막 발자국 뒤로 걸은 거리 */
   walked: number;
+  /** 눈덩이에 맞아 얼굴에 눈이 묻어 있는 남은 시간 */
+  faceSnow: number;
 }
 
 interface Puff {
@@ -151,6 +154,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
           }
         } else if (r.cheerLeft > 0) drawCharacter(ctx, r.ch, ox, { pose: 'cheer', index: 0 });
         else drawCharacter(ctx, r.ch, ox);
+        if (r.faceSnow > 0 && !r.hits.snowman) drawFaceSnow(ctx, footX, footY, r.ch.facing, kind === 'sitting' ? BENCH_SIT.lift : 0);
         // 손에 든 노점 소품
         if (r.info.hold && kind !== 'skating' && !r.hits.snowman) drawHeldProp(ctx, r.info.hold, footX, footY, r.ch.facing, kind === 'sitting' ? BENCH_SIT.lift : 0);
         r.hits.drawOver(ctx, footX, footY, ox);
@@ -212,6 +216,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
         spinning: false,
         cheerLeft: 0,
         walked: 0,
+        faceSnow: 0,
       };
       remotes.set(player.id, r);
       applyState(r, player.state, player.hat, false, player.hold ?? null, player.hc ?? null, player.ho ?? null);
@@ -279,7 +284,8 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
         ch.animTime += dt;
         if (r.sneeze.update(dt)) r.sneeze.burst(ch.x, ch.y, ch.facing);
         ch.lean = r.sneeze.lean(ch.facing);
-        ch.eyesClosed = r.sneeze.active;
+        r.faceSnow = Math.max(0, r.faceSnow - dt);
+        ch.eyesClosed = r.sneeze.active || r.faceSnow > 0;
         r.hat.update(dt);
         r.hits.follow(ch.x, ch.y);
         r.hits.update(dt);

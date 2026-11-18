@@ -242,6 +242,7 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
       let best: { snowman: Snowman; distance: number } | null = null;
       for (const s of world.snowmen) {
         if (s.melt >= 0 || !canAttach(s.props, prop) || (s.hat && PROP_SLOT[prop] === 'head')) continue;
+        if (s.headless && (PROP_SLOT[prop] === 'head' || PROP_SLOT[prop] === 'face')) continue;
         const distance = distanceToSnowman(s);
         if (!best || distance < best.distance) best = { snowman: s, distance };
       }

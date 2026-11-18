@@ -565,6 +565,62 @@ export const COPUSH = {
   loudSqueak: 1.5,
 } as const;
 
+/** 눈덩이 던져 머리 맞히기 */
+export const THROW = {
+  /** 던지는 키 (모바일은 바닥을 더블 탭) */
+  key: 'KeyF',
+  doubleTapSeconds: 0.35,
+  /** 스페이스를 이보다 짧게 누르면 '짧게' */
+  shortPress: 0.3,
+  /** 주저앉아 한 줌 뭉치는 시간, 던진 뒤 팔을 뻗고 있는 시간, 다음 던지기까지 */
+  scoopSeconds: 0.25,
+  followSeconds: 0.18,
+  cooldown: 0.6,
+  /** 눈덩이: 크기(px), 최대 거리, 나는 시간, 손 높이, 포물선 꼭대기 높이 */
+  ballSize: 3,
+  range: 120,
+  flightSeconds: 0.75,
+  handHeight: 14,
+  peak: 24,
+  /** 앞에 눈사람이 있으면 그 머리 높이로 던진다 (포물선 꼭대기를 여기까지 높인다) */
+  maxPeak: 110,
+  /** 위아래(깊이) 쪽은 화면에서 납작하므로 이 비율만큼만 간다 */
+  depthRatio: 0.55,
+  /** 깊이가 이만큼 안으로 비슷해야 맞는다 */
+  depthReach: 9,
+  /** 캐릭터 맞는 범위: 반폭, 키, 머리가 시작되는 높이 */
+  personHalfWidth: 6,
+  personHeight: 32,
+  personHeadFrom: 19,
+  /** 머리 크기별 필요한 횟수, 이만큼 안 맞으면 횟수가 0으로 */
+  hits: { small: 1, medium: 2, large: 5 },
+  resetSeconds: 30,
+  /** 떨어진 머리가 굴러가는 거리 (지름 bigHead 이상이면 최대) */
+  rollMin: 10,
+  rollMax: 40,
+  bigHead: 40,
+  faceDownChance: 0.3,
+  /** 머리가 떨어져 구르는 연출: 뒤로 젖혀지는 시간, 떨어지는 시간, 구르는 시간 */
+  tiltSeconds: 0.25,
+  fallSeconds: 0.3,
+  rollSeconds: 0.7,
+  /** 친구가 맞으면: 얼굴에 눈이 묻어 있는 시간, 추위 증가, 모자가 날아갈 확률, 스케이터가 밀리는 속도 */
+  faceSnowSeconds: 1,
+  cold: 10,
+  hatFlyChance: 0.2,
+  skaterPush: 35,
+  /** 눈 파편 수와 수명 */
+  splatBits: 7,
+  splatSeconds: 0.35,
+  shadowAlpha: 0.3,
+  ballColor: '#f4f8ff',
+  ballShade: '#c9d6ee',
+  /** 소리 */
+  whooshVolume: 0.16,
+  thudVolume: 0.3,
+  bonkVolume: 0.3,
+} as const;
+
 /** 내 털모자를 눈사람에 씌워주기 */
 export const HAT_GIFT = {
   /** 두 손으로 씌워주는 시간, 그 가운데 눈사람 머리에 얹히는 순간 (진행 비율) */

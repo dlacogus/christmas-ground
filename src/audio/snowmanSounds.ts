@@ -3,7 +3,7 @@
 // - '영차': 낮은 톤 두 번
 // - 완성 종소리 화음: 미니는 작고 높은 '딩', 엄청 큰 눈사람은 길고 낮은 화음
 
-import { COPUSH, PROPS, SNOWBALL, SNOWMAN_SOUND as K } from '../constants';
+import { COPUSH, PROPS, SNOWBALL, SNOWMAN_SOUND as K, THROW } from '../constants';
 import type { SnowmanKind } from '../features/snowman';
 import { createNoiseBuffer, type SoundPart } from './soundSystem';
 
@@ -13,6 +13,12 @@ export interface SnowmanSounds extends SoundPart {
   clap(): void;
   /** 노점에서 소품을 받을 때 '띠링' */
   ding(): void;
+  /** 눈덩이를 던질 때 '휘익' */
+  whoosh(): void;
+  /** 눈덩이가 맞았을 때 '퍽' */
+  thud(): void;
+  /** 머리가 떨어져 구를 때 '통 데굴데굴' */
+  bonk(): void;
   grunt(): void;
   chime(kind: SnowmanKind): void;
 }
@@ -28,6 +34,69 @@ export function createSnowmanSounds(): SnowmanSounds {
       audio = ctx;
       out = dest;
       noise = createNoiseBuffer(ctx, K.noiseSeconds);
+    },
+    whoosh() {
+      if (!ready()) return;
+      const ctx = audio!;
+      const now = ctx.currentTime;
+      const src = ctx.createBufferSource();
+      src.buffer = noise;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.Q.value = 1.4;
+      filter.frequency.setValueAtTime(500, now);
+      filter.frequency.exponentialRampToValueAtTime(2400, now + 0.16);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, now);
+      env.gain.linearRampToValueAtTime(THROW.whooshVolume, now + 0.05);
+      env.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+      src.connect(filter).connect(env).connect(out!);
+      src.start(now, 0, 0.25);
+    },
+    thud() {
+      if (!ready()) return;
+      const ctx = audio!;
+      const now = ctx.currentTime;
+      const src = ctx.createBufferSource();
+      src.buffer = noise;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 520;
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(THROW.thudVolume, now);
+      env.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+      src.connect(filter).connect(env).connect(out!);
+      src.start(now, 0.1, 0.14);
+    },
+    bonk() {
+      if (!ready()) return;
+      const ctx = audio!;
+      const now = ctx.currentTime;
+      // '통': 낮게 떨어지는 음, 그 뒤 '데굴데굴': 점점 잦아드는 낮은 툭 여러 번
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(240, now + 0.25);
+      osc.frequency.exponentialRampToValueAtTime(110, now + 0.42);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, now + 0.25);
+      env.gain.linearRampToValueAtTime(THROW.bonkVolume, now + 0.26);
+      env.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+      osc.connect(env).connect(out!);
+      osc.start(now + 0.25);
+      osc.stop(now + 0.5);
+      for (let i = 0; i < 5; i++) {
+        const when = now + 0.55 + i * (0.09 + i * 0.02);
+        const src = ctx.createBufferSource();
+        src.buffer = noise;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 380;
+        const e = ctx.createGain();
+        e.gain.setValueAtTime(THROW.bonkVolume * (0.7 - i * 0.12), when);
+        e.gain.exponentialRampToValueAtTime(0.0001, when + 0.07);
+        src.connect(filter).connect(e).connect(out!);
+        src.start(when, 0.2 + i * 0.05, 0.08);
+      }
     },
     ding() {
       if (!ready()) return;

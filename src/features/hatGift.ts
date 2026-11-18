@@ -191,7 +191,7 @@ export function createHatGift(character: Character, hat: Hat, world: SnowWorld, 
       if (!canGiveHat(character.hat.get(), character.holding.get())) return null;
       let best: { snowman: Snowman; distance: number } | null = null;
       for (const s of world.snowmen) {
-        if (s.melt >= 0) continue;
+        if (s.melt >= 0 || s.headless) continue;
         const distance = snowmanDistance(character, s);
         if (!best || distance < best.distance) best = { snowman: s, distance };
       }

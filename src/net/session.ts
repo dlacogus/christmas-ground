@@ -3,7 +3,7 @@
 // 무료 한도를 아끼게 꼭 필요할 때만 보낸다 — 위치는 움직이는 동안 초당 최대 8번, 상태는 바뀔 때만.
 
 import type { Character } from '../character/character';
-import { COPUSH, HAT_GIFT, NET, SNOWMAN } from '../constants';
+import { COPUSH, HAT_GIFT, NET, SNOWMAN, THROW } from '../constants';
 import { hatOnEntry } from '../features/hatGift';
 import type { MoveInput } from '../character/character';
 import type { SnowmanPlay } from '../features/snowmanPlay';
@@ -34,6 +34,10 @@ export interface SessionDeps {
   trail?: (x: number, y: number, d: number) => void;
   /** 친구가 한 발 디뎠다: 발자국 */
   step?: (x: number, y: number, dx: number, dy: number) => void;
+  /** 친구가 눈덩이를 던졌다 / 눈사람 머리를 맞혔다 / 누가 맞았다 (to가 나면 me = true) */
+  thrown?: (start: { x: number; y: number }, dir: { x: number; y: number }, peak: number) => void;
+  headHit?: (snowman: Snowman, n: number, dir: number) => void;
+  splatted?: (at: { x: number; y: number; lift: number }, me: boolean, head: boolean, dir: number) => void;
   /** 다시 들어올 때 새 모자를 쓴다 */
   newHat?: () => void;
   /** 친구가 눈사람에 소품을 달아줬다 */
@@ -57,6 +61,14 @@ export interface Session {
     push(ball: Ball, dir: MoveInput): void;
     act(a: Act): void;
   };
+  /** 던지기: 시작 자리·방향, 눈사람 머리 맞힘, 친구 맞힘을 서버에 보낸다 */
+  readonly throwing: {
+    throw(start: { x: number; y: number }, dir: { x: number; y: number }, peak: number): void;
+    hit(snowman: Snowman, n: number, dir: number): void;
+    splat(to: string, head: boolean, dir: number): void;
+  };
+  /** 눈덩이로 맞힐 수 있는 친구들 */
+  targets(): { id: string; x: number; y: number; lift: number }[];
   /** 나 (닉네임과 목도리 색) — 만든 사람으로 적힌다 */
   me(): Maker;
   /** 같은 눈덩이를 미는 다른 사람의 지금 자리 */
@@ -96,12 +108,12 @@ export function createSession(deps: SessionDeps): Session {
   };
 
   // ── 눈덩이·눈사람
-  const ballData = (b: Ball) => ({ x: b.x, y: b.y, d: b.d, roll: b.roll, seed: b.seed, owner: b.owner, makers: b.makers });
+  const ballData = (b: Ball) => ({ x: b.x, y: b.y, d: b.d, roll: b.roll, seed: b.seed, owner: b.owner, makers: b.makers, face: b.face });
   const put = (thing: SnowThing) => {
     if (net.status !== 'online') return;
     thing.synced = true;
     if (thing.kind === 'ball') net.send({ t: 'put', id: thing.netId, kind: 'ball', data: ballData(thing) });
-    else net.send({ t: 'put', id: thing.netId, kind: 'snowman', data: { x: thing.x, y: thing.y, tiers: thing.tiers, seed: thing.seed, owner: thing.owner, makers: thing.makers, props: thing.props, hat: thing.hat } });
+    else net.send({ t: 'put', id: thing.netId, kind: 'snowman', data: { x: thing.x, y: thing.y, tiers: thing.tiers, seed: thing.seed, owner: thing.owner, makers: thing.makers, props: thing.props, hat: thing.hat, headless: thing.headless } });
   };
   let lastBallSent = 0;
 
@@ -235,6 +247,26 @@ export function createSession(deps: SessionDeps): Session {
           // 먼저 잡은 사람이 손을 뗐으면 내가 이어받고, 눈덩이가 놓였으면 나도 손을 뗀다
           if (message.holders[0] === net.id) play.promote();
           else if (!message.holders.includes(net.id ?? '')) play.dismiss();
+        }
+        break;
+      }
+      case 'throw':
+        deps.thrown?.({ x: message.x, y: message.y }, { x: message.dx, y: message.dy }, message.p);
+        break;
+      case 'hit': {
+        // 내가 맞힌 것은 이미 내 화면에서 처리했다
+        if (message.by === net.id) break;
+        const thing = snowWorld.findNet(message.id);
+        if (thing && thing.kind === 'snowman') deps.headHit?.(thing, message.n, message.dir);
+        break;
+      }
+      case 'splat': {
+        if (message.to === net.id) deps.splatted?.({ x: character.x, y: character.y, lift: 0 }, true, message.head === 1, message.dir);
+        else {
+          const r = remotes.get(message.to);
+          if (!r) break;
+          r.faceSnow = THROW.faceSnowSeconds;
+          deps.splatted?.({ x: r.ch.x, y: r.ch.y, lift: 0 }, false, message.head === 1, message.dir);
         }
         break;
       }
@@ -403,6 +435,22 @@ export function createSession(deps: SessionDeps): Session {
       act(a) {
         net.send({ t: 'act', a });
       },
+    },
+    throwing: {
+      throw(start, dir, peak) {
+        net.send({ t: 'throw', x: Math.round(start.x), y: Math.round(start.y), dx: dir.x, dy: dir.y, p: peak });
+      },
+      hit(snowman, n, dir) {
+        net.send({ t: 'hit', id: snowman.netId, n: Math.min(5, n), dir });
+      },
+      splat(to, head, dir) {
+        net.send({ t: 'splat', to, head: head ? 1 : 0, dir });
+      },
+    },
+    targets() {
+      const out: { id: string; x: number; y: number; lift: number }[] = [];
+      for (const r of remotes.all()) out.push({ id: r.info.id, x: r.ch.x, y: r.ch.y, lift: r.info.state.kind === 'sitting' ? 6 : 0 });
+      return out;
     },
     me: () => ({ name: profile?.name ?? '나', scarf: profile?.scarf ?? 0 }),
     partner(ball) {

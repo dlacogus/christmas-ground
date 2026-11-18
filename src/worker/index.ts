@@ -219,6 +219,16 @@ export class Plaza extends DurableObject<Env> {
         this.cleanup(now);
         break;
       }
+      case 'throw':
+        this.broadcast({ t: 'throw', id: me.id, x: message.x, y: message.y, dx: message.dx, dy: message.dy, p: message.p }, ws);
+        break;
+      case 'hit':
+        // 그 눈사람이 있을 때만 모두에게 알린다 (던진 사람에게도 — 확인)
+        if (this.objects().some((o) => o.id === message.id && o.kind === 'snowman')) this.broadcast({ t: 'hit', id: message.id, by: me.id, n: message.n, dir: message.dir });
+        break;
+      case 'splat':
+        this.broadcast({ t: 'splat', from: me.id, to: message.to, head: message.head, dir: message.dir });
+        break;
       case 'del':
         this.remove(message.id);
         if (session.rolling?.id === message.id) session.rolling = null;

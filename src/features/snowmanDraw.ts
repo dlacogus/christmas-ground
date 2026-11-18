@@ -7,7 +7,8 @@ import { LAYER_FACTORS, OUTFITS, SCREEN_WIDTH, SNOWBALL as B, SNOWMAN as M, SNOW
 import type { DepthDrawable } from '../zones/zone';
 import { drawSnowmanBeanie } from './hatGift';
 import { drawAttachedProps, PROP_SLOT } from './props';
-import { snowmanHeight, snowmanKind, snowmanLook, tierBase, type Ball, type Snowman, type SnowThing } from './snowman';
+import { snowmanHeight, snowmanKind, snowmanLook, tierBase, type Ball, type Snowman, type SnowmanKind, type SnowThing } from './snowman';
+import type { BallFace } from '../shared/protocol';
 
 const sprites = new Map<number, HTMLCanvasElement>();
 
@@ -125,7 +126,8 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowma
   const hy = Math.round(cy[top]);
   const hr = tiers[top] / 2;
   const f = look.face;
-  const body = Math.max(0, top - 1);
+  // 머리가 떨어져 나갔으면 맨 위 단이 몸통이다
+  const body = s.headless ? top : Math.max(0, top - 1);
   const bx = cx[body];
   const by = Math.round(cy[body]);
   const br = tiers[body] / 2;
@@ -137,7 +139,8 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowma
     for (const side of [-1, 1]) {
       const x0 = bx + side * Math.round(br * 0.85);
       const y0 = by - Math.round(br * 0.2);
-      const angle = look.armAngle + (side === f ? 0.15 : 0);
+      // 머리가 떨어지면 깜짝 놀란 듯 팔이 살짝 들린다
+      const angle = look.armAngle + (side === f ? 0.15 : 0) + (s.headless ? 0.45 : 0);
       const x1 = x0 + side * Math.cos(angle) * length;
       const y1 = y0 - Math.sin(angle) * length;
       line(ctx, x0, y0, x1, y1);
@@ -159,7 +162,7 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowma
   }
 
   // 목도리: 머리와 몸통 사이를 두르고 한쪽으로 늘어진다
-  if ((look.scarf !== null || look.stripes) && top > 0 && hr >= 2) {
+  if ((look.scarf !== null || look.stripes) && top > 0 && hr >= 2 && !s.headless) {
     const neck = y - Math.round(tierBase(tiers, top)) - 1;
     const half = Math.max(2, Math.round(hr * 0.9));
     const thick = kind === 'giant' ? 3 : 2;
@@ -185,7 +188,7 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowma
   }
 
   // 얼굴: 석탄 눈 두 개, 당근 코(바라보는 쪽), 석탄 점 웃음
-  if (hr >= 1.5) {
+  if (hr >= 1.5 && !s.headless) {
     const eye = kind === 'giant' ? 2 : 1;
     const gap = Math.max(1, Math.round(hr * 0.38 * look.eyeGap));
     const faceX = hx + f * Math.round(hr * 0.2);
@@ -225,7 +228,7 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowma
   let headTop = hy - Math.round(hr);
   // 머리에 소품(산타 모자·귀마개)을 씌워 줬으면 양동이는 벗는다
   const headProp = s.hat !== null || s.props.some((a) => PROP_SLOT[a.p] === 'head');
-  if (look.bucket && !headProp && hr >= 3 && melt < 0.5) {
+  if (look.bucket && !headProp && !s.headless && hr >= 3 && melt < 0.5) {
     const w = Math.max(3, Math.round(hr * 1.2));
     const h = Math.max(2, Math.round(hr * 0.8));
     ctx.fillStyle = C.bucket;
@@ -237,7 +240,7 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowma
   }
   // 달아준 노점 소품
   if (s.props.length > 0 && melt < 0.5) {
-    drawAttachedProps(ctx, s.props, { hx, hy, hr, headTop, f, neckY: y - Math.round(tierBase(tiers, top)) - 1, bx, by, br, footY: y }, kind);
+    drawAttachedProps(ctx, s.props, { hx, hy, hr, headTop, f, neckY: s.headless ? hy - Math.round(hr) + 1 : y - Math.round(tierBase(tiers, top)) - 1, bx, by, br, footY: y }, kind);
     if (s.props.some((a) => a.p === 'santaHat')) headTop -= 4 * (kind === 'mini' ? 1 : kind === 'giant' ? 3 : 2);
   }
   // 누가 씌워 준 털모자 (머리 크기에 맞춘다. 미니는 헐렁해서 눈까지 덮는다)
@@ -251,7 +254,7 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowma
     headTop -= 2;
   }
   // 엄청 큰 눈사람: 가끔 작은 새가 머리에 앉았다 날아간다
-  if (kind === 'giant' && melt <= 0) {
+  if (kind === 'giant' && melt <= 0 && !s.headless) {
     const cycle = M.birdMinGap + hash(s.seed, 9) * (M.birdMaxGap - M.birdMinGap);
     const t = (s.age % cycle) - (cycle - M.birdStay);
     if (t >= 0) {
@@ -267,6 +270,40 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowma
       ctx.fillRect(bxp + 3, byp, 1, 1);
     }
   }
+}
+
+/** 눈덩이에 맞아 얼굴에 묻은 눈 (발밑 footX, footY인 캐릭터) */
+export function drawFaceSnow(ctx: CanvasRenderingContext2D, footX: number, footY: number, facing: 'left' | 'right', lift = 0): void {
+  const f = facing === 'right' ? 1 : -1;
+  const x = footX + f - 3;
+  const y = footY - 24 - lift;
+  ctx.fillStyle = C.top;
+  ctx.fillRect(x, y, 6, 4);
+  ctx.fillRect(x + 1, y - 1, 3, 1);
+  ctx.fillRect(x + 1 + f, y + 4, 2, 1);
+}
+
+/** 떨어진 머리 눈덩이의 얼굴: 눈·당근 코와, 붙어 간 머리·얼굴 소품, 털모자. (sx, bottom) = 눈덩이 바닥 가운데 */
+export function drawBallFace(ctx: CanvasRenderingContext2D, sx: number, bottom: number, d: number, face: BallFace): void {
+  const hr = d / 2;
+  if (hr < 1.5) return;
+  const hy = Math.round(bottom - hr);
+  const kind: SnowmanKind = d <= 8 ? 'mini' : d >= 28 ? 'giant' : 'medium';
+  const look = snowmanLook(face.seed, kind);
+  const f = look.face;
+  const eye = kind === 'giant' ? 2 : 1;
+  const gap = Math.max(1, Math.round(hr * 0.38 * look.eyeGap));
+  const faceX = sx + f * Math.round(hr * 0.2);
+  const eyeY = hy - Math.max(1, Math.round(hr * 0.25));
+  ctx.fillStyle = C.coal;
+  ctx.fillRect(faceX - gap - (eye - 1), eyeY, eye, eye);
+  ctx.fillRect(faceX + gap, eyeY, eye, eye);
+  const noseLength = kind === 'mini' ? 1 : kind === 'giant' ? Math.round(7 * look.nose) : Math.max(2, Math.round(2.5 * look.nose));
+  ctx.fillStyle = C.carrot;
+  ctx.fillRect(f > 0 ? faceX + 1 : faceX - noseLength, hy + (kind === 'mini' ? 0 : 1), noseLength, 1);
+  const headTop = hy - Math.round(hr);
+  if (face.props && face.props.length > 0) drawAttachedProps(ctx, face.props, { hx: sx, hy, hr, headTop, f, neckY: bottom, bx: sx, by: hy, br: hr, footY: bottom }, kind);
+  if (face.hat) drawSnowmanBeanie(ctx, face.hat, sx, hy, hr, kind === 'mini');
 }
 
 const drawables = new WeakMap<SnowThing, DepthDrawable>();
@@ -287,6 +324,8 @@ export function drawableFor(thing: SnowThing): DepthDrawable {
           const ball = thing as Ball;
           drawBall(ctx, sx, Math.round(ball.y), ball.d, ball.roll, ball.seed);
           // 만든 사람 수만큼 아주 작은 목도리 색 점 (누구 건지 알 수 있게)
+          // 눈사람에서 떨어진 머리: 얼굴·소품·모자가 그대로 붙어 있다 (엎어져 있으면 안 보인다)
+          if (ball.face && !ball.face.down) drawBallFace(ctx, sx, Math.round(ball.y), ball.d, ball.face);
           const top = Math.round(ball.y) - Math.round(ball.d) - 3;
           ball.makers.forEach((m, i) => {
             ctx.fillStyle = OUTFITS[`scarf${m.scarf}` as OutfitName].scarf;

@@ -2,7 +2,7 @@
 // 서버(Durable Object 'Plaza')는 받은 메시지를 parseClientMessage로 확인하고, 다른 사람들에게 전달만 한다.
 // 브라우저·Worker 어느 쪽에서도 돌아가게 DOM도 Cloudflare API도 쓰지 않는다.
 
-import { CAROUSEL, CARRIAGE, COPUSH, NET, PROP_IDS, PROPS, SNOWBALL, SNOWMAN, type PropId } from '../constants';
+import { CAROUSEL, CARRIAGE, COPUSH, NET, PROP_IDS, PROPS, SNOWBALL, SNOWMAN, THROW, type PropId } from '../constants';
 import { MAP_HEIGHT, MAP_WIDTH } from '../world';
 
 // ───────────── 공통 ─────────────
@@ -57,6 +57,14 @@ export interface AttachedProp {
   by: string;
 }
 
+/** 떨어진 머리 눈덩이에 붙어 있는 얼굴: 생김새 시드, 머리·얼굴 소품, 모자, 엎어져 있나 */
+export interface BallFace {
+  seed: number;
+  props?: AttachedProp[];
+  hat?: SnowmanHat | null;
+  down?: boolean;
+}
+
 /** 놓여 있는 눈덩이 */
 export interface BallData {
   x: number;
@@ -67,6 +75,8 @@ export interface BallData {
   owner: string;
   /** 처음 만든 사람 + 이어서 굴린 사람들 (최대 4명) */
   makers?: Maker[];
+  /** 눈사람에서 떨어진 머리면 얼굴이 붙어 있다 (눈 위로 굴리면 묻혀 없어진다) */
+  face?: BallFace | null;
 }
 
 /** 눈사람 */
@@ -82,6 +92,8 @@ export interface SnowmanData {
   props?: AttachedProp[];
   /** 누가 씌워 준 털모자 */
   hat?: SnowmanHat | null;
+  /** 머리가 떨어져 몸통만 남았다 (한 단만 남을 수도 있다) */
+  headless?: boolean;
 }
 
 export type WireObject =
@@ -114,7 +126,13 @@ export type ClientMessage =
   /** 결과가 바뀔 때만: 놓기·합치기 (저장한다) / 없어짐 */
   | { t: 'put'; id: string; kind: 'ball'; data: BallData }
   | { t: 'put'; id: string; kind: 'snowman'; data: SnowmanData }
-  | { t: 'del'; id: string };
+  | { t: 'del'; id: string }
+  /** 눈덩이를 던졌다: 시작 자리·방향만 보내고, 나는 모습은 각자 화면에서 똑같이 계산한다 */
+  | { t: 'throw'; x: number; y: number; dx: number; dy: number; p: number }
+  /** 눈사람 머리를 맞혔다 (던진 사람 화면이 판정한다). n = 지금까지 맞힌 횟수, dir = 날아온 쪽 */
+  | { t: 'hit'; id: string; n: number; dir: number }
+  /** 친구를 맞혔다 (head = 머리에 맞았다) */
+  | { t: 'splat'; to: string; head: 0 | 1; dir: number };
 
 // ───────────── 서버 → 클라이언트 ─────────────
 
@@ -138,7 +156,11 @@ export type ServerMessage =
   | { t: 'holders'; id: string; holders: string[] }
   /** 잡을 수 없다 (이미 둘이 밀고 있다) */
   | { t: 'grabDenied'; id: string }
-  | { t: 'push'; id: string; from: string; dx: number; dy: number };
+  | { t: 'push'; id: string; from: string; dx: number; dy: number }
+  | { t: 'throw'; id: string; x: number; y: number; dx: number; dy: number; p: number }
+  /** 서버가 확인한 맞힘 (그 눈사람이 있을 때만) */
+  | { t: 'hit'; id: string; by: string; n: number; dir: number }
+  | { t: 'splat'; from: string; to: string; head: 0 | 1; dir: number };
 
 // ───────────── 검사 ─────────────
 
@@ -211,10 +233,17 @@ export function validProps(v: unknown): v is AttachedProp[] | undefined {
   );
 }
 
+export function validFace(v: unknown): v is BallFace | null | undefined {
+  if (v === undefined || v === null) return true;
+  if (typeof v !== 'object') return false;
+  const f = v as Record<string, unknown>;
+  return isNum(f.seed) && validProps(f.props) && validSnowmanHat(f.hat) && (f.down === undefined || typeof f.down === 'boolean');
+}
+
 export function validBall(v: unknown): v is BallData {
   if (typeof v !== 'object' || v === null) return false;
   const b = v as Record<string, unknown>;
-  return inMap(b.x, b.y) && isSize(b.d) && isNum(b.roll) && isNum(b.seed) && isId(b.owner) && validMakers(b.makers);
+  return inMap(b.x, b.y) && isSize(b.d) && isNum(b.roll) && isNum(b.seed) && isId(b.owner) && validMakers(b.makers) && validFace(b.face);
 }
 
 export function validSnowman(v: unknown): v is SnowmanData {
@@ -223,7 +252,8 @@ export function validSnowman(v: unknown): v is SnowmanData {
   return (
     inMap(s.x, s.y) &&
     Array.isArray(s.tiers) &&
-    s.tiers.length >= 2 &&
+    (s.headless === undefined || typeof s.headless === 'boolean') &&
+    s.tiers.length >= (s.headless === true ? 1 : 2) &&
     s.tiers.length <= SNOWMAN.maxTiers &&
     s.tiers.every(isSize) &&
     isNum(s.seed) &&
@@ -288,6 +318,12 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return null;
     case 'del':
       return isId(m.id) ? { t: 'del', id: m.id } : null;
+    case 'throw':
+      return inMap(m.x, m.y) && isNum(m.dx) && isNum(m.dy) && Math.abs(m.dx) <= 1 && Math.abs(m.dy) <= 1 && isNum(m.p) && m.p >= 0 && m.p <= THROW.maxPeak ? { t: 'throw', x: m.x as number, y: m.y as number, dx: m.dx, dy: m.dy, p: m.p } : null;
+    case 'hit':
+      return isId(m.id) && isInt(m.n, 1, 5) && (m.dir === 1 || m.dir === -1) ? { t: 'hit', id: m.id, n: m.n, dir: m.dir } : null;
+    case 'splat':
+      return isId(m.to) && isBit(m.head) && (m.dir === 1 || m.dir === -1) ? { t: 'splat', to: m.to, head: m.head, dir: m.dir } : null;
     default:
       return null;
   }

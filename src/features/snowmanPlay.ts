@@ -11,6 +11,7 @@ import type { Act, Maker } from '../shared/protocol';
 import type { SnowField } from '../scenery/snowField';
 import type { PlayHint } from '../zones/carouselPlay';
 import type { DepthDrawable } from '../zones/zone';
+import { restoreFace } from './throwing';
 import {
   addMaker,
   combinePush,
@@ -240,6 +241,15 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
       deps.sync?.del(l.bottom!);
     }
     snowman.makers = makers;
+    // 머리가 다시 생겼다. 얼굴이 붙은 머리를 올렸으면 그 얼굴·소품·모자가 그대로 돌아온다
+    snowman.headless = false;
+    snowman.hits = 0;
+    if (l.ball.face) {
+      const back = restoreFace(snowman, l.ball.face);
+      snowman.seed = back.seed;
+      snowman.props = back.props;
+      snowman.hat = back.hat;
+    }
     // 같이 만든 사람이 곁에 있으면 하이파이브 '짝!'
     if (makers.length >= 2 && deps.nearCoMaker?.(snowman)) {
       highFive = COPUSH.highFiveSeconds;
@@ -420,6 +430,8 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
     const fp = footprint(b.d);
     const area = deps.field.take(b.x, b.y - fp.halfD, fp.halfW, fp.halfD);
     const pile = deps.takePile?.(b.x, b.y, fp.halfW) ?? 0;
+    // 떨어진 머리를 눈 위로 굴리면 얼굴이 눈에 묻혀 그냥 눈덩이가 된다
+    if (b.face && (area > 0 || pile > 0)) b.face = null;
     b.d = grow(grow(b.d, area), pile, B.pileBoost);
     const turn = moved / (b.d / 2);
     b.roll += turn * sign;

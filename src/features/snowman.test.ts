@@ -435,6 +435,22 @@ describe('둘이 같이 밀기 · 이어서 굴리기', () => {
     expect(ball.heldBy).toBeNull();
   });
 
+  it('누가 밀고 있는 눈덩이에는 올릴 수 없다 (그 사람 화면에서 눈사람 속에 끼이지 않게)', () => {
+    const { ch, world, play, run } = setup();
+    const theirs = world.addBall(ch.x + 60, ch.y, 24, 'friend');
+    theirs.heldBy = 'friend';
+    theirs.holders = ['friend'];
+    const mine = world.addBall(ch.x + 14, ch.y, 10, 'me');
+    play.continueWith(mine);
+    run(3, right);
+    expect(play.target).toBe(theirs);
+    expect(play.canStack).toBe(false);
+    // 그 사람이 놓으면 올릴 수 있다
+    theirs.heldBy = null;
+    theirs.holders = [];
+    expect(play.canStack).toBe(true);
+  });
+
   it('만든 사람 기록: 처음 만든 사람 + 이어서 굴린 사람들 (최대 4명), 같이 만든 눈사람은 줄무늬 목도리', () => {
     const makers = [{ name: '산타', scarf: 1 }];
     expect(addMaker(makers, { name: '산타', scarf: 1 })).toBe(false);

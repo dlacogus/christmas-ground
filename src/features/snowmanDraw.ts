@@ -5,6 +5,7 @@
 import { layerOffsetX } from '../camera';
 import { LAYER_FACTORS, OUTFITS, SCREEN_WIDTH, SNOWBALL as B, SNOWMAN as M, SNOWMAN_COLORS as C, type OutfitName } from '../constants';
 import type { DepthDrawable } from '../zones/zone';
+import { drawAttachedProps, PROP_SLOT } from './props';
 import { snowmanHeight, snowmanKind, snowmanLook, tierBase, type Ball, type Snowman, type SnowThing } from './snowman';
 
 const sprites = new Map<number, HTMLCanvasElement>();
@@ -221,7 +222,9 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowma
 
   // 양동이 모자
   let headTop = hy - Math.round(hr);
-  if (look.bucket && hr >= 3 && melt < 0.5) {
+  // 머리에 소품(산타 모자·귀마개)을 씌워 줬으면 양동이는 벗는다
+  const headProp = s.props.some((a) => PROP_SLOT[a.p] === 'head');
+  if (look.bucket && !headProp && hr >= 3 && melt < 0.5) {
     const w = Math.max(3, Math.round(hr * 1.2));
     const h = Math.max(2, Math.round(hr * 0.8));
     ctx.fillStyle = C.bucket;
@@ -230,6 +233,11 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, sx: number, s: Snowma
     ctx.fillRect(hx - Math.floor(w / 2) - 1, headTop + 1, w + 2, 1);
     ctx.fillRect(hx + Math.floor(w / 2) - 1, headTop - h + 2, 1, h);
     headTop -= h - 2;
+  }
+  // 달아준 노점 소품
+  if (s.props.length > 0 && melt < 0.5) {
+    drawAttachedProps(ctx, s.props, { hx, hy, hr, headTop, f, neckY: y - Math.round(tierBase(tiers, top)) - 1, bx, by, br, footY: y }, kind);
+    if (s.props.some((a) => a.p === 'santaHat')) headTop -= 4 * (kind === 'mini' ? 1 : kind === 'giant' ? 3 : 2);
   }
   // 지붕 눈이 머리에 얹혔다
   if (s.capped && hr >= 2) {

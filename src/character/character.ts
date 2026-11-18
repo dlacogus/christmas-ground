@@ -4,7 +4,7 @@ import { CHARACTER, DEFAULT_OUTFIT, type OutfitName } from '../constants';
 import { OBSTACLES, WALK_AREA, rectsOverlap, type Point, type Rect } from '../world';
 import { nextBreathInterval, spawnPuff, updatePuffs, type BreathPuff } from './breath';
 import { POSES, type Facing, type PoseName } from './sprites';
-import { createCharacterState, createHatState, type CharacterStateStore, type HatStore } from './state';
+import { createCharacterState, createHatState, type CharacterStateStore, type HatStore, createHoldState, type HoldStore } from './state';
 
 export interface Character {
   /** 발밑 좌표 */
@@ -22,6 +22,8 @@ export interface Character {
   state: CharacterStateStore;
   /** 털모자: 쓰고 있나, 벗겨져 어디에 떨어져 있나 (벗겨져 있으면 대머리로 그린다) */
   hat: HatStore;
+  /** 손에 든 노점 소품 */
+  holding: HoldStore;
   /** 윗몸을 옆으로 기울이는 px (재채기·떨림). 어떤 자세로 그리든 더해진다 */
   lean: number;
   /** 걷는 빠르기 배율 (재채기 준비 중에는 느려진다) */
@@ -49,6 +51,7 @@ export function createCharacter(x: number, y: number, outfit: OutfitName = DEFAU
     puffs: [],
     state: createCharacterState(),
     hat: createHatState(),
+    holding: createHoldState(),
     lean: 0,
     speedFactor: 1,
     eyesClosed: false,

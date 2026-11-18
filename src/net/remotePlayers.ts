@@ -4,7 +4,8 @@
 import { layerOffsetX } from '../camera';
 import { createCharacter, type Character } from '../character/character';
 import { drawCharacter } from '../character/render';
-import { BENCH_SIT, CAROUSEL, COPUSH, LAYER_FACTORS, NET, ROOF_SNOW_COLORS, SCREEN_WIDTH, SKATE, type OutfitName } from '../constants';
+import { BENCH_SIT, CAROUSEL, COPUSH, FOOTPRINTS, LAYER_FACTORS, NET, ROOF_SNOW_COLORS, SCREEN_WIDTH, SKATE, type OutfitName, type PropId } from '../constants';
+import { drawHeldProp } from '../features/props';
 import { createSnowHits, type SnowHits } from '../features/roofSnow';
 import { createHat, createSneeze, type Hat, type Sneeze } from '../features/sneeze';
 import type { Act, ServerMessage, WireHat, WirePlayer, WireState } from '../shared/protocol';
@@ -36,6 +37,8 @@ export interface Remote {
   spinning: boolean;
   /** 두 손을 들고 있는 남은 시간 (하이파이브) */
   cheerLeft: number;
+  /** 마지막 발자국 뒤로 걸은 거리 */
+  walked: number;
 }
 
 interface Puff {
@@ -88,7 +91,7 @@ export interface RemotePlayers {
   names(offsetX: number): { id: string; name: string; sx: number; sy: number }[];
 }
 
-export function createRemotePlayers(seats: Seats, rideTime: () => number): RemotePlayers {
+export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep?: (x: number, y: number, dx: number, dy: number) => void): RemotePlayers {
   const remotes = new Map<string, Remote>();
   const puffs: Puff[] = [];
   let list: DepthDrawable[] = [];
@@ -100,9 +103,10 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number): Remot
     }
   };
 
-  const applyState = (r: Remote, state: WireState, hat: WireHat, animate: boolean) => {
+  const applyState = (r: Remote, state: WireState, hat: WireHat, animate: boolean, hold: PropId | null = null) => {
     r.info.state = state;
     r.info.hat = hat;
+    r.info.hold = hold;
     r.ch.state.set(state.kind === 'skating' ? { kind: 'skating', vx: 0, vy: 0 } : state);
     if (state.kind !== 'skating') {
       r.spinning = false;
@@ -140,6 +144,8 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number): Remot
           }
         } else if (r.cheerLeft > 0) drawCharacter(ctx, r.ch, ox, { pose: 'cheer', index: 0 });
         else drawCharacter(ctx, r.ch, ox);
+        // 손에 든 노점 소품
+        if (r.info.hold && kind !== 'skating' && !r.hits.snowman) drawHeldProp(ctx, r.info.hold, footX, footY, r.ch.facing, kind === 'sitting' ? BENCH_SIT.lift : 0);
         r.hits.drawOver(ctx, footX, footY, ox);
       }
       r.sneeze.draw(ctx, ox);
@@ -174,7 +180,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number): Remot
     else if (a === 'spin') r.spinning = true;
     else if (a === 'spinEnd') r.spinning = false;
     else if (a === 'wave') r.occupant.waveLeft = CAROUSEL.waveSeconds;
-    else if (a === 'highfive' || a === 'cheer') r.cheerLeft = COPUSH.highFiveSeconds;
+    else if (a === 'highfive' || a === 'cheer' || a === 'decorate') r.cheerLeft = COPUSH.highFiveSeconds;
   };
 
   return {
@@ -198,9 +204,10 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number): Remot
         jump: -1,
         spinning: false,
         cheerLeft: 0,
+        walked: 0,
       };
       remotes.set(player.id, r);
-      applyState(r, player.state, player.hat, false);
+      applyState(r, player.state, player.hat, false, player.hold ?? null);
       if (puff) puffAt(player.x, player.y);
       rebuild();
     },
@@ -222,7 +229,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number): Remot
       if (message.t === 'pos') {
         r.samples.push({ t: now, x: message.x, y: message.y, f: message.f, vx: message.vx ?? 0, vy: message.vy ?? 0 });
         if (r.samples.length > 12) r.samples.shift();
-      } else if (message.t === 'state') applyState(r, message.state, message.hat, true);
+      } else if (message.t === 'state') applyState(r, message.state, message.hat, true, message.hold ?? null);
       else act(r, message.a);
     },
     update(dt, now) {
@@ -243,6 +250,15 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number): Remot
           const p = samplePosition(r.samples, now - NET.renderDelay);
           if (p) {
             const moved = Math.hypot(p.x - ch.x, p.y - ch.y);
+            // 걸은 거리만큼 발자국을 남긴다 (한 번에 멀리 옮겨지면 찍지 않는다)
+            if (r.info.state.kind !== 'walk' || moved > FOOTPRINTS.stride) r.walked = 0;
+            else if (moved > 0) {
+              r.walked += moved;
+              if (r.walked >= FOOTPRINTS.stride) {
+                r.walked = 0;
+                onStep?.(p.x, p.y, p.x - ch.x, p.y - ch.y);
+              }
+            }
             ch.x = p.x;
             ch.y = p.y;
             ch.facing = p.f ? 'right' : 'left';

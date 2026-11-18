@@ -3,7 +3,7 @@
 // - '영차': 낮은 톤 두 번
 // - 완성 종소리 화음: 미니는 작고 높은 '딩', 엄청 큰 눈사람은 길고 낮은 화음
 
-import { COPUSH, SNOWBALL, SNOWMAN_SOUND as K } from '../constants';
+import { COPUSH, PROPS, SNOWBALL, SNOWMAN_SOUND as K } from '../constants';
 import type { SnowmanKind } from '../features/snowman';
 import { createNoiseBuffer, type SoundPart } from './soundSystem';
 
@@ -11,6 +11,8 @@ export interface SnowmanSounds extends SoundPart {
   squeak(d: number, loud?: boolean): void;
   /** 하이파이브 '짝!' */
   clap(): void;
+  /** 노점에서 소품을 받을 때 '띠링' */
+  ding(): void;
   grunt(): void;
   chime(kind: SnowmanKind): void;
 }
@@ -26,6 +28,24 @@ export function createSnowmanSounds(): SnowmanSounds {
       audio = ctx;
       out = dest;
       noise = createNoiseBuffer(ctx, K.noiseSeconds);
+    },
+    ding() {
+      if (!ready()) return;
+      const ctx = audio!;
+      const now = ctx.currentTime;
+      PROPS.dingNotes.forEach((hz, i) => {
+        const when = now + i * 0.09;
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = hz;
+        const env = ctx.createGain();
+        env.gain.setValueAtTime(0, when);
+        env.gain.linearRampToValueAtTime(PROPS.dingVolume, when + 0.005);
+        env.gain.exponentialRampToValueAtTime(0.0001, when + 0.35);
+        osc.connect(env).connect(out!);
+        osc.start(when);
+        osc.stop(when + 0.4);
+      });
     },
     clap() {
       if (!ready()) return;

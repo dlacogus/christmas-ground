@@ -29,6 +29,12 @@ export interface SessionDeps {
   roofSnow: RoofSnow;
   /** 지금 내가 굴리는 눈덩이 */
   rolling: () => Ball | null;
+  /** 친구가 굴리는 눈덩이가 (x, y)를 지나갔다 (지름 d): 눈밭에 길이 난다 */
+  trail?: (x: number, y: number, d: number) => void;
+  /** 친구가 한 발 디뎠다: 발자국 */
+  step?: (x: number, y: number, dx: number, dy: number) => void;
+  /** 친구가 눈사람에 소품을 달아줬다 */
+  decorated?: (snowman: Snowman, by: string) => void;
   /** 눈덩이 조작 (같이 밀기: 이어받기·놓치기·하이파이브) */
   snowPlay: () => SnowmanPlay;
   /** 예전에 이 브라우저에만 저장해 둔 내 눈사람 (처음 접속 때 서버로 옮기고 지운다) */
@@ -67,7 +73,7 @@ export interface Session {
 export function createSession(deps: SessionDeps): Session {
   const { character, carousel, snowWorld } = deps;
   const ui = createNetUi(deps.canvas);
-  const remotes = createRemotePlayers(carousel.seats, () => carousel.rideTime());
+  const remotes = createRemotePlayers(carousel.seats, () => carousel.rideTime(), (x, y, dx, dy) => deps.step?.(x, y, dx, dy));
   let profile: Profile | null = loadProfile();
   let legacy = deps.legacy;
   let lastSeats: WireSeats = emptySeats();
@@ -92,7 +98,7 @@ export function createSession(deps: SessionDeps): Session {
     if (net.status !== 'online') return;
     thing.synced = true;
     if (thing.kind === 'ball') net.send({ t: 'put', id: thing.netId, kind: 'ball', data: ballData(thing) });
-    else net.send({ t: 'put', id: thing.netId, kind: 'snowman', data: { x: thing.x, y: thing.y, tiers: thing.tiers, seed: thing.seed, owner: thing.owner, makers: thing.makers } });
+    else net.send({ t: 'put', id: thing.netId, kind: 'snowman', data: { x: thing.x, y: thing.y, tiers: thing.tiers, seed: thing.seed, owner: thing.owner, makers: thing.makers, props: thing.props } });
   };
   let lastBallSent = 0;
 
@@ -129,10 +135,11 @@ export function createSession(deps: SessionDeps): Session {
     if (net.status !== 'online') return;
     const state = wireState();
     const hat: WireHat = character.hat.get();
-    const text = JSON.stringify([state, hat]);
+    const hold = character.holding.get();
+    const text = JSON.stringify([state, hat, hold]);
     if (!force && text === sentState) return;
     sentState = text;
-    net.send({ t: 'state', state, hat });
+    net.send({ t: 'state', state, hat, hold });
     // 회전목마 자리는 서버에 물어본다
     if (state.kind === 'riding') {
       net.send({ t: 'sit', mount: state.mount, slot: state.slot });
@@ -193,7 +200,16 @@ export function createSession(deps: SessionDeps): Session {
         applySeats(lastSeats);
         break;
       case 'ball': {
+        const old = snowWorld.findNet(message.id);
+        const fromX = old ? old.x : message.x;
+        const fromY = old ? old.y : message.y;
         const ball = snowWorld.upsertBall(message.id, { ...message, owner: message.owner }, message.owner);
+        // 지나간 자리에 눈길을 낸다 (받은 위치 사이를 촘촘히 이어서)
+        if (deps.trail) {
+          const gap = Math.hypot(ball.x - fromX, ball.y - fromY);
+          const steps = gap > 60 ? 0 : Math.max(1, Math.ceil(gap / 2));
+          for (let k = 1; k <= steps; k++) deps.trail(fromX + ((ball.x - fromX) * k) / steps, fromY + ((ball.y - fromY) * k) / steps, ball.d);
+        }
         if (ball.holders.length === 0) ball.holders = [message.owner];
         break;
       }
@@ -230,7 +246,16 @@ export function createSession(deps: SessionDeps): Session {
       }
       case 'put':
         if (message.object.kind === 'ball') snowWorld.upsertBall(message.object.id, message.object.data, null);
-        else snowWorld.upsertSnowman(message.object.id, message.object.data);
+        else {
+          const old = snowWorld.findNet(message.object.id);
+          const before = old && old.kind === 'snowman' ? old.props.map((a) => `${a.p}:${a.by}`) : [];
+          const snowman = snowWorld.upsertSnowman(message.object.id, message.object.data);
+          // 누가 소품을 달아줬다: 만든 사람이 아닌 친구가 달았으면 '♥ 닉네임'
+          for (const a of snowman.props) {
+            if (before.includes(`${a.p}:${a.by}`)) continue;
+            if (snowman.makers.length > 0 && !snowman.makers.some((m) => m.name === a.by)) deps.decorated?.(snowman, a.by);
+          }
+        }
         break;
       case 'del': {
         const thing = snowWorld.findNet(message.id);
@@ -281,6 +306,7 @@ export function createSession(deps: SessionDeps): Session {
 
   character.state.onChange(() => sendState());
   character.hat.onChange(() => sendState());
+  character.holding.onChange(() => sendState());
 
   // 10분 동안 아무 입력이 없으면 연결을 끊는다
   for (const type of ['keydown', 'pointerdown'] as const) window.addEventListener(type, () => (lastInput = seconds()));

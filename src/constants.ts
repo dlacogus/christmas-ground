@@ -565,6 +565,76 @@ export const COPUSH = {
   loudSqueak: 1.5,
 } as const;
 
+/** 노점 소품 (노점에서 받아 눈사람에 달아준다) */
+export const PROP_IDS = ['carrot', 'coal', 'ribbon', 'earmuffs', 'glasses', 'holly', 'broom', 'santaHat'] as const;
+export type PropId = (typeof PROP_IDS)[number];
+
+export const PROPS = {
+  /** 눈사람 하나에 달 수 있는 소품 수 */
+  maxPerSnowman: 5,
+  /** 눈사람 종류별 소품 크기 (픽셀 배율) */
+  scale: { mini: 1, medium: 2, giant: 3 },
+  /** 노점 앞 이 거리 안에서 구경할 수 있다 / 구경하다 이만큼 멀어지면 닫힌다 */
+  stallRadius: 16,
+  /** 노점 앞에 서는 자리: 돌바닥 윗선에서 앞으로 */
+  stallFront: 5,
+  /** 진열대에 놓인 소품 사이 간격, 계산대 위로 띄우는 높이 */
+  shelfGap: 9,
+  shelfAbove: 3,
+  /** 고르는 화면: 노점 위에 뜨는 아이콘 크기(배율)·간격·칸 크기·노점 바닥에서 위로 */
+  menuScale: 2,
+  menuGap: 24,
+  menuBox: 20,
+  menuAbove: 68,
+  /** 건네받는 시간, 달아주는 시간 (초), 달리는 순간 (진행 비율) */
+  takeSeconds: 0.5,
+  attachSeconds: 0.6,
+  attachAt: 0.7,
+  /** 눈사람 키가 이보다 작으면 쪼그려 앉고, jumpFrom부터는 폴짝 뛰어 단다 (사이는 까치발) */
+  crouchBelow: 22,
+  jumpFrom: 44,
+  jumpHeight: 10,
+  tiptoe: 2,
+  /** 눈사람 가장자리에서 이 거리 안이면 달아줄 수 있다 */
+  attachRadius: 14,
+  /** 바닥에 내려놓은 소품을 줍는 거리 */
+  pickRadius: 14,
+  /** 손 위치: 발밑에서 앞으로, 위로 */
+  handX: 6,
+  handY: 11,
+  /** 재채기하면 손에서 튀어 나가는 거리 */
+  sneezeThrow: 12,
+  /** 친구 눈사람에 달아주면 뜨는 '♥ 닉네임' 시간 */
+  heartSeconds: 3,
+  /** '띠링' */
+  dingNotes: [1318.5, 1760],
+  dingVolume: 0.22,
+} as const;
+
+/** 소품 그림의 글자 → 색 */
+export const PROP_COLORS = {
+  O: '#f08a2c',
+  o: '#c8641c',
+  K: '#2a2a33',
+  R: '#d9434f',
+  r: '#a52f3b',
+  G: '#3a3340',
+  L: '#bfe3f2',
+  g: '#2f8a4c',
+  d: '#1f6a3a',
+  b: '#7a4f2a',
+  y: '#e3c16a',
+  Y: '#b8963f',
+  W: '#f6f3ea',
+  M: '#e86a8a',
+  B: '#4a4a58',
+  /** 고르는 화면: 칸 바탕·테두리·고른 칸 테두리, 건네는 손 */
+  menuBack: 'rgba(86, 98, 140, 0.92)',
+  menuEdge: '#2b3352',
+  menuPick: '#ffd76a',
+  hand: '#f1c9a5',
+} as const;
+
 /** 눈사람 */
 export const SNOWMAN = {
   /** 최대 단 수, 위 단이 아래 단에 파묻히는 비율 (위 단 지름 대비) */

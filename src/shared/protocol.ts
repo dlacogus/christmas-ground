@@ -2,7 +2,7 @@
 // 서버(Durable Object 'Plaza')는 받은 메시지를 parseClientMessage로 확인하고, 다른 사람들에게 전달만 한다.
 // 브라우저·Worker 어느 쪽에서도 돌아가게 DOM도 Cloudflare API도 쓰지 않는다.
 
-import { CAROUSEL, CARRIAGE, COPUSH, NET, SNOWBALL, SNOWMAN } from '../constants';
+import { CAROUSEL, CARRIAGE, COPUSH, NET, PROP_IDS, PROPS, SNOWBALL, SNOWMAN, type PropId } from '../constants';
 import { MAP_HEIGHT, MAP_WIDTH } from '../world';
 
 // ───────────── 공통 ─────────────
@@ -18,7 +18,7 @@ export type WireState =
 export type WireHat = 'on' | { x: number; y: number };
 
 /** 한 번짜리 동작 — 친구 화면에서도 같은 연출이 나온다 */
-export const ACTS = ['sneeze', 'snowman', 'fall', 'wave', 'jump', 'spin', 'spinEnd', 'highfive', 'cheer'] as const;
+export const ACTS = ['sneeze', 'snowman', 'fall', 'wave', 'jump', 'spin', 'spinEnd', 'highfive', 'cheer', 'decorate'] as const;
 export type Act = (typeof ACTS)[number];
 
 export interface WirePlayer {
@@ -32,12 +32,20 @@ export interface WirePlayer {
   f: 0 | 1;
   state: WireState;
   hat: WireHat;
+  /** 손에 든 노점 소품 */
+  hold?: PropId | null;
 }
 
 /** 만든 사람 (접속 id는 나가면 바뀌므로 닉네임과 목도리 색으로 적는다) */
 export interface Maker {
   name: string;
   scarf: number;
+}
+
+/** 눈사람에 달린 소품 하나: 무엇을(p), 누가 달았나(by = 닉네임) */
+export interface AttachedProp {
+  p: PropId;
+  by: string;
 }
 
 /** 놓여 있는 눈덩이 */
@@ -61,6 +69,8 @@ export interface SnowmanData {
   owner: string;
   /** 눈덩이를 굴린 사람들 (2명 이상이면 줄무늬 목도리) */
   makers?: Maker[];
+  /** 달아준 노점 소품 (자리마다 하나, 5개까지) */
+  props?: AttachedProp[];
 }
 
 export type WireObject =
@@ -78,7 +88,7 @@ export type ClientMessage =
   /** 위치 (움직이는 동안 초당 최대 8번, 멈추면 한 번). 스케이트 중에는 속도도 */
   | { t: 'pos'; x: number; y: number; f: 0 | 1; m: 0 | 1; vx?: number; vy?: number }
   /** 상태가 바뀌었을 때만 */
-  | { t: 'state'; state: WireState; hat: WireHat }
+  | { t: 'state'; state: WireState; hat: WireHat; hold?: PropId | null }
   | { t: 'act'; a: Act }
   /** 회전목마 자리에 앉겠다 / 내렸다 */
   | { t: 'sit'; mount: number; slot: number }
@@ -105,7 +115,7 @@ export type ServerMessage =
   | { t: 'joined'; player: WirePlayer }
   | { t: 'left'; id: string }
   | { t: 'pos'; id: string; x: number; y: number; f: 0 | 1; m: 0 | 1; vx?: number; vy?: number }
-  | { t: 'state'; id: string; state: WireState; hat: WireHat }
+  | { t: 'state'; id: string; state: WireState; hat: WireHat; hold?: PropId | null }
   | { t: 'act'; id: string; a: Act }
   | { t: 'seats'; seats: WireSeats }
   /** 그 자리는 이미 누가 앉았다 */
@@ -170,6 +180,19 @@ export function validMakers(v: unknown): v is Maker[] | undefined {
   );
 }
 
+export function validProp(v: unknown): v is PropId {
+  return (PROP_IDS as readonly unknown[]).includes(v);
+}
+
+export function validProps(v: unknown): v is AttachedProp[] | undefined {
+  if (v === undefined) return true;
+  return (
+    Array.isArray(v) &&
+    v.length <= PROPS.maxPerSnowman &&
+    v.every((a) => typeof a === 'object' && a !== null && validProp((a as AttachedProp).p) && cleanName((a as AttachedProp).by) !== null)
+  );
+}
+
 export function validBall(v: unknown): v is BallData {
   if (typeof v !== 'object' || v === null) return false;
   const b = v as Record<string, unknown>;
@@ -187,7 +210,8 @@ export function validSnowman(v: unknown): v is SnowmanData {
     s.tiers.every(isSize) &&
     isNum(s.seed) &&
     isId(s.owner) &&
-    validMakers(s.makers)
+    validMakers(s.makers) &&
+    validProps(s.props)
   );
 }
 
@@ -222,7 +246,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return out;
     }
     case 'state':
-      return validState(m.state) && validHat(m.hat) ? { t: 'state', state: m.state, hat: m.hat } : null;
+      return validState(m.state) && validHat(m.hat) ? { t: 'state', state: m.state, hat: m.hat, hold: validProp(m.hold) ? m.hold : null } : null;
     case 'act':
       return (ACTS as readonly unknown[]).includes(m.a) ? { t: 'act', a: m.a as Act } : null;
     case 'sit':

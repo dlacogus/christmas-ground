@@ -1,6 +1,7 @@
 // 월드 좌표 데이터. 좌표는 모두 맵 기준 (x 0~1440, y 0~270).
 // 장애물은 '발밑 기준' 사각형이다: 캐릭터의 발 상자가 겹치면 못 지나간다.
 
+import type { PropId } from './constants';
 import { GROUND, MARKET_HUT } from './constants';
 
 export interface Rect {
@@ -145,6 +146,16 @@ export const HUTS: readonly { x: number; w: number; kind: HutKind; wall: number 
   { x: 828, w: 56, kind: 'gable', wall: 26 },
   { x: 880, w: 32, kind: 'kiosk', wall: 32 },
   { x: 921, w: 42, kind: 'pavilion', wall: 27 },
+];
+
+/** 소품을 진열한 노점 (HUTS 번호)과 그 소품들. 노점마다 달라서 돌아다녀야 다 모은다 */
+export const STALLS: readonly { hut: number; props: readonly PropId[] }[] = [
+  { hut: 1, props: ['carrot', 'ribbon'] },
+  { hut: 3, props: ['broom', 'coal', 'earmuffs'] },
+  { hut: 4, props: ['glasses', 'holly'] },
+  { hut: 7, props: ['santaHat', 'carrot', 'coal'] },
+  { hut: 8, props: ['ribbon', 'glasses', 'broom'] },
+  { hut: 11, props: ['holly', 'earmuffs', 'santaHat'] },
 ];
 
 /** 지붕 눈이 떨어지는 오두막 (HUTS 번호): 회전목마 구역 2곳(삼각 지붕·원뿔 정자), 광장 2곳(삼각 지붕) */

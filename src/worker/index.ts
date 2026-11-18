@@ -151,7 +151,8 @@ export class Plaza extends DurableObject<Env> {
       case 'state':
         me.state = message.state;
         me.hat = message.hat;
-        this.broadcast({ t: 'state', id: me.id, state: message.state, hat: message.hat }, ws);
+        me.hold = message.hold ?? null;
+        this.broadcast({ t: 'state', id: me.id, state: message.state, hat: message.hat, hold: me.hold }, ws);
         break;
       case 'act':
         this.broadcast({ t: 'act', id: me.id, a: message.a }, ws);
@@ -219,6 +220,15 @@ export class Plaza extends DurableObject<Env> {
       case 'del':
         this.remove(message.id);
         if (session.rolling?.id === message.id) session.rolling = null;
+        // 없어진 눈덩이(눈사람이 됐다)를 잡고 있던 사람들의 손을 푼다
+        for (const peer of this.ctx.getWebSockets()) {
+          const other = peer.deserializeAttachment() as Session | null;
+          if (!other || other.holding?.id !== message.id) continue;
+          other.holding = null;
+          if (other.rolling?.id === message.id) other.rolling = null;
+          peer.serializeAttachment(other);
+        }
+        if (session.holding?.id === message.id) session.holding = null;
         this.broadcast({ t: 'del', id: message.id }, ws);
         break;
     }

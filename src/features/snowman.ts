@@ -7,7 +7,7 @@
 // 그리기는 snowmanDraw.ts, 조작은 snowmanPlay.ts.
 
 import { COPUSH, SNOWBALL as B, SNOWMAN as M } from '../constants';
-import type { Maker } from '../shared/protocol';
+import type { AttachedProp, Maker } from '../shared/protocol';
 import { OBSTACLES, WALK_AREA, rectsOverlap, type Rect } from '../world';
 
 // ───────────── 눈덩이 ─────────────
@@ -182,6 +182,8 @@ export interface Snowman {
   synced: boolean;
   /** 눈덩이를 굴린 사람들 (2명 이상이면 줄무늬 목도리를 두른다) */
   makers: Maker[];
+  /** 달아준 노점 소품 */
+  props: AttachedProp[];
 }
 
 /** 시드로 정해지는 생김새 (눈사람마다 조금씩 다르다) */
@@ -238,6 +240,7 @@ export interface SavedSnowman {
   seed: number;
   owner: string;
   makers?: Maker[];
+  props?: AttachedProp[];
 }
 
 export interface SnowWorld {
@@ -289,7 +292,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
     },
     addSnowman(x, y, tiers, owner, seed = Math.floor(random() * 1e6)) {
       const id = nextId++;
-      const snowman: Snowman = { kind: 'snowman', id, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0, netId: `${prefix}-${id}`, synced: false, makers: [] };
+      const snowman: Snowman = { kind: 'snowman', id, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0, netId: `${prefix}-${id}`, synced: false, makers: [], props: [] };
       snowmen.push(snowman);
       // 상한을 넘으면 (아직 안 녹는 것 가운데) 가장 오래된 것부터 녹는다
       const standing = snowmen.filter((s) => s.melt < 0);
@@ -359,6 +362,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
       }
       Object.assign(snowman, { x: data.x, y: data.y, tiers: [...data.tiers], seed: data.seed, owner: data.owner, synced: true });
       if (data.makers) snowman.makers = data.makers.map((m) => ({ ...m }));
+      if (data.props) snowman.props = data.props.map((a) => ({ ...a }));
       return snowman;
     },
     removeNet(netId) {

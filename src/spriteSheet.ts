@@ -2,7 +2,8 @@
 
 import { getSpriteCanvas } from './character/render';
 import { POSES, type Facing, type PoseName } from './character/sprites';
-import { CHARACTER, COLORS, DEFAULT_OUTFIT, OUTFITS, SKATERS, SPRITE_SHEET, type OutfitName } from './constants';
+import { CHARACTER, COLORS, DEFAULT_OUTFIT, OUTFITS, PROP_IDS, SKATERS, SPRITE_SHEET, type OutfitName, type PropId } from './constants';
+import { drawPropIcon, PROP_NAMES, propSize } from './features/props';
 import { fitCanvasToWindow, frameDt } from './screen';
 
 interface Cell {
@@ -41,6 +42,22 @@ function animatedCell(pose: PoseName, frameDuration: number, outfit: OutfitName)
   };
 }
 
+/** 노점 소품: 한 칸에 세 가지 크기(미니·중간·엄청 큰 눈사람용)를 위에서부터 */
+function propCell(prop: PropId): Cell {
+  // 칸을 절반 배율로 쓴다 (3배 크기까지 들어가게)
+  const canvas = document.createElement('canvas');
+  canvas.width = CHARACTER.spriteWidth * 2;
+  canvas.height = CHARACTER.spriteHeight * 2;
+  const g = canvas.getContext('2d')!;
+  let top = 2;
+  for (const scale of [1, 2, 3]) {
+    const h = propSize(prop, scale).h;
+    drawPropIcon(g, prop, canvas.width / 2, top + h / 2, scale);
+    top += h + 3;
+  }
+  return { label: PROP_NAMES[prop], sprite: () => canvas };
+}
+
 export function startSpriteSheet(canvas: HTMLCanvasElement): void {
   const { scale, columns, padding, labelHeight, titleHeight } = SPRITE_SHEET;
   const cellW = CHARACTER.spriteWidth * scale;
@@ -60,6 +77,7 @@ export function startSpriteSheet(canvas: HTMLCanvasElement): void {
       animatedCell('walk', CHARACTER.walkFrameDuration, DEFAULT_OUTFIT),
       animatedCell('glide', SKATERS.glideFrameDuration, SKATERS.list[0].outfit),
     ],
+    PROP_IDS.map(propCell),
   ];
 
   const rowHeight = labelHeight + cellH + padding;

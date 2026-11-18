@@ -216,6 +216,8 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
       const tiers = stackOnSnowman(target.tiers, ball.d, target.y);
       return tiers ? { tiers, base: { x: target.x, y: target.y }, lifted: ball, onto: target, bottom: null } : null;
     }
+    // 누가 밀고 있는 눈덩이와는 합칠 수 없다 (그 사람 화면에서는 계속 굴리고 있어 눈사람 속에 끼인다)
+    if (target.heldBy || target.holders.some((id) => id !== owner())) return null;
     // 눈덩이끼리: 작은 쪽이 위로. 내가 굴리던 게 더 크면 놓여 있던 것을 들어 내 눈덩이 위에 올린다
     const tiers = stackBalls(ball.d, target.d);
     const mineBelow = ball.d > target.d;
@@ -457,12 +459,11 @@ export function createSnowmanPlay(character: Character, world: SnowWorld, deps: 
       // 먼저 잡은 사람 곁에 나란히 선다
       const tx = p.x - (p.facing === 'right' ? 2 : -2);
       const spots = [p.y + COPUSH.helperDepth, p.y - COPUSH.helperDepth];
-      const ty = spots.find((y) => canStandAt(tx, y, character));
-      if (ty !== undefined) {
-        character.moving = Math.hypot(tx - character.x, ty - character.y) > 0.05;
-        character.x = tx;
-        character.y = ty;
-      } else character.moving = false;
+      // 곁자리가 막혀 있으면 (벽, 다른 눈사람) 먼저 잡은 사람과 같은 자리에 겹쳐 선다 — 뒤에 남겨지지 않게
+      const ty = spots.find((y) => canStandAt(tx, y, character)) ?? p.y;
+      character.moving = Math.hypot(tx - character.x, ty - character.y) > 0.05;
+      character.x = tx;
+      character.y = ty;
       character.facing = p.facing;
     }
     character.animTime += dt;

@@ -7,7 +7,7 @@
 // 그리기는 snowmanDraw.ts, 조작은 snowmanPlay.ts.
 
 import { COPUSH, SNOWBALL as B, SNOWMAN as M } from '../constants';
-import type { AttachedProp, Maker } from '../shared/protocol';
+import type { AttachedProp, Maker, SnowmanHat } from '../shared/protocol';
 import { OBSTACLES, WALK_AREA, rectsOverlap, type Rect } from '../world';
 
 // ───────────── 눈덩이 ─────────────
@@ -184,6 +184,8 @@ export interface Snowman {
   makers: Maker[];
   /** 달아준 노점 소품 */
   props: AttachedProp[];
+  /** 누가 씌워 준 털모자 (주인 닉네임, 색) */
+  hat: SnowmanHat | null;
 }
 
 /** 시드로 정해지는 생김새 (눈사람마다 조금씩 다르다) */
@@ -241,6 +243,7 @@ export interface SavedSnowman {
   owner: string;
   makers?: Maker[];
   props?: AttachedProp[];
+  hat?: SnowmanHat | null;
 }
 
 export interface SnowWorld {
@@ -292,7 +295,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
     },
     addSnowman(x, y, tiers, owner, seed = Math.floor(random() * 1e6)) {
       const id = nextId++;
-      const snowman: Snowman = { kind: 'snowman', id, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0, netId: `${prefix}-${id}`, synced: false, makers: [], props: [] };
+      const snowman: Snowman = { kind: 'snowman', id, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0, netId: `${prefix}-${id}`, synced: false, makers: [], props: [], hat: null };
       snowmen.push(snowman);
       // 상한을 넘으면 (아직 안 녹는 것 가운데) 가장 오래된 것부터 녹는다
       const standing = snowmen.filter((s) => s.melt < 0);
@@ -363,6 +366,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
       Object.assign(snowman, { x: data.x, y: data.y, tiers: [...data.tiers], seed: data.seed, owner: data.owner, synced: true });
       if (data.makers) snowman.makers = data.makers.map((m) => ({ ...m }));
       if (data.props) snowman.props = data.props.map((a) => ({ ...a }));
+      snowman.hat = data.hat ? { ...data.hat } : null;
       return snowman;
     },
     removeNet(netId) {

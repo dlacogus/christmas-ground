@@ -9,6 +9,7 @@
 import type { Character } from '../character/character';
 import { HAT_ROWS, type Facing } from '../character/sprites';
 import { BALD, CHARACTER_BASE_PALETTE, HAT as H, SCREEN_WIDTH, SNEEZE as S, SNEEZE_COLORS as C } from '../constants';
+import { hatColors } from '../character/render';
 import { fillPixelEllipse, stampPixels } from '../props/pixel';
 import { OBSTACLES, WALK_AREA } from '../world';
 import { insideSkateArea, wallContact } from '../zones/skating';
@@ -209,6 +210,10 @@ export interface Hat extends DepthDrawable {
   readonly on: boolean;
   /** 날거나 튀거나 미끄러지는 중인가 */
   readonly moving: boolean;
+  /** 바닥에 가만히 떨어져 있나 (주울 수 있다) */
+  readonly lying: boolean;
+  /** 눈사람에게 씌워 줬다 (머리에도 바닥에도 없다) */
+  giveAway(): void;
   /** 바닥 위 자리 (발밑 기준)와 떠 있는 높이 */
   readonly x: number;
   readonly y: number;
@@ -226,7 +231,7 @@ export interface Hat extends DepthDrawable {
   placeAt(to: { x: number; y: number }): void;
 }
 
-type HatMode = 'on' | 'flying' | 'bouncing' | 'sliding' | 'resting';
+type HatMode = 'on' | 'flying' | 'bouncing' | 'sliding' | 'resting' | 'away';
 
 export function createHat(character: Character, random: () => number = Math.random): Hat {
   let mode: HatMode = 'on';
@@ -243,11 +248,12 @@ export function createHat(character: Character, random: () => number = Math.rand
   let slideVx = 0;
   let slideVy = 0;
   let spin = 0;
-  const sprites = new Map<number, HTMLCanvasElement>();
+  const sprites = new Map<string, HTMLCanvasElement>();
 
   /** 모자 그림 (quarter = 90°씩 돌린 모습 0~3) */
   const sprite = (quarter: number): HTMLCanvasElement => {
-    const cached = sprites.get(quarter);
+    const key = `${quarter}|${character.hatColor}`;
+    const cached = sprites.get(key);
     if (cached) return cached;
     const w = HAT_ROWS[0].length;
     const h = HAT_ROWS.length;
@@ -258,8 +264,8 @@ export function createHat(character: Character, random: () => number = Math.rand
     const ctx = canvas.getContext('2d')!;
     ctx.translate(size / 2, size / 2);
     ctx.rotate((Math.PI / 2) * quarter);
-    stampPixels(ctx, HAT_ROWS, CHARACTER_BASE_PALETTE, -w / 2, -h / 2);
-    sprites.set(quarter, canvas);
+    stampPixels(ctx, HAT_ROWS, { ...CHARACTER_BASE_PALETTE, ...hatColors(character.hatColor) }, -w / 2, -h / 2);
+    sprites.set(key, canvas);
     return canvas;
   };
 
@@ -274,6 +280,14 @@ export function createHat(character: Character, random: () => number = Math.rand
   return {
     get on() {
       return mode === 'on';
+    },
+    get lying() {
+      return mode === 'resting';
+    },
+    giveAway() {
+      mode = 'away';
+      z = 0;
+      character.hat.set('onSnowman');
     },
     get moving() {
       return mode === 'flying' || mode === 'bouncing' || mode === 'sliding';
@@ -316,7 +330,7 @@ export function createHat(character: Character, random: () => number = Math.rand
       character.hat.set({ x: to.x, y: to.y });
     },
     update(dt) {
-      if (mode === 'on' || mode === 'resting') return;
+      if (mode === 'on' || mode === 'resting' || mode === 'away') return;
       t += dt;
       if (mode === 'flying') {
         // 포물선을 그리며 빙글빙글
@@ -399,7 +413,7 @@ export function createHat(character: Character, random: () => number = Math.rand
       character.hat.set('on');
     },
     draw(ctx, camera) {
-      if (mode === 'on') return;
+      if (mode === 'on' || mode === 'away') return;
       const sx = Math.round(x) - Math.round(camera.x);
       if (sx < -16 || sx > SCREEN_WIDTH + 16) return;
       const sy = Math.round(y);

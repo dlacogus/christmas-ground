@@ -103,10 +103,16 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
     }
   };
 
-  const applyState = (r: Remote, state: WireState, hat: WireHat, animate: boolean, hold: PropId | null = null) => {
+  const applyState = (r: Remote, state: WireState, hat: WireHat, animate: boolean, hold: PropId | null = null, hc: number | null = null, ho: string | null = null) => {
     r.info.state = state;
     r.info.hat = hat;
     r.info.hold = hold;
+    r.info.hc = hc;
+    r.info.ho = ho;
+    // 털모자 색: 따로 없으면 자기 목도리 색
+    r.ch.hatColor = hc ?? r.info.scarf;
+    r.ch.hatOwner = ho;
+    r.occupant.hatColor = r.ch.hatColor;
     r.ch.state.set(state.kind === 'skating' ? { kind: 'skating', vx: 0, vy: 0 } : state);
     if (state.kind !== 'skating') {
       r.spinning = false;
@@ -115,7 +121,8 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
     }
     if (hat === 'on') {
       if (!r.hat.on) r.hat.putOn();
-    } else if (r.hat.on && animate) r.hat.flyTo({ x: r.ch.x, y: r.ch.y }, hat);
+    } else if (hat === 'onSnowman') r.hat.giveAway();
+    else if (r.hat.on && animate) r.hat.flyTo({ x: r.ch.x, y: r.ch.y }, hat);
     else r.hat.placeAt(hat);
   };
 
@@ -207,7 +214,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
         walked: 0,
       };
       remotes.set(player.id, r);
-      applyState(r, player.state, player.hat, false, player.hold ?? null);
+      applyState(r, player.state, player.hat, false, player.hold ?? null, player.hc ?? null, player.ho ?? null);
       if (puff) puffAt(player.x, player.y);
       rebuild();
     },
@@ -229,7 +236,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
       if (message.t === 'pos') {
         r.samples.push({ t: now, x: message.x, y: message.y, f: message.f, vx: message.vx ?? 0, vy: message.vy ?? 0 });
         if (r.samples.length > 12) r.samples.shift();
-      } else if (message.t === 'state') applyState(r, message.state, message.hat, true, message.hold ?? null);
+      } else if (message.t === 'state') applyState(r, message.state, message.hat, true, message.hold ?? null, message.hc ?? null, message.ho ?? null);
       else act(r, message.a);
     },
     update(dt, now) {

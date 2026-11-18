@@ -22,6 +22,9 @@ export interface Character {
   state: CharacterStateStore;
   /** 털모자: 쓰고 있나, 벗겨져 어디에 떨어져 있나 (벗겨져 있으면 대머리로 그린다) */
   hat: HatStore;
+  /** 쓰고 있는 털모자 색 (목도리 색 번호 0~5, null = 기본 빨강)과 그 모자의 주인 닉네임 (내 모자면 null) */
+  hatColor: number | null;
+  hatOwner: string | null;
   /** 손에 든 노점 소품 */
   holding: HoldStore;
   /** 윗몸을 옆으로 기울이는 px (재채기·떨림). 어떤 자세로 그리든 더해진다 */
@@ -51,6 +54,8 @@ export function createCharacter(x: number, y: number, outfit: OutfitName = DEFAU
     puffs: [],
     state: createCharacterState(),
     hat: createHatState(),
+    hatColor: null,
+    hatOwner: null,
     holding: createHoldState(),
     lean: 0,
     speedFactor: 1,

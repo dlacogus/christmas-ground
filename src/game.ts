@@ -21,6 +21,7 @@ import { createSneezeSound } from './audio/sneezeSound';
 import { createSnowmanSounds } from './audio/snowmanSounds';
 import { createSnowWorld, footprint, loadSnowmen, snowmanHeight } from './features/snowman';
 import { drawableFor } from './features/snowmanDraw';
+import { createHatGift } from './features/hatGift';
 import { createPropsPlay } from './features/propsPlay';
 import { createSnowmanPlay } from './features/snowmanPlay';
 import { createSession } from './net/session';
@@ -130,7 +131,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       return;
     }
     // 떨어진 모자를 탭하면 걸어가서 줍는다
-    if (play.boarding.phase === 'none' && !hat.on && !hat.moving && Math.abs(worldX - hat.x) <= 10 && sy >= hat.y - 14 && sy <= hat.y + 5) {
+    if (play.boarding.phase === 'none' && hat.lying && Math.abs(worldX - hat.x) <= 10 && sy >= hat.y - 14 && sy <= hat.y + 5) {
       if (hat.canPickUp(character.x, character.y)) startPickup();
       else {
         setWalkTarget(character, hat.x, hat.y);
@@ -157,6 +158,17 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     }
     // 노점을 탭하면 걸어가 구경하고, 소품을 들고 눈사람을 탭하면 걸어가 달아준다
     if (propsPlay.tap(worldX, sy)) return;
+    // 눈사람을 탭하면 (곁에 있을 때) 내 모자를 씌워주거나 돌려받는다
+    if (!propsPlay.holding && sy >= WALK_AREA.y - 40) {
+      const give = hatGift.nearestToGive();
+      const take = hatGift.nearestToTake();
+      const near = take && take.distance <= PROPS.attachRadius ? take : give && give.distance <= PROPS.attachRadius ? give : null;
+      if (near && Math.abs(worldX - near.snowman.x) <= near.snowman.tiers[0] / 2 + 3 && sy <= near.snowman.y + 3 && sy >= near.snowman.y - snowmanHeight(near.snowman.tiers) - 6) {
+        if (near === take) hatGift.take(near.snowman);
+        else hatGift.give(near.snowman);
+        return;
+      }
+    }
     // 바닥을 탭했을 때만 그 자리로 걸어간다
     if (sy < WALK_AREA.y) return;
     setWalkTarget(character, worldX, sy);
@@ -187,7 +199,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   let swallowSpace = false;
   let wasFrozen = false;
   /** 이번 프레임에 고른 상호작용 (힌트도 이것만 띄운다) */
-  let choice: 'hat' | 'carousel' | 'skate' | 'bench' | 'exit' | 'ball' | 'stall' | 'prop' | 'decorate' | null = null;
+  let choice: 'hat' | 'carousel' | 'skate' | 'bench' | 'exit' | 'ball' | 'stall' | 'prop' | 'decorate' | 'giveHat' | 'takeHat' | null = null;
 
   // 눈사람 만들기: 눈덩이·눈사람 목록(내 눈사람은 저장해 둔 것을 불러온다)과 굴리기 조작
   const snowWorld = createSnowWorld();
@@ -205,6 +217,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     snowPlay: () => snowPlay,
     legacy: loadSnowmen(),
     decorated: (snowman, by) => propsPlay.showHeart(snowman, by),
+    newHat: () => hat.putOn(),
     // 친구가 굴리는 눈덩이도 내 화면의 눈밭에 길을 내고, 친구도 발자국을 남긴다
     trail: (x, y, d) => {
       const fp = footprint(d);
@@ -232,6 +245,15 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     ding: () => snowmanSounds.ding(),
     onAttach: () => session.act('decorate'),
   });
+  // 내 털모자를 눈사람에게 씌워주기 / 돌려받기
+  const hatGift = createHatGift(character, hat, snowWorld, {
+    me: () => session.me(),
+    put: (snowman) => session.sync.put(snowman),
+    onAct: () => session.act('decorate'),
+    ding: () => snowmanSounds.ding(),
+  });
+  let nearGive: ReturnType<typeof hatGift.nearestToGive> = null;
+  let nearTake: ReturnType<typeof hatGift.nearestToTake> = null;
   let nearStall: ReturnType<typeof propsPlay.nearestStall> | null = null;
   let nearProp: ReturnType<typeof propsPlay.nearestGround> = null;
   let nearSnowman: ReturnType<typeof propsPlay.nearestSnowman> = null;
@@ -270,7 +292,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
         if (skate.active) skate.drawCharacter(c, cam);
         else if (kind === 'sitting') bench.draw(c, cam);
         else if (snowHits.snowman) snowHits.drawSnowman(c, footX, footY);
-        else drawCharacter(c, character, ox, bending ? { pose: 'crouch', index: 0 } : (snowPlay.pose() ?? propsPlay.pose() ?? { lean: snowHits.shakeLean() }));
+        else drawCharacter(c, character, ox, bending ? { pose: 'crouch', index: 0 } : (snowPlay.pose() ?? propsPlay.pose() ?? hatGift.pose() ?? { lean: snowHits.shakeLean() }));
         // 손에 든 노점 소품
         if (!skate.active && !snowHits.snowman && !bending) propsPlay.drawHeld(c, footX, footY, kind === 'sitting' ? BENCH_SIT.lift : 0);
         if (!snowHits.snowman && !bending) {
@@ -313,7 +335,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     });
   }
   // 발밑 y로 앞뒤 정렬되는 것들. 눈덩이·눈사람은 매 프레임 뒤에 덧붙인다
-  const actors: DepthDrawable[] = [characterDrawable, hat, ...roofSnow.drawables, ...snowPlay.drawables, ...propsPlay.drawables];
+  const actors: DepthDrawable[] = [characterDrawable, hat, ...roofSnow.drawables, ...snowPlay.drawables, ...propsPlay.drawables, ...hatGift.drawables];
   const fixedActors = actors.length;
   const layers = createLayers(
     zones,
@@ -395,11 +417,12 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     snowPlay.update(dt, rollDir, holding);
     // 노점 소품: 눈 굴리기·스케이트를 시작하면 발밑에 내려놓는다
     if (propsPlay.holding && (skate.active || snowPlay.busy)) propsPlay.putDown();
-    const propsBusy = propsPlay.busy;
+    const propsBusy = propsPlay.busy || hatGift.busy;
     propsPlay.update(dt, dir, actions);
+    hatGift.update(dt);
 
     choice = null;
-    const hatLying = !hat.on && !hat.moving;
+    const hatLying = hat.lying;
     if (snowHits.frozen) {
       // 눈사람: 못 움직인다. 방향키를 연타하면 더 빨리 빠져나온다
       snowHits.struggle(actions.moveTaps ?? 0);
@@ -451,6 +474,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       nearStall = propsPlay.nearestStall();
       nearProp = propsPlay.nearestGround();
       nearSnowman = propsPlay.nearestSnowman();
+      nearGive = hatGift.nearestToGive();
+      nearTake = hatGift.nearestToTake();
       choice = nearestInteraction([
         { id: 'hat', distance: hatLying ? distanceTo(hat) : Infinity, radius: HAT.pickRadius },
         { id: 'carousel', distance: distanceTo(carouselEntry), radius: CAROUSEL.entryRadius },
@@ -458,6 +483,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
         { id: 'bench', distance: seat ? Math.hypot(character.x - seat.frontX, character.y - seat.frontY) : Infinity, radius: BENCH_SIT.sitRadius },
         { id: 'ball', distance: nearBall ? nearBall.distance : Infinity, radius: SNOWBALL.continueRadius },
         { id: 'decorate', distance: nearSnowman ? nearSnowman.distance : Infinity, radius: PROPS.attachRadius },
+        { id: 'giveHat', distance: nearGive ? nearGive.distance : Infinity, radius: PROPS.attachRadius },
+        { id: 'takeHat', distance: nearTake ? nearTake.distance : Infinity, radius: PROPS.attachRadius },
         { id: 'prop', distance: nearProp ? nearProp.distance : Infinity, radius: PROPS.pickRadius },
         { id: 'stall', distance: nearStall.distance, radius: PROPS.stallRadius },
       ]);
@@ -474,6 +501,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
         if (choice === 'stall') propsPlay.open(nearStall.index);
         else if (choice === 'prop' && nearProp) propsPlay.pickUp(nearProp.item);
         else if (choice === 'decorate' && nearSnowman) propsPlay.decorate(nearSnowman.snowman);
+        else if (choice === 'giveHat' && nearGive) hatGift.give(nearGive.snowman);
+        else if (choice === 'takeHat' && nearTake) hatGift.take(nearTake.snowman);
       }
       if (dir.x !== 0 || dir.y !== 0) pickOnArrive = false;
       if (choice === 'hat' && (actions.tap || actions.hold)) startPickup();
@@ -568,6 +597,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     let h: PlayHint | null;
     if (snowPlay.busy) h = snowPlay.hint(touch);
     else if (propsPlay.busy) h = propsPlay.hint(touch);
+    else if (choice === 'giveHat' && nearGive) h = { text: touch ? '눈사람을 탭해서 내 모자 씌워주기' : 'Space 내 모자 씌워주기', anchor: 'point', at: { x: nearGive.snowman.x, y: nearGive.snowman.y - snowmanHeight(nearGive.snowman.tiers) - 10 } };
+    else if (choice === 'takeHat' && nearTake) h = { text: (touch ? '눈사람을 탭해서 ' : 'Space ') + (nearTake.kind === 'back' ? '모자 돌려받기' : '모자 가져가기'), anchor: 'point', at: { x: nearTake.snowman.x, y: nearTake.snowman.y - snowmanHeight(nearTake.snowman.tiers) - 10 } };
     else if (choice === 'stall' && nearStall) h = { text: touch ? '탭해서 구경하기' : 'Space 구경하기', anchor: 'point', at: { x: nearStall.x, y: nearStall.y - HINT.aboveHead - 6 } };
     else if (choice === 'prop' && nearProp) h = { text: touch ? '탭해서 줍기' : 'Space 줍기', anchor: 'point', at: { x: nearProp.item.x, y: nearProp.item.y - HAT.hintAbove } };
     else if (choice === 'decorate' && nearSnowman) h = { text: touch ? '눈사람을 탭해서 달아주기' : 'Space 달아주기', anchor: 'point', at: { x: nearSnowman.snowman.x, y: nearSnowman.snowman.y - snowmanHeight(nearSnowman.snowman.tiers) - 10 } };
@@ -580,7 +611,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     else if (choice === 'carousel') h = play.hint(touch);
     else h = skate.hint(touch) ?? bench.hint(touch) ?? play.hint(touch);
     // 더 가까운 상호작용이 없는 눈밭에 가만히 서 있으면 눈 굴리기를 알려 준다
-    if (!h && choice === null && stillTime >= SNOWBALL.hintAfter && snowPlay.canStartHere()) {
+    if (!h && choice === null && !propsPlay.busy && !hatGift.busy && stillTime >= SNOWBALL.hintAfter && snowPlay.canStartHere()) {
       h = { text: touch ? '길게 눌러 눈 굴리기' : 'Space 눈 굴리기', anchor: 'head' };
     }
     if (!h || pickLeft > 0) hint.show(null);

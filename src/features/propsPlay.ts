@@ -13,7 +13,7 @@ import { LAYER_FACTORS, MARKET_HUT, PROPS, PROP_COLORS, SCREEN_WIDTH, type PropI
 import type { InputActions } from '../input';
 import type { DepthDrawable } from '../zones/zone';
 import { HUTS, STALLS, STREET_LINE_Y, WALK_AREA } from '../world';
-import { attachProp, attachStyle, canAttach, drawHeldProp, drawPropIcon, PROP_NAMES, takeFromStall } from './props';
+import { attachProp, attachStyle, canAttach, drawHeldProp, drawPropIcon, PROP_NAMES, PROP_SLOT, takeFromStall } from './props';
 import { snowmanHeight, type Snowman, type SnowWorld } from './snowman';
 
 export interface GroundProp {
@@ -241,7 +241,7 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
       if (!prop) return null;
       let best: { snowman: Snowman; distance: number } | null = null;
       for (const s of world.snowmen) {
-        if (s.melt >= 0 || !canAttach(s.props, prop)) continue;
+        if (s.melt >= 0 || !canAttach(s.props, prop) || (s.hat && PROP_SLOT[prop] === 'head')) continue;
         const distance = distanceToSnowman(s);
         if (!best || distance < best.distance) best = { snowman: s, distance };
       }
@@ -268,7 +268,7 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
     },
     decorate(snowman) {
       const prop = holding();
-      if (phase !== 'idle' || !prop || !canAttach(snowman.props, prop)) return false;
+      if (phase !== 'idle' || !prop || !canAttach(snowman.props, prop) || (snowman.hat && PROP_SLOT[prop] === 'head')) return false;
       onto = snowman;
       attached = false;
       phase = 'attach';

@@ -152,7 +152,9 @@ export class Plaza extends DurableObject<Env> {
         me.state = message.state;
         me.hat = message.hat;
         me.hold = message.hold ?? null;
-        this.broadcast({ t: 'state', id: me.id, state: message.state, hat: message.hat, hold: me.hold }, ws);
+        me.hc = message.hc ?? null;
+        me.ho = message.ho ?? null;
+        this.broadcast({ t: 'state', id: me.id, state: message.state, hat: message.hat, hold: me.hold, hc: me.hc, ho: me.ho }, ws);
         break;
       case 'act':
         this.broadcast({ t: 'act', id: me.id, a: message.a }, ws);

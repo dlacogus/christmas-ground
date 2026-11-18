@@ -14,8 +14,14 @@ export type WireState =
   | { kind: 'skating' }
   | { kind: 'sitting'; bench: number; slot: number };
 
-/** 털모자: 쓰고 있거나, 떨어져 있는 자리 */
-export type WireHat = 'on' | { x: number; y: number };
+/** 털모자: 쓰고 있거나, 눈사람에게 씌워 줬거나, 떨어져 있는 자리 */
+export type WireHat = 'on' | 'onSnowman' | { x: number; y: number };
+
+/** 눈사람이 쓴 털모자: 주인 닉네임과 모자 색 (목도리 색 번호) */
+export interface SnowmanHat {
+  name: string;
+  color: number;
+}
 
 /** 한 번짜리 동작 — 친구 화면에서도 같은 연출이 나온다 */
 export const ACTS = ['sneeze', 'snowman', 'fall', 'wave', 'jump', 'spin', 'spinEnd', 'highfive', 'cheer', 'decorate'] as const;
@@ -34,6 +40,9 @@ export interface WirePlayer {
   hat: WireHat;
   /** 손에 든 노점 소품 */
   hold?: PropId | null;
+  /** 쓰고 있는 털모자 색 (없으면 자기 목도리 색)과, 남의 모자를 쓰고 있으면 그 주인 닉네임 */
+  hc?: number | null;
+  ho?: string | null;
 }
 
 /** 만든 사람 (접속 id는 나가면 바뀌므로 닉네임과 목도리 색으로 적는다) */
@@ -71,6 +80,8 @@ export interface SnowmanData {
   makers?: Maker[];
   /** 달아준 노점 소품 (자리마다 하나, 5개까지) */
   props?: AttachedProp[];
+  /** 누가 씌워 준 털모자 */
+  hat?: SnowmanHat | null;
 }
 
 export type WireObject =
@@ -88,7 +99,7 @@ export type ClientMessage =
   /** 위치 (움직이는 동안 초당 최대 8번, 멈추면 한 번). 스케이트 중에는 속도도 */
   | { t: 'pos'; x: number; y: number; f: 0 | 1; m: 0 | 1; vx?: number; vy?: number }
   /** 상태가 바뀌었을 때만 */
-  | { t: 'state'; state: WireState; hat: WireHat; hold?: PropId | null }
+  | { t: 'state'; state: WireState; hat: WireHat; hold?: PropId | null; hc?: number | null; ho?: string | null }
   | { t: 'act'; a: Act }
   /** 회전목마 자리에 앉겠다 / 내렸다 */
   | { t: 'sit'; mount: number; slot: number }
@@ -115,7 +126,7 @@ export type ServerMessage =
   | { t: 'joined'; player: WirePlayer }
   | { t: 'left'; id: string }
   | { t: 'pos'; id: string; x: number; y: number; f: 0 | 1; m: 0 | 1; vx?: number; vy?: number }
-  | { t: 'state'; id: string; state: WireState; hat: WireHat; hold?: PropId | null }
+  | { t: 'state'; id: string; state: WireState; hat: WireHat; hold?: PropId | null; hc?: number | null; ho?: string | null }
   | { t: 'act'; id: string; a: Act }
   | { t: 'seats'; seats: WireSeats }
   /** 그 자리는 이미 누가 앉았다 */
@@ -165,7 +176,7 @@ export function validState(v: unknown): v is WireState {
 }
 
 export function validHat(v: unknown): v is WireHat {
-  if (v === 'on') return true;
+  if (v === 'on' || v === 'onSnowman') return true;
   if (typeof v !== 'object' || v === null) return false;
   const h = v as Record<string, unknown>;
   return inMap(h.x, h.y);
@@ -178,6 +189,13 @@ export function validMakers(v: unknown): v is Maker[] | undefined {
     v.length <= COPUSH.maxMakers &&
     v.every((m) => typeof m === 'object' && m !== null && cleanName((m as Maker).name) !== null && isInt((m as Maker).scarf, 0, NET.scarves - 1))
   );
+}
+
+export function validSnowmanHat(v: unknown): v is SnowmanHat | null | undefined {
+  if (v === undefined || v === null) return true;
+  if (typeof v !== 'object') return false;
+  const h = v as Record<string, unknown>;
+  return cleanName(h.name) !== null && isInt(h.color, 0, NET.scarves - 1);
 }
 
 export function validProp(v: unknown): v is PropId {
@@ -211,7 +229,8 @@ export function validSnowman(v: unknown): v is SnowmanData {
     isNum(s.seed) &&
     isId(s.owner) &&
     validMakers(s.makers) &&
-    validProps(s.props)
+    validProps(s.props) &&
+    validSnowmanHat(s.hat)
   );
 }
 
@@ -246,7 +265,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return out;
     }
     case 'state':
-      return validState(m.state) && validHat(m.hat) ? { t: 'state', state: m.state, hat: m.hat, hold: validProp(m.hold) ? m.hold : null } : null;
+      return validState(m.state) && validHat(m.hat) ? { t: 'state', state: m.state, hat: m.hat, hold: validProp(m.hold) ? m.hold : null, hc: isInt(m.hc, 0, NET.scarves - 1) ? m.hc : null, ho: cleanName(m.ho) } : null;
     case 'act':
       return (ACTS as readonly unknown[]).includes(m.a) ? { t: 'act', a: m.a as Act } : null;
     case 'sit':

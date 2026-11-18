@@ -5,7 +5,14 @@ import { drawPuffs } from './breath';
 import { getCharacterFrame, type Character } from './character';
 import { getFrame, type Facing, type PoseName } from './sprites';
 
-export function buildPalette(outfit: OutfitName): Record<string, string> {
+/** 털모자 색: 목도리 색 번호(0~5)와 같은 색, null이면 기본 빨강 */
+export function hatColors(hatColor: number | null): { H: string; h: string } {
+  if (hatColor === null) return { H: CHARACTER_BASE_PALETTE.H, h: CHARACTER_BASE_PALETTE.h };
+  const colors = OUTFITS[`scarf${hatColor}` as OutfitName] ?? OUTFITS.scarf1;
+  return { H: colors.scarf, h: colors.scarfShade };
+}
+
+export function buildPalette(outfit: OutfitName, hatColor: number | null = null): Record<string, string> {
   const colors = OUTFITS[outfit];
   return {
     ...CHARACTER_BASE_PALETTE,
@@ -13,6 +20,7 @@ export function buildPalette(outfit: OutfitName): Record<string, string> {
     o: colors.coatShade,
     M: colors.scarf,
     m: colors.scarfShade,
+    ...hatColors(hatColor),
   };
 }
 
@@ -26,13 +34,14 @@ export function getSpriteCanvas(
   outfit: OutfitName,
   bald = false,
   eyesClosed = false,
+  hatColor: number | null = null,
 ): HTMLCanvasElement {
-  const key = `${outfit}|${pose}|${index}|${facing}|${bald}|${eyesClosed}`;
+  const key = `${outfit}|${pose}|${index}|${facing}|${bald}|${eyesClosed}|${hatColor}`;
   const cached = cache.get(key);
   if (cached) return cached;
 
   const rows = getFrame(pose, index, facing, bald);
-  const palette = buildPalette(outfit);
+  const palette = buildPalette(outfit, hatColor);
   const canvas = document.createElement('canvas');
   canvas.width = CHARACTER.spriteWidth;
   canvas.height = CHARACTER.spriteHeight;
@@ -103,7 +112,7 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, ch: Character, offs
 
   const frame = options.pose ? { pose: options.pose, index: options.index ?? 0 } : getCharacterFrame(ch);
   // 모자가 벗겨져 있으면 대머리
-  const sprite = getSpriteCanvas(frame.pose, frame.index, options.facing ?? ch.facing, ch.outfit, ch.hat.get() !== 'on', ch.eyesClosed);
+  const sprite = getSpriteCanvas(frame.pose, frame.index, options.facing ?? ch.facing, ch.outfit, ch.hat.get() !== 'on', ch.eyesClosed, ch.hatColor);
   const lift = Math.round(options.lift ?? 0);
   drawLeaning(ctx, sprite, footX - CHARACTER.spriteWidth / 2, footY - CHARACTER.spriteHeight - lift, (options.lean ?? 0) + ch.lean);
 

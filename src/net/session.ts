@@ -3,7 +3,8 @@
 // 무료 한도를 아끼게 꼭 필요할 때만 보낸다 — 위치는 움직이는 동안 초당 최대 8번, 상태는 바뀔 때만.
 
 import type { Character } from '../character/character';
-import { COPUSH, NET, SNOWMAN } from '../constants';
+import { COPUSH, HAT_GIFT, NET, SNOWMAN } from '../constants';
+import { hatOnEntry } from '../features/hatGift';
 import type { MoveInput } from '../character/character';
 import type { SnowmanPlay } from '../features/snowmanPlay';
 import type { RoofSnow, SnowHits } from '../features/roofSnow';
@@ -33,6 +34,8 @@ export interface SessionDeps {
   trail?: (x: number, y: number, d: number) => void;
   /** 친구가 한 발 디뎠다: 발자국 */
   step?: (x: number, y: number, dx: number, dy: number) => void;
+  /** 다시 들어올 때 새 모자를 쓴다 */
+  newHat?: () => void;
   /** 친구가 눈사람에 소품을 달아줬다 */
   decorated?: (snowman: Snowman, by: string) => void;
   /** 눈덩이 조작 (같이 밀기: 이어받기·놓치기·하이파이브) */
@@ -98,7 +101,7 @@ export function createSession(deps: SessionDeps): Session {
     if (net.status !== 'online') return;
     thing.synced = true;
     if (thing.kind === 'ball') net.send({ t: 'put', id: thing.netId, kind: 'ball', data: ballData(thing) });
-    else net.send({ t: 'put', id: thing.netId, kind: 'snowman', data: { x: thing.x, y: thing.y, tiers: thing.tiers, seed: thing.seed, owner: thing.owner, makers: thing.makers, props: thing.props } });
+    else net.send({ t: 'put', id: thing.netId, kind: 'snowman', data: { x: thing.x, y: thing.y, tiers: thing.tiers, seed: thing.seed, owner: thing.owner, makers: thing.makers, props: thing.props, hat: thing.hat } });
   };
   let lastBallSent = 0;
 
@@ -136,10 +139,12 @@ export function createSession(deps: SessionDeps): Session {
     const state = wireState();
     const hat: WireHat = character.hat.get();
     const hold = character.holding.get();
-    const text = JSON.stringify([state, hat, hold]);
+    const hc = character.hatColor;
+    const ho = character.hatOwner;
+    const text = JSON.stringify([state, hat, hold, hc, ho]);
     if (!force && text === sentState) return;
     sentState = text;
-    net.send({ t: 'state', state, hat, hold });
+    net.send({ t: 'state', state, hat, hold, hc, ho });
     // 회전목마 자리는 서버에 물어본다
     if (state.kind === 'riding') {
       net.send({ t: 'sit', mount: state.mount, slot: state.slot });
@@ -291,6 +296,10 @@ export function createSession(deps: SessionDeps): Session {
     ui.notice(null);
     lastInput = seconds();
     character.outfit = outfitOf(profile.scarf);
+    // 들어올 때는 언제나 새 모자 (내 목도리 색). 눈사람에게 준 모자는 눈사람에 남아 있다
+    const fresh = hatOnEntry(profile.scarf);
+    if (character.hat.get() === 'onSnowman') deps.newHat?.();
+    if (character.hatOwner === null) character.hatColor = fresh.color;
     net.connect(profile, legacy);
   };
 
@@ -307,6 +316,8 @@ export function createSession(deps: SessionDeps): Session {
   character.state.onChange(() => sendState());
   character.hat.onChange(() => sendState());
   character.holding.onChange(() => sendState());
+  /** 모자 색·주인이 바뀌었으면 (남의 모자를 썼다) 알린다 */
+  let sentHat = '';
 
   // 10분 동안 아무 입력이 없으면 연결을 끊는다
   for (const type of ['keydown', 'pointerdown'] as const) window.addEventListener(type, () => (lastInput = seconds()));
@@ -413,6 +424,11 @@ export function createSession(deps: SessionDeps): Session {
       net.send({ t: 'act', a });
     },
     tick(dt, offsetX, labels = []) {
+      const hatKey = `${character.hatColor}|${character.hatOwner}`;
+      if (hatKey !== sentHat) {
+        sentHat = hatKey;
+        sendState();
+      }
       const now = seconds();
       net.tick(dt);
       remotes.update(dt, now);
@@ -426,6 +442,21 @@ export function createSession(deps: SessionDeps): Session {
         if (Math.hypot(b.x - character.x, b.y - character.y) > COPUSH.nameRadius + b.d / 2) continue;
         tags.push({ id: `ball-${b.netId}`, name: b.makers.map((m) => m.name).join(' · '), sx: b.x - offsetX, sy: b.y - b.d - 5 });
       }
+      // 내 모자를 쓴 사람이 가까이 있으면 모자 주인 머리 위에 '?!'
+      const myName = profile?.name;
+      const notice = (wearer: { x: number; y: number }, owner: string | null | undefined) => {
+        if (!owner) return;
+        if (owner === myName) {
+          if (Math.hypot(wearer.x - character.x, wearer.y - character.y) <= HAT_GIFT.noticeRadius) tags.push({ id: 'notice-me', name: '?!', sx: character.x - offsetX, sy: character.y - NET.nameAbove - 6 });
+          return;
+        }
+        for (const o of remotes.all()) {
+          if (o.info.name !== owner || Math.hypot(wearer.x - o.ch.x, wearer.y - o.ch.y) > HAT_GIFT.noticeRadius) continue;
+          tags.push({ id: `notice-${o.info.id}`, name: '?!', sx: o.ch.x - offsetX, sy: o.ch.y - NET.nameAbove - 8 });
+        }
+      };
+      if (character.hat.get() === 'on') notice(character, character.hatOwner);
+      for (const r of remotes.all()) if (r.info.hat === 'on') notice(r.ch, r.info.ho);
       ui.names(tags);
       if (net.status !== 'online') return;
       // 회전목마 각도와 지붕 눈이 떨어지는 때를 서버 시각에 맞춘다 (모두 같은 화면)

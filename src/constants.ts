@@ -565,6 +565,22 @@ export const COPUSH = {
   loudSqueak: 1.5,
 } as const;
 
+/** 내 털모자를 눈사람에 씌워주기 */
+export const HAT_GIFT = {
+  /** 두 손으로 씌워주는 시간, 그 가운데 눈사람 머리에 얹히는 순간 (진행 비율) */
+  giveSeconds: 0.8,
+  giveAt: 0.75,
+  /** 돌려받는(가져가는) 시간 */
+  takeSeconds: 0.5,
+  /** 씌워준 뒤 머리를 만져 보고 부르르 떠는 시간 */
+  shiverSeconds: 0.7,
+  /** 하트가 눈사람 쪽으로 떠가는 시간 */
+  heartSeconds: 1.1,
+  heartColor: '#ff6f8f',
+  /** 내 모자를 쓴 사람에게 이 거리 안으로 가면 내 머리 위에 '?!' */
+  noticeRadius: 44,
+} as const;
+
 /** 노점 소품 (노점에서 받아 눈사람에 달아준다) */
 export const PROP_IDS = ['carrot', 'coal', 'ribbon', 'earmuffs', 'glasses', 'holly', 'broom', 'santaHat'] as const;
 export type PropId = (typeof PROP_IDS)[number];

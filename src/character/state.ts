@@ -13,8 +13,8 @@ export type CharacterState =
   | { kind: 'skating'; vx: number; vy: number }
   | { kind: 'sitting'; bench: number; slot: number };
 
-/** 털모자: 쓰고 있거나('on'), 벗겨져 바닥 어딘가(발밑 기준 좌표)에 떨어져 있다. 벗겨져 있는 동안 캐릭터는 대머리다 */
-export type HatState = 'on' | { x: number; y: number };
+/** 털모자: 쓰고 있거나('on'), 벗겨져 바닥 어딘가(발밑 기준 좌표)에 떨어져 있거나, 눈사람에게 씌워 줬다('onSnowman'). 쓰고 있지 않은 동안 캐릭터는 대머리다 */
+export type HatState = 'on' | 'onSnowman' | { x: number; y: number };
 
 export interface HatStore {
   get(): HatState;
@@ -29,7 +29,7 @@ export function createHatState(): HatStore {
   return {
     get: () => current,
     set(next) {
-      const same = next === current || (next !== 'on' && current !== 'on' && next.x === current.x && next.y === current.y);
+      const same = next === current || (typeof next === 'object' && typeof current === 'object' && next.x === current.x && next.y === current.y);
       if (same) return;
       const previous = current;
       current = next;

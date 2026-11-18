@@ -373,7 +373,7 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
       if (skate.phase === 'fallen' && skate.timer > S.getUpSeconds) {
         // 벌러덩: 뒤로 젖혀지며 눕고, 머리 위로 별이 돈다
         const tip = Math.min(1, (S.fallSeconds - skate.timer) / S.fallTipSeconds);
-        drawLying(ctx, getSpriteCanvas('skateGlide', 0, skate.facing, character.outfit, character.hat.get() !== 'on'), Math.round(skate.x) - ox, Math.round(skate.y), skate.facing, tip, time);
+        drawLying(ctx, getSpriteCanvas('skateGlide', 0, skate.facing, character.outfit, character.hat.get() !== 'on', false, character.hatColor), Math.round(skate.x) - ox, Math.round(skate.y), skate.facing, tip, time);
       } else {
         const opts = skateDrawOptions(skate, time);
         drawCharacter(ctx, character, ox, swoopLeft > 0 ? { ...opts, pose: 'crouch', index: 0 } : opts);
@@ -400,7 +400,7 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
       // 누워 있을 때는 비친 모습을 그리지 않는다 (누운 몸은 얼음에 붙어 있다)
       if (phase === 'on' && skate && !(skate.phase === 'fallen' && skate.timer > S.getUpSeconds)) {
         const opts = skateDrawOptions(skate, time);
-        const sprite = getSpriteCanvas(opts.pose!, opts.index ?? 0, opts.facing ?? skate.facing, character.outfit, character.hat.get() !== 'on');
+        const sprite = getSpriteCanvas(opts.pose!, opts.index ?? 0, opts.facing ?? skate.facing, character.outfit, character.hat.get() !== 'on', false, character.hatColor);
         drawSpriteReflection(ctx, sprite, skate.x, skate.y + Math.round(opts.lift ?? 0), ox);
       }
     },

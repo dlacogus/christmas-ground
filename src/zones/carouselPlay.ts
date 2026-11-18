@@ -116,6 +116,7 @@ export function createCarouselPlay(character: Character, zone: CarouselZone): Ca
     update() {
       const time = zone.rideTime();
       me.bald = character.hat.get() !== 'on';
+      me.hatColor = character.hatColor;
       me.outfit = character.outfit;
       const events: PlayEvent[] = [];
       const result = updateBoarding(boarding, seats, time, me);

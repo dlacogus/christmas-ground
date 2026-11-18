@@ -207,6 +207,8 @@ export interface RoofSnow {
   startSlide(roof: number): void;
   /** ?debug=1: 눈을 가득 채워 바로 떨어뜨린다 */
   fillAndDrop(roof: number): void;
+  /** 바닥 눈 더미에서 (x, y) 둘레 가로 ±halfW의 눈을 걷는다 (눈덩이를 굴릴 때). 걷은 넓이(px²)를 돌려준다 */
+  takePile(x: number, y: number, halfW: number): number;
   /** 지금 가장 빠르게 미끄러지는 눈 판 (소리용). 없으면 null */
   sliding(): { speed: number; x: number; y: number } | null;
   /** 지붕 눈(오두막 바로 앞)과 떠 있는 것들(깊이 띠별)을 y 정렬해 그린다 */
@@ -717,6 +719,21 @@ export function createRoofSnow(seed = SCENERY_SEED + R.seedOffset): RoofSnow {
       const roof = roofs[index];
       roof.depth.set(roof.cap);
       roof.level = 1;
+    },
+    takePile(x, y, halfW) {
+      let taken = 0;
+      for (const roof of roofs) {
+        if (roof.meltRate <= 0) continue;
+        const base = roof.zone.y + Math.round((R.landMinDepth + R.landMaxDepth) / 2);
+        if (Math.abs(y - base) > R.landMaxDepth) continue;
+        const from = Math.max(0, Math.floor(x - halfW) - roof.pileLeft);
+        const to = Math.min(roof.pile.length - 1, Math.ceil(x + halfW) - roof.pileLeft);
+        for (let i = from; i <= to; i++) {
+          taken += roof.pile[i];
+          roof.pile[i] = 0;
+        }
+      }
+      return taken;
     },
     sliding() {
       let best: { speed: number; x: number; y: number } | null = null;

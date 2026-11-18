@@ -1,9 +1,12 @@
 // 바닥 (레이어 1): 눈 덮인 연석 + 어긋나게 깐 판석 (멀리 작게, 가까이 크게) + 구석의 눈
 
-import { GROUND, GROUND_COLORS as G, SCENERY_SEED, SCREEN_HEIGHT } from '../constants';
+import { GROUND, GROUND_COLORS as G, SCENERY_SEED, SCREEN_HEIGHT, SNOW_FIELD } from '../constants';
 import { createRng, pick, randInt, type Rng } from '../random';
 import { MAP_WIDTH, STREET_LINE_Y, WALK_AREA } from '../world';
-import { drawSlice, lazyBuffer } from './buffer';
+import { gateGeometry } from '../props/carouselEntrance';
+import { CAROUSEL_GATE } from '../world';
+import { createBuffer, drawSlice, lazyBuffer, type PixelBuffer } from './buffer';
+import { createSnowField, type SnowField } from './snowField';
 import { paintSnowWriting } from './snowWriting';
 
 export interface SlabRow {
@@ -121,12 +124,26 @@ function snowCover(): Uint8Array {
   return cachedCover;
 }
 
-/** 월드 좌표 (x, y) 바닥에 눈이 쌓여 있나 (벽돌이 드러난 곳과 바닥 밖은 false) */
+let field: SnowField | null = null;
+
+/** 바닥 눈의 양 (2px 칸마다). 눈덩이를 굴리면 줄고 다시 찬다. 회전목마 입구 카펫 위는 눈이 없는 것으로 친다 */
+export function snowField(): SnowField {
+  if (!field) {
+    const gate = gateGeometry();
+    const carpet = {
+      x: gate.cx - CAROUSEL_GATE.carpetHalfWidth,
+      y: gate.rimBottom,
+      w: CAROUSEL_GATE.carpetHalfWidth * 2,
+      h: gate.carpetEndY - gate.rimBottom + 1,
+    };
+    field = createSnowField(snowCover(), MAP_WIDTH, WALK_AREA.h, { x: 0, y: WALK_AREA.y }, [carpet]);
+  }
+  return field;
+}
+
+/** 월드 좌표 (x, y)가 눈 덮인 바닥인가 (눈덩이가 지나가 눌린 길도 눈이다. 벽돌이 드러난 곳, 카펫, 바닥 밖은 false) */
 export function isSnowAt(x: number, y: number): boolean {
-  const px = Math.floor(x);
-  const py = Math.floor(y) - WALK_AREA.y;
-  if (px < 0 || px >= MAP_WIDTH || py < 0 || py >= WALK_AREA.h) return false;
-  return snowCover()[py * MAP_WIDTH + px] > 0;
+  return snowField().covered(x, y);
 }
 
 /** 눈 지도를 판석 위에 찍는다. 눈이 끝나는 아래 가장자리는 그늘 한 줄 */
@@ -212,12 +229,53 @@ function paintGround(ctx: CanvasRenderingContext2D, width: number, slabs: readon
 export function createGround(rng: Rng, width: number) {
   const slabs = generateSlabs(rng, width);
   const drifts = generateDrifts(rng, width);
-  const getBuffer = lazyBuffer(width, SCREEN_HEIGHT - STREET_LINE_Y, (ctx) => paintGround(ctx, width, slabs, drifts));
+  const height = SCREEN_HEIGHT - STREET_LINE_Y;
+  // 눈 덮인 바닥과, 눈이 조금 눌려 낮아진 바닥을 한 번씩 그려 둔다. 화면에는 '지금 바닥'을 찍는다:
+  // 눈덩이가 지나간 칸은 눌린 그림에서, 다시 쌓인 칸은 눈 그림에서 그 칸만 옮겨 찍는다 (돌바닥은 드러나지 않는다)
+  const getSnowy = lazyBuffer(width, height, (ctx) => paintGround(ctx, width, slabs, drifts));
+  const getPacked = lazyBuffer(width, height, (ctx) => {
+    ctx.drawImage(getSnowy().canvas, 0, 0);
+    // 눌린 눈: 푸른 그늘을 엷게 얹고, 덜 눌린 밝은 알갱이를 드문드문 남긴다
+    const top = WALK_AREA.y - STREET_LINE_Y;
+    ctx.globalAlpha = SNOW_FIELD.packedAlpha;
+    ctx.fillStyle = SNOW_FIELD.packedColor;
+    ctx.fillRect(0, top, width, WALK_AREA.h);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = SNOW_FIELD.packedGrain;
+    for (let y = 0; y < WALK_AREA.h; y++) {
+      for (let x = (y * 7) % 5; x < width; x += 5) {
+        const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+        if (n - Math.floor(n) < SNOW_FIELD.packedGrainChance * 5 && isSnowAt(x, WALK_AREA.y + y)) ctx.fillRect(x, top + y, 1, 1);
+      }
+    }
+  });
+  let live: PixelBuffer | null = null;
+  const cell = SNOW_FIELD.cell;
+  const walkTop = WALK_AREA.y - STREET_LINE_Y;
+
+  const repaint = (cx: number, cy: number, snowy: boolean) => {
+    if (!live) return;
+    const x = cx * cell;
+    const y = walkTop + cy * cell;
+    live.ctx.drawImage((snowy ? getSnowy() : getPacked()).canvas, x, y, cell, cell, x, y, cell, cell);
+  };
+
+  const getLive = (): PixelBuffer => {
+    if (!live) {
+      live = createBuffer(width, height);
+      live.ctx.drawImage(getSnowy().canvas, 0, 0);
+      const f = snowField();
+      f.forEachBare((cx, cy) => repaint(cx, cy, false));
+      f.onCell = repaint;
+    }
+    return live;
+  };
+
   return {
     slabs,
     drifts,
     draw(ctx: CanvasRenderingContext2D, offsetX: number) {
-      drawSlice(ctx, getBuffer().canvas, offsetX, STREET_LINE_Y);
+      drawSlice(ctx, getLive().canvas, offsetX, STREET_LINE_Y);
     },
   };
 }

@@ -65,15 +65,28 @@ export function footRect(x: number, y: number): Rect {
   };
 }
 
-/** 이 자리에 설 수 있나: 발 상자가 바닥 띠 안에 있고 장애물과 겹치지 않아야 한다 */
-export function canStandAt(x: number, y: number): boolean {
+/** 그때그때 생기는 장애물 (놓아둔 눈덩이, 눈사람). 매 프레임 바꿔 끼운다 */
+let dynamicObstacles: readonly Rect[] = [];
+
+export function setDynamicObstacles(rects: readonly Rect[]): void {
+  dynamicObstacles = rects;
+}
+
+/**
+ * 이 자리에 설 수 있나: 발 상자가 바닥 띠 안에 있고 장애물과 겹치지 않아야 한다.
+ * from = 지금 서 있는 자리. 그때그때 생기는 장애물은, 이미 겹쳐 서 있던 것이면 막지 않는다 (발밑에 눈사람이 생겨도 빠져나올 수 있게).
+ */
+export function canStandAt(x: number, y: number, from?: { x: number; y: number }): boolean {
   const foot = footRect(x, y);
   const insideWalk =
     foot.x >= WALK_AREA.x &&
     foot.x + foot.w <= WALK_AREA.x + WALK_AREA.w &&
     foot.y >= WALK_AREA.y &&
     foot.y + foot.h <= WALK_AREA.y + WALK_AREA.h;
-  return insideWalk && !OBSTACLES.some((o) => rectsOverlap(foot, o));
+  if (!insideWalk || OBSTACLES.some((o) => rectsOverlap(foot, o))) return false;
+  if (dynamicObstacles.length === 0) return true;
+  const here = from ? footRect(from.x, from.y) : null;
+  return !dynamicObstacles.some((o) => rectsOverlap(foot, o) && !(here && rectsOverlap(here, o)));
 }
 
 /** 탭한 곳을 목적지로 정한다 (바닥 띠 안으로 맞춤) */
@@ -96,7 +109,7 @@ function moveAxis(ch: Character, axis: 'x' | 'y', amount: number): void {
   for (let i = 0; i < steps; i++) {
     const nx = axis === 'x' ? ch.x + step : ch.x;
     const ny = axis === 'y' ? ch.y + step : ch.y;
-    if (!canStandAt(nx, ny)) return;
+    if (!canStandAt(nx, ny, ch)) return;
     ch.x = nx;
     ch.y = ny;
   }

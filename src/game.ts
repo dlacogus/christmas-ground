@@ -1,14 +1,14 @@
 import { createCamera, layerOffsetX, snapCamera, updateCamera, type Camera } from './camera';
-import { createCharacter, setWalkTarget } from './character/character';
+import { createCharacter, setDynamicObstacles, setWalkTarget } from './character/character';
 import { drawCharacter } from './character/render';
 import type { CharacterState } from './character/state';
-import { BENCH_SIT, CAROUSEL, CHARACTER, COLD, FOOTPRINTS, HAT, HINT, LAYER_FACTORS, ROOF_SNOW, SANTA, SKATE, SNEEZE, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
+import { BENCH_SIT, CAROUSEL, CHARACTER, COLD, FOOTPRINTS, HAT, HINT, LAYER_FACTORS, ROOF_SNOW, SANTA, SKATE, SNEEZE, SNOWBALL, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
 import { createFpsMeter, drawDebugOverlay } from './debug';
 import { createInput } from './input';
 import { createLayers, drawLayers, updateLayers } from './layers';
 import { warmBuffers } from './scenery/buffer';
 import { createFootprints } from './scenery/footprints';
-import { isSnowAt } from './scenery/ground';
+import { isSnowAt, snowField } from './scenery/ground';
 import { createSanta } from './scenery/santa';
 import { fitCanvasToWindow, frameDt } from './screen';
 import { createAmbience } from './audio/ambience';
@@ -18,6 +18,10 @@ import { createRinkSounds } from './audio/rinkSounds';
 import { createSoundSystem } from './audio/soundSystem';
 import { createRoofSnowSounds } from './audio/roofSnowSounds';
 import { createSneezeSound } from './audio/sneezeSound';
+import { createSnowmanSounds } from './audio/snowmanSounds';
+import { createSnowWorld, loadSnowmen } from './features/snowman';
+import { drawableFor } from './features/snowmanDraw';
+import { createSnowmanPlay } from './features/snowmanPlay';
 import { createCold, isWarmAt } from './character/cold';
 import { createBaldHead, createHat, createSneeze, drawRedNose } from './features/sneeze';
 import { actionsFor, nearestInteraction, withoutSpace } from './input/interact';
@@ -71,7 +75,9 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   const skateSounds = createSkateSounds();
   const roofSnowSounds = createRoofSnowSounds();
   const sneezeSound = createSneezeSound();
+  const snowmanSounds = createSnowmanSounds();
   const sound = createSoundSystem([
+    snowmanSounds,
     sneezeSound,
     roofSnowSounds,
     createAmbience(),
@@ -148,7 +154,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   });
   for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, () => sound.unlock());
   window.addEventListener('keydown', (e) => {
-    if (e.code === SOUND.toggleKey && !e.repeat) sound.toggleMuted();
+    // (?debug=1에서는 M이 눈덩이 놓기라 음소거는 스피커 버튼으로만)
+    if (e.code === SOUND.toggleKey && !e.repeat && !debug) sound.toggleMuted();
   });
 
   // 지붕에 쌓인 눈: 상태(쌓인 양·떨어짐 이벤트) → 화면(지붕 눈·덩어리·바닥 더미), 맞은 캐릭터(눈 모자·눈사람), 소리
@@ -171,7 +178,24 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   let swallowSpace = false;
   let wasFrozen = false;
   /** 이번 프레임에 고른 상호작용 (힌트도 이것만 띄운다) */
-  let choice: 'hat' | 'carousel' | 'skate' | 'bench' | 'exit' | null = null;
+  let choice: 'hat' | 'carousel' | 'skate' | 'bench' | 'exit' | 'ball' | null = null;
+
+  // 눈사람 만들기: 눈덩이·눈사람 목록(내 눈사람은 저장해 둔 것을 불러온다)과 굴리기 조작
+  const snowWorld = createSnowWorld();
+  snowWorld.load(loadSnowmen());
+  const snowPlay = createSnowmanPlay(character, snowWorld, {
+    field: snowField(),
+    takePile: (x, y, halfW) => roofSnow.takePile(x, y, halfW),
+    sounds: snowmanSounds,
+    owner: MY_ID,
+  });
+  /** 스페이스 한 번으로 굴리기 시작해 굴리는 중인가 (다시 누르면 놓는다) */
+  let keyRolling = false;
+  /** (모바일) 손가락을 이어서 누르고 있던 시간, 가만히 서 있던 시간 */
+  let holdTime = 0;
+  let stillTime = 0;
+  /** 이어 굴릴 수 있는 눈덩이 (이번 프레임) */
+  let nearBall: ReturnType<typeof snowPlay.nearestBall> = null;
   const startSneeze = () => {
     if (sneeze.start()) sneezeSound.windup();
   };
@@ -198,7 +222,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
         if (skate.active) skate.drawCharacter(c, cam);
         else if (kind === 'sitting') bench.draw(c, cam);
         else if (snowHits.snowman) snowHits.drawSnowman(c, footX, footY);
-        else drawCharacter(c, character, ox, bending ? { pose: 'crouch', index: 0 } : { lean: snowHits.shakeLean() });
+        else drawCharacter(c, character, ox, bending ? { pose: 'crouch', index: 0 } : (snowPlay.pose() ?? { lean: snowHits.shakeLean() }));
         if (!snowHits.snowman && !bending) {
           const lift = kind === 'sitting' ? BENCH_SIT.lift : 0;
           if (!hat.on) baldHead.draw(c, footX, footY, character.facing, lift);
@@ -224,6 +248,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       if (e.code === SANTA.debugKey) santa.fly();
       // N: 즉시 재채기
       if (e.code === SNEEZE.debugKey) startSneeze();
+      // M: 발 앞에 눈덩이 놓기 (누를 때마다 작음 → 중간 → 큼)
+      if (e.code === SNOWBALL.debugKey && !e.repeat) snowPlay.debugDrop();
       // R: 캐릭터에게서 가장 가까운 지붕 눈을 가득 채워 바로 떨어뜨린다
       if (e.code === ROOF_SNOW.debugDropKey) {
         let nearest = 0;
@@ -236,9 +262,12 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       if (e.code === ROOF_SNOW.debugSlowKey) slowMotion = !slowMotion;
     });
   }
+  // 발밑 y로 앞뒤 정렬되는 것들. 눈덩이·눈사람은 매 프레임 뒤에 덧붙인다
+  const actors: DepthDrawable[] = [characterDrawable, hat, ...roofSnow.drawables, ...snowPlay.drawables];
+  const fixedActors = actors.length;
   const layers = createLayers(
     zones,
-    [characterDrawable, hat, ...roofSnow.drawables],
+    actors,
     SCENERY_SEED,
     [footprints, { draw: (c, ox) => roofSnow.drawFloor(c, ox) }],
     [santa],
@@ -291,6 +320,28 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     // 재채기하는 동안('흐… 흐… 에취')은 눈을 감는다
     character.eyesClosed = sneeze.active;
 
+    // 눈밭: 걷힌 눈이 다시 쌓이고, 놓아둔 눈덩이·눈사람은 걸어서 못 지나간다
+    snowField().update(dt);
+    setDynamicObstacles(snowWorld.obstacles(snowPlay.rolling));
+    // 굴리기: 스페이스를 한 번 누르면 시작해 계속 굴리고, 다시 누르면 놓는다 (닿아 있으면 올린다).
+    // 모바일은 바닥을 길게 눌러 시작하고, 누른 채 끌면 그쪽으로 굴리고, 떼면 놓는다
+    const press = input.pointer();
+    const pressing = press !== null && press.sy >= WALK_AREA.y;
+    const spacePressed = actions.tap || actions.hold;
+    if (snowPlay.phase !== 'gather' && snowPlay.phase !== 'roll') keyRolling = false;
+    if (keyRolling && snowPlay.rolling && spacePressed) keyRolling = false;
+    const holding = keyRolling || pressing;
+    holdTime = pressing ? holdTime + dt : 0;
+    let rollDir = dir;
+    if (dir.x === 0 && dir.y === 0 && pressing && snowPlay.rolling) {
+      const dx = press.sx + layerOffsetX(camera, LAYER_FACTORS.main) - character.x;
+      const dy = press.sy - character.y;
+      const d = Math.hypot(dx, dy);
+      if (d > SKATE.pointerDeadZone) rollDir = { x: dx / d, y: dy / d };
+    }
+    const snowBusy = snowPlay.busy;
+    snowPlay.update(dt, rollDir, holding);
+
     choice = null;
     const hatLying = !hat.on && !hat.moving;
     if (snowHits.frozen) {
@@ -300,6 +351,9 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       character.target = null;
     } else if (pickLeft > 0) {
       character.moving = false;
+      character.target = null;
+    } else if (snowBusy) {
+      // 눈덩이를 굴리거나 올리는 중: 캐릭터는 snowPlay가 움직인다
       character.target = null;
     } else if (skate.active) {
       const p = input.pointer();
@@ -334,19 +388,29 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     } else {
       // 걸어 다니는 중: 스페이스는 가장 가까운 상호작용 하나에만 간다
       const seat = seatNear(character.x, character.y);
+      nearBall = snowPlay.nearestBall();
       choice = nearestInteraction([
         { id: 'hat', distance: hatLying ? distanceTo(hat) : Infinity, radius: HAT.pickRadius },
         { id: 'carousel', distance: distanceTo(carouselEntry), radius: CAROUSEL.entryRadius },
         { id: 'skate', distance: distanceTo(rinkGate()), radius: SKATE.gateRadius },
         { id: 'bench', distance: seat ? Math.hypot(character.x - seat.frontX, character.y - seat.frontY) : Infinity, radius: BENCH_SIT.sitRadius },
+        { id: 'ball', distance: nearBall ? nearBall.distance : Infinity, radius: SNOWBALL.continueRadius },
       ]);
+      // 스페이스(모바일은 길게 누르기): 눈덩이 곁이면 이어 굴리고, 더 가까운 상호작용이 없는 눈밭이면 새로 뭉친다
+      let startedRolling = false;
+      const longPress = holdTime >= SNOWBALL.holdSeconds;
+      if (spacePressed || longPress) {
+        if (choice === 'ball' && nearBall) startedRolling = snowPlay.continueWith(nearBall.ball);
+        else if (choice === null) startedRolling = snowPlay.start();
+        if (startedRolling && spacePressed) keyRolling = true;
+      }
       if (dir.x !== 0 || dir.y !== 0) pickOnArrive = false;
       if (choice === 'hat' && (actions.tap || actions.hold)) startPickup();
       else if (pickOnArrive && !character.target) {
         pickOnArrive = false;
         if (hat.canPickUp(character.x, character.y)) startPickup();
       }
-      if (pickLeft <= 0 && !(skate.handleWalking(actionsFor('skate', choice, actions), dir) || bench.handleWalking(actionsFor('bench', choice, actions), dir))) {
+      if (pickLeft <= 0 && !startedRolling && !(skate.handleWalking(actionsFor('skate', choice, actions), dir) || bench.handleWalking(actionsFor('bench', choice, actions), dir))) {
         play.handleInput(dt, dir, actionsFor('carousel', choice, actions));
       }
     }
@@ -368,7 +432,13 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     // 소리: 미끄러지는 동안 스르르, 덩어리가 닿을 때마다 퍽
     roofSnowSounds.setSlide(roofSnow.sliding());
     for (const ev of roofEvents) {
-      if (ev.type === 'land') roofSnowSounds.thud(ev.x, ev.y, ev.size);
+      if (ev.type === 'land') {
+        roofSnowSounds.thud(ev.x, ev.y, ev.size);
+        // 지붕 눈이 눈사람 위에 떨어지면 머리에 눈이 얹힌다
+        for (const s of snowWorld.snowmen) {
+          if (Math.abs(s.x - ev.x) <= s.tiers[0] / 2 + 2 && Math.abs(s.y - ev.y) <= 10) s.capped = true;
+        }
+      }
       if (ev.type === 'hat' || ev.type === 'snowman') roofSnowSounds.thud(ev.x, ev.y, ev.type === 'hat' ? 4 : 8);
       if (ev.type === 'drip') roofSnowSounds.rustle(ev.x, ev.y - CHARACTER.spriteHeight);
     }
@@ -405,6 +475,10 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     lastX = character.x;
     lastY = character.y;
 
+    actors.length = fixedActors;
+    for (const b of snowWorld.balls) actors.push(drawableFor(b));
+    for (const s of snowWorld.snowmen) actors.push(drawableFor(s));
+    stillTime = walking && !character.moving && !snowPlay.busy ? stillTime + dt : 0;
     drawLayers(ctx, camera, layers);
     drawSoundButton(ctx, sound.started && !sound.muted);
     if (debug) {
@@ -414,11 +488,18 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
 
     // 힌트도 고른 상호작용 하나만
     let h: PlayHint | null;
-    if (choice === 'hat') h = { text: touch ? '탭해서 줍기' : 'Space 줍기', anchor: 'point', at: { x: hat.x, y: hat.y - HAT.hintAbove } };
+    if (snowPlay.busy) h = snowPlay.hint(touch);
+    else if (choice === 'ball' && nearBall) {
+      h = { text: touch ? '길게 눌러 이어 굴리기' : 'Space 이어 굴리기', anchor: 'point', at: { x: nearBall.ball.x, y: nearBall.ball.y - nearBall.ball.d - 8 } };
+    } else if (choice === 'hat') h = { text: touch ? '탭해서 줍기' : 'Space 줍기', anchor: 'point', at: { x: hat.x, y: hat.y - HAT.hintAbove } };
     else if (choice === 'skate' || choice === 'exit') h = skate.hint(touch);
     else if (choice === 'bench') h = bench.hint(touch);
     else if (choice === 'carousel') h = play.hint(touch);
     else h = skate.hint(touch) ?? bench.hint(touch) ?? play.hint(touch);
+    // 더 가까운 상호작용이 없는 눈밭에 가만히 서 있으면 눈 굴리기를 알려 준다
+    if (!h && choice === null && stillTime >= SNOWBALL.hintAfter && snowPlay.canStartHere()) {
+      h = { text: touch ? '길게 눌러 눈 굴리기' : 'Space 눈 굴리기', anchor: 'head' };
+    }
     if (!h || pickLeft > 0) hint.show(null);
     else if (h.anchor === 'point' && h.at) hint.show({ text: h.text, sub: h.sub, sx: h.at.x - layerOffsetX(camera, LAYER_FACTORS.main), sy: h.at.y });
     else if (h.anchor === 'bottom') hint.show({ text: h.text, sub: h.sub, sx: SCREEN_WIDTH / 2, sy: HINT.bottomY });

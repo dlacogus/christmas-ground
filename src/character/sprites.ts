@@ -15,6 +15,8 @@ export type PoseName =
   | 'glide'
   | 'skateGlide'
   | 'crouch'
+  | 'push'
+  | 'cheer'
   | 'ride'
   | 'rideWave'
   | 'sit'
@@ -204,6 +206,27 @@ function armsOut(frame: readonly string[], bodyShift: number): string[] {
   return grid.map((row) => row.join(''));
 }
 
+/** 두 팔을 앞으로 뻗어 민다 (눈덩이 굴리기): 늘어뜨린 손을 지우고 몸 앞에 팔과 장갑을 둔다 */
+function armsForward(frame: readonly string[], bodyShift: number): string[] {
+  const grid = frame.map((row) => [...row]);
+  for (const r of HANGING_HAND_ROWS) if (grid[r + bodyShift]?.[HANGING_HAND_COLUMN] === 'M') grid[r + bodyShift][HANGING_HAND_COLUMN] = 'O';
+  const arm = 19 + bodyShift;
+  grid[arm][14] = 'O';
+  grid[arm][15] = 'o';
+  grid[arm + 1][14] = 'M';
+  grid[arm + 1][15] = 'M';
+  return grid.map((row) => row.join(''));
+}
+
+/** 뿌듯하게 두 손을 번쩍 든다 */
+function armsUp(frame: readonly string[]): string[] {
+  const grid = withWave(frame, WAVE_ARMS[1]).map((row) => [...row]);
+  // 반대쪽 팔도 (좌우를 뒤집어) 올리고, 늘어뜨린 손은 지운다
+  for (const r of HANGING_HAND_ROWS) if (grid[r][1] === 'M') grid[r][1] = TRANSPARENT;
+  stamp(grid, WAVE_ARMS[1].map((row) => [...row].reverse().join('')), WAVE_ARM_TOP_ROW);
+  return grid.map((row) => row.join(''));
+}
+
 /** 앉은 자세에 손 흔드는 팔을 얹는다 */
 function withWave(frame: readonly string[], arm: readonly string[]): string[] {
   const grid = frame.map((row) => [...row]);
@@ -264,6 +287,15 @@ function buildPoses(upper: readonly string[]): Record<PoseName, string[][]> {
   skateGlide: [armsOut(compose(LEGS_GLIDE_TUCK, 1, 0), 1)],
   // 쪼그려 앉기 2프레임 (신는 동안 머리가 까딱)
   crouch: [compose(LEGS_CROUCH, CROUCH_DROP, 0), compose(LEGS_CROUCH, CROUCH_DROP, 1)],
+  // 눈덩이 밀기 4프레임 (걷는 다리 + 앞으로 뻗은 두 팔)
+  push: [
+    armsForward(compose(LEGS_CONTACT, 1, 0), 1),
+    armsForward(compose(LEGS_PASS, 0, 0), 0),
+    armsForward(compose(swapLegs(LEGS_CONTACT), 1, 0), 1),
+    armsForward(compose(swapLegs(LEGS_PASS), 0, 0), 0),
+  ],
+  // 뿌듯하게 두 손 들기
+  cheer: [armsUp(compose(LEGS_STAND, 0, 0))],
   // 회전목마: 말 위에 앉기 / 마차 의자에 앉기, 각각 손 흔드는 두 장
   ride: [compose(LEGS_RIDE, 0, 0)],
   rideWave: WAVE_ARMS.map((arm) => withWave(compose(LEGS_RIDE, 0, 0), arm)),

@@ -469,6 +469,160 @@ export const ROOF_SNOW_SOUND = {
   rustleSeconds: 0.3,
 } as const;
 
+/** 바닥에 깔린 눈의 양 (굴리면 줄고, 내리는 눈으로 다시 찬다) */
+export const SNOW_FIELD = {
+  /** 눈 양을 붙이는 칸 크기 (px) */
+  cell: 2,
+  /** 걷힌 눈이 다시 가득 차기까지 (초) */
+  refillSeconds: 120,
+  /** 칸마다 이 사이의 양을 넘으면 다시 눈으로 보인다 (칸마다 달라 길이 얼룩덜룩 메워진다) */
+  showMin: 0.35,
+  showMax: 0.95,
+  /** 눈덩이가 지나간 자리: 바닥이 드러나지 않고 눈이 조금 눌려 낮아진 길로 보인다 (푸른 그늘을 이만큼 얹고, 밝은 알갱이를 조금 남긴다) */
+  packedColor: '#8d9ec8',
+  packedAlpha: 0.3,
+  packedGrain: '#e6ecf8',
+  packedGrainChance: 0.1,
+  /** 길 가장자리는 이 안쪽부터 한 칸 걸러 한 칸만 눌려 경계가 부드럽게 흩어진다 (타원 반지름² 비율) */
+  softEdgeFrom: 0.6,
+} as const;
+
+/** 눈덩이 굴리기 */
+export const SNOWBALL = {
+  /** 처음 뭉친 지름, 최대 지름 (캐릭터 키의 두 배) */
+  startSize: 4,
+  maxSize: 64,
+  /** 크기 구간: 이 지름까지 작음 / 중간, 그보다 크면 큼 */
+  smallMax: 12,
+  mediumMax: 32,
+  /** 굴리는 속도 (px/초): 작음, 중간, 큼은 중간 속도에서 최대 크기일 때 largeMinSpeed까지 느려진다 */
+  smallSpeed: 50,
+  mediumSpeed: 30,
+  largeMinSpeed: 15,
+  /** 커지기: 지름² += growth × (걷은 눈 넓이 px²) / 지름 — 처음엔 빨리, 클수록 천천히 */
+  growth: 1,
+  /** 지붕에서 떨어진 눈 더미 위에서는 이 배수로 커진다 */
+  pileBoost: 2,
+  /** 눈을 걷는 자국: 폭 = 지름 × footprintWidth, 앞뒤 = 지름 × clearDepth (비스듬히 내려다봐서 앞뒤가 납작하다, 최소 minDepth) */
+  footprintWidth: 0.75,
+  clearDepth: 0.5,
+  /** 눈덩이가 바닥을 차지하는 앞뒤 깊이 = 지름 × footprintDepth (최소 minDepth) */
+  footprintDepth: 0.3,
+  minDepth: 3,
+  /** (모바일) 바닥을 이만큼 길게 누르면 눈을 뭉치기 시작, 주저앉아 뭉치는 시간 */
+  holdSeconds: 0.3,
+  gatherSeconds: 0.3,
+  /** 눈덩이가 발 앞에 붙는 거리 (지름의 절반에 더하는 px), 위아래로 밀 때 깊이 쪽 거리 */
+  gap: 4,
+  depthGap: 3,
+  /** 뒤돌 때 눈덩이가 반대편으로 옮겨 가는 빠르기 (px/초) */
+  swingSpeed: 90,
+  /** 놓아둔 눈덩이 곁에서 이어 굴릴 수 있는 거리 (눈덩이 가장자리에서) */
+  continueRadius: 12,
+  /** 이 지름보다 크면 놓아둔 눈덩이가 장애물이 된다 */
+  obstacleSize: 12,
+  /** 놓아두기만 한 눈덩이가 녹기 시작하는 시간과 녹는 데 걸리는 시간 */
+  idleSeconds: 300,
+  meltSeconds: 6,
+  /** 표면 얼룩 개수 = base + 지름 / per, 돌멩이·나뭇잎이 섞일 확률 */
+  speckBase: 3,
+  speckPer: 6,
+  debrisChance: 0.2,
+  /** 큰 눈덩이를 밀 때 땀방울 간격 */
+  sweatEvery: 1.6,
+  /** 몸을 숙이는 px: 중간, 큼 */
+  leanMedium: 2,
+  leanLarge: 3,
+  /** 제자리에 가만히 서 있으면 이 초 뒤 '눈 굴리기' 힌트 */
+  hintAfter: 1.2,
+  /** ?debug=1: 발 앞에 눈덩이 놓기 (누를 때마다 작음 → 중간 → 큼) */
+  debugKey: 'KeyM',
+  debugSizes: [8, 24, 48],
+} as const;
+
+/** 눈사람 */
+export const SNOWMAN = {
+  /** 최대 단 수, 위 단이 아래 단에 파묻히는 비율 (위 단 지름 대비) */
+  maxTiers: 3,
+  sink: 0.15,
+  /** 화면 위에 남기는 여유 (전체 높이가 화면을 넘으면 올리지 않는다) */
+  topMargin: 4,
+  /** 종류: 전체 높이가 이보다 작으면 미니, giantFrom을 넘으면 엄청 큰 눈사람 */
+  miniBelow: 24,
+  giantFrom: 64,
+  /** 두 눈덩이 크기 차이가 이 이하면 위 눈덩이가 흔들흔들하다 자리를 잡는다 */
+  wobbleDiff: 2,
+  wobbleSeconds: 1.8,
+  wobblePx: 2,
+  /** 올리는 시간: 작음(한 손으로 톡), 중간(안아서), 큼(옆면을 타고 굴려 올림 — 중간에 한 번 밀려 내려온다) */
+  liftSmall: 0.4,
+  liftMedium: 0.8,
+  liftLarge: 2,
+  slipAt: 0.5,
+  slipBack: 0.18,
+  /** 올린 뒤: 헉헉 주저앉는 시간(큼), 뿌듯하게 두 손 드는 시간, 미니를 쪼그려 들여다보는 시간, 고개 갸우뚱 */
+  pantSeconds: 1.2,
+  cheerSeconds: 0.9,
+  peekSeconds: 1.1,
+  shrugSeconds: 0.7,
+  /** 광장 전체 눈사람 수 상한. 넘으면 가장 오래된 것이 meltSeconds에 걸쳐 녹는다 */
+  maxCount: 12,
+  meltSeconds: 10,
+  /** 완성 반짝이 개수: 미니, 중간, 엄청 큼 */
+  sparkles: { mini: 6, medium: 14, giant: 30 },
+  sparkleLife: 0.9,
+  /** 엄청 큰 눈사람: 모자·목도리를 할 확률 (다른 것은 accessoryChance) */
+  giantAccessoryChance: 0.5,
+  accessoryChance: 0.2,
+  /** 새가 앉는 간격 범위와 앉아 있는 시간 (엄청 큰 눈사람) */
+  birdMinGap: 20,
+  birdMaxGap: 50,
+  birdStay: 5,
+  storageKey: 'christmas-square.snowmen',
+} as const;
+
+export const SNOWMAN_COLORS = {
+  top: '#e9eef8',
+  shade: '#b9c6e0',
+  shadeDeep: '#98a8c9',
+  edge: '#8796bb',
+  speck: '#a9bfe0',
+  pebble: '#6b6d86',
+  leaf: '#6f5a3a',
+  shadow: '#101424',
+  coal: '#22202a',
+  carrot: '#f08a2e',
+  carrotDark: '#c96a1c',
+  twig: '#5a3d26',
+  scarves: ['#c8343e', '#2f7a52', '#3d5a8a'],
+  bucket: '#7d8596',
+  bucketDark: '#5a6172',
+  bird: '#3b3f52',
+  birdBelly: '#c9a56a',
+  sparkle: '#fff2b0',
+  sweat: '#9ad4ff',
+} as const;
+
+/** 눈사람 소리 */
+export const SNOWMAN_SOUND = {
+  noiseSeconds: 0.6,
+  /** 한 바퀴 굴러갈 때마다 '뽀득': 크면 낮고 둔하게 */
+  squeakVolume: 0.3,
+  squeakHz: 2600,
+  squeakHzPerSize: 30,
+  squeakSeconds: 0.09,
+  /** '영차' */
+  gruntVolume: 0.3,
+  gruntHz: 190,
+  /** 완성 종소리 화음 (Hz): 미니는 작고 높은 '딩', 엄청 큰 건 길고 낮은 화음 */
+  chimeVolume: 0.3,
+  chimes: {
+    mini: { notes: [1568], seconds: 0.5 },
+    medium: { notes: [784, 988, 1175], seconds: 1.1 },
+    giant: { notes: [392, 494, 587, 784], seconds: 2.2 },
+  },
+} as const;
+
 /** 추위 (0~100). 화면에 숫자는 보여주지 않는다 */
 export const COLD = {
   max: 100,
@@ -1863,7 +2017,7 @@ export const RINK_SOUND = {
 /** ?sprites=1 확인 화면 */
 export const SPRITE_SHEET = {
   scale: 4,
-  columns: 17,
+  columns: 22,
   padding: 8,
   labelHeight: 14,
   titleHeight: 20,

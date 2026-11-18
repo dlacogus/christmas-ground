@@ -6,7 +6,11 @@ export const SCREEN_WIDTH = 480;
 export const SCREEN_HEIGHT = 270;
 
 /** 최소 확대 배율 */
-export const MIN_SCALE = 1;
+/**
+ * 화면 맞춤: 창에 들어가는 가장 큰 크기로 확대한다 (가로세로 비율 유지).
+ * 다만 게임 픽셀 하나가 모니터 픽셀 정수 개로 딱 떨어지는 크기가 그 크기의 이 비율 이상이면 그쪽을 쓴다 (픽셀이 더 고르다).
+ */
+export const SCALE_SNAP = 0.94;
 
 /** 미리 그려 두는 버퍼: 시작 뒤 이만큼 기다렸다가, 한 번에 몇 개씩, 이 간격으로 */
 export const WARM_BUFFERS = { delayMs: 300, perStep: 2, stepMs: 30 } as const;

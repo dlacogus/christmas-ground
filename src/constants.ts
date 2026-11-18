@@ -253,6 +253,22 @@ export const GROUND_COLORS = {
   snowCoverEdge: '#a3afcc',
 } as const;
 
+/** 눈 위에 남는 발자국 */
+export const FOOTPRINTS = {
+  /** 남아 있는 시간(초)과, 그 끝에서 눈에 덮여 흐려지는 시간 */
+  life: 4,
+  fade: 2,
+  /** 한꺼번에 남는 최대 개수 (넘으면 오래된 것부터 지운다) */
+  max: 120,
+  alpha: 0.8,
+  /** 발 길이, 왼발·오른발이 걷는 줄에서 벌어진 거리 */
+  length: 3,
+  sideOffset: 1,
+  /** 이만큼 걸을 때마다 한 발씩 찍힌다 (px) */
+  stride: 6,
+  color: '#7482ac',
+} as const;
+
 // ───────────── 앞 눈 더미 (레이어 1.3) ─────────────
 
 export const FOREGROUND = {
@@ -327,6 +343,13 @@ export const TREE = {
   sideJag: [0, 1, 2, 1, 0, 2, 1, 0, 1, 2, 0, 1],
   /** 가지 끝에 얹힌 눈 비율 (%) */
   tipSnowChance: 38,
+  /** 가지 위에 조금 쌓인 눈 더미: 놓일 수 있는 간격(px), 실제로 놓이는 비율(%), 폭 범위, 단 아래선에서 위로 올라간 범위 */
+  snowClumpEvery: 9,
+  snowClumpChance: 62,
+  snowClumpMinWidth: 5,
+  snowClumpMaxWidth: 10,
+  snowClumpRiseMin: 7,
+  snowClumpRiseMax: 13,
   /** 단 아래 테두리 들쭉날쭉 패턴 (열마다 아래로 더 내려가는 px) */
   jagPattern: [0, 1, 3, 4, 5, 5, 4, 2, 1, 0, 0, 2, 3, 4, 3, 1],
   trunkHalfWidth: 5,
@@ -394,6 +417,8 @@ export const TREE_COLORS = {
   needleShadow: '#143526',
   needleDeep: '#0f2a1f',
   tipSnow: '#dfe8f4',
+  snowClump: '#eef3fb',
+  snowClumpShade: '#b4c2d8',
   snowflake: '#f4f8ff',
   trunk: '#4a3020',
   trunkShade: '#36231a',

@@ -2,11 +2,13 @@ import { createCamera, layerOffsetX, snapCamera, updateCamera, type Camera } fro
 import { createCharacter, setWalkTarget } from './character/character';
 import { drawCharacter } from './character/render';
 import type { CharacterState } from './character/state';
-import { CAROUSEL, HINT, LAYER_FACTORS, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
+import { CAROUSEL, FOOTPRINTS, HINT, LAYER_FACTORS, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
 import { createFpsMeter, drawDebugOverlay } from './debug';
 import { createInput } from './input';
 import { createLayers, drawLayers, updateLayers } from './layers';
 import { warmBuffers } from './scenery/buffer';
+import { createFootprints } from './scenery/footprints';
+import { isSnowAt } from './scenery/ground';
 import { fitCanvasToWindow, frameDt } from './screen';
 import { createAmbience } from './audio/ambience';
 import { advanceStepTimer, createFootsteps, createStepTimer } from './audio/footsteps';
@@ -18,7 +20,7 @@ import { createHint } from './ui/hint';
 import { drawSoundButton, hitSoundButton } from './ui/soundButton';
 import { carouselGeometry } from './props/carousel';
 import { gateGeometry } from './props/carouselEntrance';
-import { CAROUSEL_X, SPAWN, TREE_X, WALK_AREA, getObstacle } from './world';
+import { CAROUSEL_GATE, CAROUSEL_X, SPAWN, TREE_X, WALK_AREA, getObstacle } from './world';
 import { createWorldZones } from './zones';
 import { createCarouselPlay, nearEntry, onCarousel } from './zones/carouselPlay';
 import type { DepthDrawable } from './zones/zone';
@@ -98,7 +100,15 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       drawCharacter(c, character, layerOffsetX(cam, LAYER_FACTORS.main));
     },
   };
-  const layers = createLayers(zones, [characterDrawable]);
+  // 눈 위 발자국 (입구 카펫과 벽돌이 드러난 곳에는 남지 않는다)
+  const footprints = createFootprints();
+  const gate = gateGeometry();
+  const onCarpet = (x: number, y: number) =>
+    Math.abs(x - gate.cx) <= CAROUSEL_GATE.carpetHalfWidth && y >= gate.rimBottom && y <= gate.carpetEndY;
+  let lastX = character.x;
+  let lastY = character.y;
+  let walked = 0;
+  const layers = createLayers(zones, [characterDrawable], SCENERY_SEED, [footprints]);
 
   const fpsMeter = createFpsMeter();
   // 화면 밖 구역의 그림도 틈틈이 미리 그려 둔다 (처음 들어설 때 멈칫하지 않게)
@@ -127,6 +137,23 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     updateLayers(layers, dt, camera);
     sound.setListener(character.x, character.y);
     if (advanceStepTimer(stepTimer, dt, !riding && character.moving)) footsteps.step();
+    // 걸은 거리만큼 발자국을 남긴다 (타고 내릴 때처럼 한 번에 멀리 옮겨지면 찍지 않는다)
+    const movedX = character.x - lastX;
+    const movedY = character.y - lastY;
+    const moved = Math.hypot(movedX, movedY);
+    if (riding || moved > FOOTPRINTS.stride) walked = 0;
+    else if (moved > 0) {
+      walked += moved;
+      if (walked >= FOOTPRINTS.stride) {
+        walked = 0;
+        if (isSnowAt(character.x, character.y) && !onCarpet(character.x, character.y)) {
+          footprints.add(character.x, character.y, movedX, movedY);
+        }
+      }
+    }
+    footprints.update(dt);
+    lastX = character.x;
+    lastY = character.y;
 
     drawLayers(ctx, camera, layers);
     drawSoundButton(ctx, sound.started && !sound.muted);

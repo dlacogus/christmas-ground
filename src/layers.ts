@@ -39,7 +39,17 @@ export function sortByDepth<T extends { footY: number }>(items: readonly T[]): T
 }
 
 /** zones의 시설과 actors(캐릭터 등)를 본 레이어에서 함께 y 정렬한다 */
-export function createLayers(zones: readonly Zone[], actors: readonly DepthDrawable[], seed = SCENERY_SEED): Layer[] {
+/** 바닥에 납작하게 남는 자국 (발자국 등): 바닥 바로 위, 바닥 불빛 아래에 그린다 */
+export interface FloorMarks {
+  draw(ctx: CanvasRenderingContext2D, offsetX: number): void;
+}
+
+export function createLayers(
+  zones: readonly Zone[],
+  actors: readonly DepthDrawable[],
+  seed = SCENERY_SEED,
+  floorMarks: readonly FloorMarks[] = [],
+): Layer[] {
   const f = LAYER_FACTORS;
   const sky = createSky(createRng(seed));
   const farCity = createFarCity(createRng(seed + 1), layerWidth(f.farBuildings));
@@ -100,6 +110,7 @@ export function createLayers(zones: readonly Zone[], actors: readonly DepthDrawa
       factor: f.main,
       draw: (ctx, camera) => {
         ground.draw(ctx, layerOffsetX(camera, f.main));
+        for (const marks of floorMarks) marks.draw(ctx, layerOffsetX(camera, f.main));
         light.drawGround(ctx, layerOffsetX(camera, f.main));
         // 화면 밖 구역은 건너뛴다
         const visible = zones.filter((z) => zoneVisible(z, camera.x));

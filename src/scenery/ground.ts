@@ -2,7 +2,7 @@
 
 import { GROUND, GROUND_COLORS as G, SCENERY_SEED, SCREEN_HEIGHT } from '../constants';
 import { createRng, pick, randInt, type Rng } from '../random';
-import { STREET_LINE_Y, WALK_AREA } from '../world';
+import { MAP_WIDTH, STREET_LINE_Y, WALK_AREA } from '../world';
 import { drawSlice, lazyBuffer } from './buffer';
 
 export interface SlabRow {
@@ -112,10 +112,27 @@ export function generateSnowCover(rng: Rng, width: number, height: number): Uint
   return cover;
 }
 
+let cachedCover: Uint8Array | null = null;
+
+/** 맵 전체 바닥의 눈 지도 (한 번만 만든다) */
+function snowCover(): Uint8Array {
+  cachedCover ??= generateSnowCover(createRng(SCENERY_SEED + GROUND.snowSeedOffset), MAP_WIDTH, WALK_AREA.h);
+  return cachedCover;
+}
+
+/** 월드 좌표 (x, y) 바닥에 눈이 쌓여 있나 (벽돌이 드러난 곳과 바닥 밖은 false) */
+export function isSnowAt(x: number, y: number): boolean {
+  const px = Math.floor(x);
+  const py = Math.floor(y) - WALK_AREA.y;
+  if (px < 0 || px >= MAP_WIDTH || py < 0 || py >= WALK_AREA.h) return false;
+  return snowCover()[py * MAP_WIDTH + px] > 0;
+}
+
 /** 눈 지도를 판석 위에 찍는다. 눈이 끝나는 아래 가장자리는 그늘 한 줄 */
-function paintSnowCover(ctx: CanvasRenderingContext2D, width: number, top: number): void {
+function paintSnowCover(ctx: CanvasRenderingContext2D, top: number): void {
+  const width = MAP_WIDTH;
   const height = WALK_AREA.h;
-  const cover = generateSnowCover(createRng(SCENERY_SEED + GROUND.snowSeedOffset), width, height);
+  const cover = snowCover();
   const colors = [G.snowCoverEdge, G.snowCover, G.snowCoverLight];
   for (let y = 0; y < height; y++) {
     let runStart = 0;
@@ -168,7 +185,7 @@ function paintGround(ctx: CanvasRenderingContext2D, width: number, slabs: readon
   }
 
   // 판석 위에 쌓인 눈
-  paintSnowCover(ctx, width, walkTop);
+  paintSnowCover(ctx, walkTop);
 
   // 아래쪽 눈둑
   ctx.fillStyle = G.snowShade;

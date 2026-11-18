@@ -167,6 +167,44 @@ function fleck(dx: number, y: number): number {
   return ((Math.imul(dx + 977, 73856093) ^ Math.imul(y + 131, 19349663)) >>> 0) % 100;
 }
 
+export interface SnowClump {
+  /** 가운데 x (트리 가운데 기준), 아랫줄 y, 폭 */
+  dx: number;
+  y: number;
+  w: number;
+}
+
+/** tierIndex번째 단의 가지 위에 쌓인 눈 더미들 (늘 같은 자리). 단 폭 안쪽에만 놓인다 */
+export function snowClumps(tierIndex: number): SnowClump[] {
+  const t = TIERS[tierIndex];
+  const clumps: SnowClump[] = [];
+  const step = TREE.snowClumpEvery;
+  const offset = (tierIndex * 3) % step;
+  for (let dx = -t.bottomHalf + offset; dx <= t.bottomHalf; dx += step) {
+    if (fleck(dx, tierIndex * 17 + 5) >= TREE.snowClumpChance) continue;
+    const w = TREE.snowClumpMinWidth + (fleck(dx, tierIndex + 40) % (TREE.snowClumpMaxWidth - TREE.snowClumpMinWidth + 1));
+    const rise = TREE.snowClumpRiseMin + (fleck(dx, tierIndex + 80) % (TREE.snowClumpRiseMax - TREE.snowClumpRiseMin + 1));
+    const y = t.bottom - rise;
+    if (y - 2 < t.top) continue;
+    // 더미 양 끝이 그 높이의 잎 안에 있어야 한다
+    if (Math.abs(dx) + Math.ceil(w / 2) > tierHalfAt(t, y) - TREE.edgeWidth) continue;
+    clumps.push({ dx, y, w });
+  }
+  return clumps;
+}
+
+/** 눈 더미: 위는 둥글고 밝게, 아랫줄은 그늘 */
+function paintSnowClumps(ctx: CanvasRenderingContext2D, ox: number, tierIndex: number): void {
+  for (const c of snowClumps(tierIndex)) {
+    const left = ox + c.dx - Math.floor(c.w / 2);
+    ctx.fillStyle = C.snowClumpShade;
+    ctx.fillRect(left, c.y, c.w, 1);
+    ctx.fillStyle = C.snowClump;
+    ctx.fillRect(left, c.y - 1, c.w, 1);
+    ctx.fillRect(left + 1, c.y - 2, c.w - 2, 1);
+  }
+}
+
 function paintFoliage(ctx: CanvasRenderingContext2D, ox: number): void {
   // 아랫단부터 그리고 윗단이 그 위를 덮는다
   for (let i = TIERS.length - 1; i >= 0; i--) {
@@ -207,6 +245,7 @@ function paintFoliage(ctx: CanvasRenderingContext2D, ox: number): void {
         ctx.fillRect(ox + dx, y, 1, 1);
       }
     }
+    paintSnowClumps(ctx, ox, i);
   }
 }
 

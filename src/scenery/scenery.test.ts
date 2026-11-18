@@ -1,20 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { FAR_CITY, GROUND, LAYER_FACTORS, PLAZA_BUILDINGS, SCREEN_HEIGHT, SCREEN_WIDTH, SKY, SNOWFALL, STARS } from '../constants';
+import {
+  CLOCK_TOWER,
+  FAR_CITY,
+  GROUND,
+  LAYER_FACTORS,
+  TREE_LINE,
+  SCREEN_HEIGHT,
+  SCREEN_WIDTH,
+  SKY,
+  SNOWFALL,
+  STARS,
+  TREE,
+} from '../constants';
 import { layerWidth } from '../layers';
 import { createRng } from '../random';
-import { STREET_LINE_Y, WALK_AREA } from '../world';
+import { HUT_BASE_Y, hutHeight } from '../props/marketHut';
+import { HUTS, STREET_LINE_Y, TREE_X, WALK_AREA } from '../world';
 import { generateFarSkyline } from './farCity';
 import { generateForeground } from './foreground';
 import { generateSlabs, slabRows } from './ground';
-import { advanceToggleTimer, collectWindows, garlandY, generatePlazaRow, nextToggleInterval, wallTopY } from './plazaBuildings';
+import { clockHandAngles, clockTowerGeometry } from './clockTower';
+import { generateBackTrees } from './treeLine';
 import { createStars, skyColorAt, starLevel } from './sky';
 import { createSnowfall, totalFlakes, updateSnowfall } from './snowfall';
 
 describe('무작위 시드', () => {
   it('같은 시드면 같은 거리, 다른 시드면 다른 거리', () => {
-    const a = generatePlazaRow(createRng(7), 1056);
-    const b = generatePlazaRow(createRng(7), 1056);
-    const c = generatePlazaRow(createRng(8), 1056);
+    const a = generateBackTrees(createRng(7), 1056);
+    const b = generateBackTrees(createRng(7), 1056);
+    const c = generateBackTrees(createRng(8), 1056);
     expect(a).toEqual(b);
     expect(a).not.toEqual(c);
   });
@@ -50,52 +64,49 @@ describe('먼 건물', () => {
   });
 });
 
-describe('광장 건물', () => {
-  const width = layerWidth(LAYER_FACTORS.plazaBuildings);
-  const row = generatePlazaRow(createRng(42), width);
+describe('나무 줄', () => {
+  const width = layerWidth(LAYER_FACTORS.treeLine);
+  const trees = generateBackTrees(createRng(42), width);
 
-  it('빈틈 없이 이어져 레이어 너비를 끝까지 덮는다', () => {
-    expect(row[0].x).toBe(0);
-    for (let i = 1; i < row.length; i++) expect(row[i].x).toBe(row[i - 1].x + row[i - 1].width);
-    const last = row[row.length - 1];
-    expect(last.x + last.width).toBeGreaterThanOrEqual(width);
+  it('잎 진 나무와 전나무가 섞여 레이어 끝까지 선다', () => {
+    expect(trees.some((t) => t.kind === 'bare')).toBe(true);
+    expect(trees.some((t) => t.kind === 'fir')).toBe(true);
+    expect(trees.at(-1)!.x).toBeGreaterThan(width - TREE_LINE.treeMaxGap * 2);
+    expect(new Set(trees.map((t) => t.height)).size).toBeGreaterThan(trees.length / 3);
   });
 
-  it('이웃한 건물은 모양도 색도 다르다', () => {
-    for (let i = 1; i < row.length; i++) {
-      expect(row[i].templateIndex).not.toBe(row[i - 1].templateIndex);
-      expect(row[i].colorIndex).not.toBe(row[i - 1].colorIndex);
-    }
+  it('돌바닥 끝 오두막들 위로 나무 꼭대기가 보인다', () => {
+    const tallestHutTop = Math.min(...HUTS.map((h) => HUT_BASE_Y - hutHeight(h)));
+    const treeTops = trees.map((t) => STREET_LINE_Y - t.height);
+    expect(treeTops.filter((y) => y < tallestHutTop).length).toBeGreaterThan(trees.length / 4);
+  });
+});
+
+describe('시계탑', () => {
+  const g = clockTowerGeometry();
+
+  it('나무 위로 솟고 화면 위로 잘리지 않는다', () => {
+    expect(g.top).toBeGreaterThanOrEqual(0);
+    expect(g.base - g.top).toBeGreaterThan(TREE_LINE.bareMaxHeight);
   });
 
-  it('2층이고 1층은 아치, 2층은 격자 창, 지붕에는 지붕 창', () => {
-    for (const b of row) expect(b.floors).toBe(2);
-    const windows = collectWindows(row, createRng(1));
-    const kinds = new Set(windows.map((w) => w.kind));
-    expect(kinds).toEqual(new Set(['arch', 'grid', 'dormer']));
-    for (const w of windows) {
-      expect(w.y + w.h).toBeLessThanOrEqual(STREET_LINE_Y);
-      if (w.kind === 'arch') expect(w.y).toBeGreaterThanOrEqual(STREET_LINE_Y - PLAZA_BUILDINGS.groundFloorHeight);
-      if (w.kind === 'dormer') expect(w.y + w.h).toBeLessThanOrEqual(wallTopY(row[w.buildingIndex].floors));
-    }
+  it('시계 판은 앞에 선 오두막 지붕에 가리지 않는다', () => {
+    const tallestHutTop = Math.min(...HUTS.map((h) => HUT_BASE_Y - hutHeight(h)));
+    expect(g.clockY + CLOCK_TOWER.clockRadius).toBeLessThan(tallestHutTop);
   });
 
-  it('창문 하나가 20~40초마다 바뀐다', () => {
-    const rng = createRng(3);
-    const timer = { remaining: nextToggleInterval(rng) };
-    let toggles = 0;
-    const seconds = 3600;
-    for (let t = 0; t < seconds * 60; t++) toggles += advanceToggleTimer(timer, 1 / 60, rng);
-    expect(toggles).toBeGreaterThanOrEqual(seconds / PLAZA_BUILDINGS.toggleMaxInterval - 1);
-    expect(toggles).toBeLessThanOrEqual(seconds / PLAZA_BUILDINGS.toggleMinInterval + 1);
+  it('처음 화면(트리 가운데)에서 트리 오른쪽에 보인다', () => {
+    const offset = Math.round((TREE_X - SCREEN_WIDTH / 2) * LAYER_FACTORS.treeLine);
+    const screenX = CLOCK_TOWER.x - offset;
+    expect(screenX).toBeGreaterThan(SCREEN_WIDTH / 2 + TREE.baseHalfWidth);
+    expect(screenX + CLOCK_TOWER.shaftWidth / 2).toBeLessThan(SCREEN_WIDTH);
   });
 
-  it('전구 줄은 가운데가 처지고 2층 높이에 걸린다', () => {
-    const anchor = garlandY(0);
-    expect(garlandY(17)).toBeGreaterThan(anchor);
-    const secondFloorTop = STREET_LINE_Y - PLAZA_BUILDINGS.groundFloorHeight - PLAZA_BUILDINGS.floorHeight;
-    expect(anchor).toBeGreaterThanOrEqual(secondFloorTop);
-    expect(garlandY(17)).toBeLessThan(STREET_LINE_Y - PLAZA_BUILDINGS.groundFloorHeight);
+  it('바늘은 시각을 가리킨다', () => {
+    expect(clockHandAngles(3, 0).hour).toBeCloseTo(Math.PI / 2, 6);
+    expect(clockHandAngles(3, 0).minute).toBe(0);
+    expect(clockHandAngles(18, 30).minute).toBeCloseTo(Math.PI, 6);
+    expect(clockHandAngles(18, 30).hour).toBeCloseTo(Math.PI * (6.5 / 6), 6);
   });
 });
 

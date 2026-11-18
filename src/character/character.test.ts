@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHARACTER } from '../constants';
-import { FIR_LINE_X, OBSTACLES, SPAWN, WALK_AREA, getObstacle, rectsOverlap } from '../world';
+import { FIR_LINE_X, OBSTACLES, RINK_FIR_LINE_X, SPAWN, WALK_AREA, getObstacle, rectsOverlap } from '../world';
 import {
   canStandAt,
   createCharacter,
@@ -48,10 +48,10 @@ describe('캐릭터 이동', () => {
     expect(ch.x).toBe(FIR_LINE_X + CHARACTER.footHalfWidth);
   });
 
-  it('오른쪽 끝까지 걸어가서 맵 끝에서 막힌다 (링크 울타리 앞으로 지나감)', () => {
+  it('오른쪽 끝까지 걸어가서 전나무 줄 앞에서 막힌다 (링크 울타리 앞으로 지나감)', () => {
     const ch = createCharacter(SPAWN.x, SPAWN.y);
     walk(ch, { x: 1, y: 0 }, 20);
-    expect(ch.x).toBe(WALK_AREA.x + WALK_AREA.w - CHARACTER.footHalfWidth);
+    expect(ch.x).toBe(RINK_FIR_LINE_X - CHARACTER.footHalfWidth);
   });
 
   it('위아래로 바닥 띠를 벗어나지 않는다', () => {

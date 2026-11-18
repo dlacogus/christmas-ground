@@ -1,5 +1,6 @@
 // 깊이 레이어 (뒤 → 앞). 괄호 안은 카메라를 따라가는 비율.
-//   하늘(0) → 먼 건물(0.3) → 먼 눈 → 광장 건물(0.6) → 중간 눈 → 본 레이어(1) → 가까운 눈 → 앞 눈 더미(1.3)
+//   하늘(0) → 먼 건물(0.3) → 먼 눈 → 나무 줄·시계탑(0.6) → 중간 눈 → 본 레이어(1) → 가까운 눈 → 앞 눈 더미(1.3)
+// 조명·분위기(scenery/lighting)는 층 사이에 덧입힌다: 하늘 뒤 노을빛·달, 먼 건물 뒤 안개, 바닥 위 불빛, 시설 위 빛 번짐, 맨 위 가장자리 어둡게.
 // 본 레이어 안에서는 발밑 y가 큰 것을 앞에 그린다.
 
 import { layerOffsetX, type Camera } from './camera';
@@ -8,7 +9,8 @@ import { createRng } from './random';
 import { createFarCity } from './scenery/farCity';
 import { createForeground } from './scenery/foreground';
 import { createGround } from './scenery/ground';
-import { createPlazaBuildings } from './scenery/plazaBuildings';
+import { createFog, createGroundLight, createSkyGlow, createVignette, drawClockHalo } from './scenery/lighting';
+import { createTreeLine } from './scenery/treeLine';
 import { createSky } from './scenery/sky';
 import { createSnowfall, drawSnowLayer, updateSnowfall } from './scenery/snowfall';
 import { MAP_WIDTH } from './world';
@@ -36,23 +38,37 @@ export function createLayers(zones: readonly Zone[], actors: readonly DepthDrawa
   const f = LAYER_FACTORS;
   const sky = createSky(createRng(seed));
   const farCity = createFarCity(createRng(seed + 1), layerWidth(f.farBuildings));
-  const plaza = createPlazaBuildings(createRng(seed + 2), layerWidth(f.plazaBuildings));
+  const treeLine = createTreeLine(createRng(seed + 2), layerWidth(f.treeLine));
   const ground = createGround(createRng(seed + 3), layerWidth(f.main));
   const foreground = createForeground(createRng(seed + 4), layerWidth(f.foregroundSnow));
   const snow = createSnowfall(createRng(seed + 5));
   const snowRng = createRng(seed + 6);
+  // 기존 그림 위에 덧입히는 조명·분위기 층
+  const skyGlow = createSkyGlow(createRng(seed + 7));
+  const fog = createFog();
+  const light = createGroundLight(createRng(seed + 8));
+  const vignette = createVignette();
 
   return [
     {
       name: 'sky',
       factor: f.sky,
-      update: (dt) => sky.update(dt),
-      draw: (ctx) => sky.draw(ctx),
+      update: (dt) => {
+        sky.update(dt);
+        skyGlow.update(dt);
+      },
+      draw: (ctx) => {
+        sky.draw(ctx);
+        skyGlow.draw(ctx);
+      },
     },
     {
       name: 'farBuildings',
       factor: f.farBuildings,
-      draw: (ctx, camera) => farCity.draw(ctx, layerOffsetX(camera, f.farBuildings)),
+      draw: (ctx, camera) => {
+        farCity.draw(ctx, layerOffsetX(camera, f.farBuildings));
+        fog.draw(ctx);
+      },
     },
     {
       name: 'snowFar',
@@ -62,14 +78,16 @@ export function createLayers(zones: readonly Zone[], actors: readonly DepthDrawa
       draw: (ctx) => drawSnowLayer(ctx, snow, 0),
     },
     {
-      name: 'plazaBuildings',
-      factor: f.plazaBuildings,
-      update: (dt) => plaza.update(dt),
-      draw: (ctx, camera) => plaza.draw(ctx, layerOffsetX(camera, f.plazaBuildings)),
+      name: 'treeLine',
+      factor: f.treeLine,
+      draw: (ctx, camera) => {
+        treeLine.draw(ctx, layerOffsetX(camera, f.treeLine));
+        drawClockHalo(ctx, layerOffsetX(camera, f.treeLine));
+      },
     },
     {
       name: 'snowMid',
-      factor: f.plazaBuildings,
+      factor: f.treeLine,
       draw: (ctx) => drawSnowLayer(ctx, snow, 1),
     },
     {
@@ -77,9 +95,11 @@ export function createLayers(zones: readonly Zone[], actors: readonly DepthDrawa
       factor: f.main,
       draw: (ctx, camera) => {
         ground.draw(ctx, layerOffsetX(camera, f.main));
+        light.drawGround(ctx, layerOffsetX(camera, f.main));
         for (const zone of zones) zone.draw(ctx, camera);
         const drawables = sortByDepth([...zones.flatMap((z) => z.props), ...actors]);
         for (const d of drawables) d.draw(ctx, camera);
+        light.drawBloom(ctx, layerOffsetX(camera, f.main));
       },
     },
     {
@@ -90,7 +110,10 @@ export function createLayers(zones: readonly Zone[], actors: readonly DepthDrawa
     {
       name: 'foregroundSnow',
       factor: f.foregroundSnow,
-      draw: (ctx, camera) => foreground.draw(ctx, layerOffsetX(camera, f.foregroundSnow)),
+      draw: (ctx, camera) => {
+        foreground.draw(ctx, layerOffsetX(camera, f.foregroundSnow));
+        vignette.draw(ctx);
+      },
     },
   ];
 }

@@ -16,8 +16,8 @@ describe('구역 배치', () => {
     const ids = zones.flatMap((z) => z.interactionPoints.map((p) => p.id));
     expect(ids.sort()).toEqual(INTERACTION_POINTS.map((p) => p.id).sort());
     const byZone = Object.fromEntries(zones.map((z) => [z.name, z.interactionPoints.map((p) => p.id)]));
-    expect(byZone.carousel).toEqual(['CAROUSEL_ENTRY', 'STALL_3', 'STALL_4']);
+    expect(byZone.carousel).toEqual(['CAROUSEL_ENTRY']);
     expect(byZone.rink).toEqual(['RINK_GATE']);
-    expect(byZone.plaza).toEqual(['STALL_1', 'STALL_2']);
+    expect(byZone.plaza).toEqual([]);
   });
 });

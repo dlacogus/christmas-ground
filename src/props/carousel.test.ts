@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseSong, BEATS_PER_BAR, noteFrequency } from '../audio/melody';
 import { musicBoxPan, musicBoxVolume } from '../audio/musicBox';
 import { CAROUSEL, CHARACTER, MUSIC_BOX } from '../constants';
-import { CAROUSEL_X, FIRS, FIR_LINE_X, INTERACTION_POINTS, LAMPS, STALLS, getObstacle, inZone } from '../world';
+import { CAROUSEL_X, FIRS, FIR_LINE_X, INTERACTION_POINTS, LAMPS, getObstacle, inZone } from '../world';
 import {
   HORSE_HEIGHT,
   HORSE_WIDTH,
@@ -100,8 +100,7 @@ describe('목마 회전', () => {
 });
 
 describe('회전목마 구역 주변', () => {
-  it('노점 2곳, 가로등 2개, 벤치는 world에, 왼쪽 끝은 전나무 줄', () => {
-    expect(STALLS.filter((s) => inZone('carousel', s.x))).toHaveLength(2);
+  it('가로등 2개, 왼쪽 끝은 전나무 줄', () => {
     expect(LAMPS.filter((l) => inZone('carousel', l.x))).toHaveLength(2);
     expect(FIRS.length).toBeGreaterThanOrEqual(5);
     for (const f of FIRS) expect(f.x).toBeLessThanOrEqual(FIR_LINE_X);

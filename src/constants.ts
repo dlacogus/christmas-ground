@@ -19,7 +19,7 @@ export const CAMERA_REFERENCE_FPS = 60;
 export const LAYER_FACTORS = {
   sky: 0,
   farBuildings: 0.3,
-  plazaBuildings: 0.6,
+  treeLine: 0.6,
   main: 1,
   foregroundSnow: 1.3,
 } as const;
@@ -117,86 +117,93 @@ export const FAR_CITY = {
   window: '#b08440',
 } as const;
 
-// ───────────── 광장 석조 건물 (레이어 0.6) ─────────────
+// ───────────── 나무 줄과 시계탑 (레이어 0.6) ─────────────
 
-export const PLAZA_BUILDINGS = {
-  /** 창문 한 칸(베이) 너비 */
-  bayWidth: 13,
-  sideMargin: 4,
-  groundFloorHeight: 24,
-  floorHeight: 18,
-  roofHeight: 14,
-  /** 지붕이 한 줄 올라갈 때 안으로 들어가는 정도 */
-  roofSlope: 0.25,
-  roofTextureEvery: 3,
-  corniceHeight: 2,
-  windowWidth: 7,
-  windowHeight: 10,
-  windowTopOffset: 4,
-  /** 격자 창 가로 창살 위치 (창 높이 비율) */
-  transomFraction: 0.4,
-  archWidth: 9,
-  archHeight: 15,
-  archBottomGap: 3,
-  doorWidth: 9,
-  doorHeight: 20,
-  fanlightRows: 4,
-  dormerWidth: 5,
-  dormerHeight: 5,
-  dormerTopOffset: 5,
-  chimneyChance: 0.5,
-  chimneyWidth: 4,
-  chimneyHeight: 6,
-  /** 처음에 불이 켜진 창 비율 */
-  litChance: 0.72,
-  /** 켜진 창 아래쪽 진한 금빛 비율 */
-  litDeepFraction: 0.35,
-  /** 창문 하나가 켜지거나 꺼지는 간격 (초) */
-  toggleMinInterval: 20,
-  toggleMaxInterval: 40,
-  /** 반복해서 섞어 쓰는 건물 모양 (모두 2층 — 걷는 길을 넓게 쓰려고 낮춤, 폭으로 구분) */
-  templates: [
-    { bays: 3, floors: 2 },
-    { bays: 4, floors: 2 },
-    { bays: 5, floors: 2 },
-    { bays: 6, floors: 2 },
-    { bays: 7, floors: 2 },
-  ],
+/** 광장 뒤 배경: 눈 덮인 나무들(잎 진 큰 나무·전나무)과 그 사이로 솟은 시계탑 */
+export const TREE_LINE = {
+  treeMinGap: 9,
+  treeMaxGap: 24,
+  bareMinHeight: 52,
+  bareMaxHeight: 86,
+  firMinHeight: 34,
+  firMaxHeight: 66,
+  firChance: 0.35,
+  /** 잎 진 나무: 가지 갈래 깊이, 가지가 벌어지는 각, 자식 가지 길이 비율, 가지 위 눈 확률 */
+  branchDepth: 4,
+  branchMinSpread: 0.3,
+  branchMaxSpread: 0.75,
+  branchShrink: 0.68,
+  trunkFraction: 0.36,
+  branchSnowChance: 0.6,
+  firTierHeight: 6,
+  firHalfWidthRatio: 0.3,
+  /** 나무 밑동을 덮는 눈 둔덕 높이 */
+  bankMinHeight: 2,
+  bankMaxHeight: 6,
 } as const;
 
-export const PLAZA_COLORS = {
-  /** 밤이라 어둡게 가라앉힌 벽색 */
-  walls: [
-    { wall: '#5f5a68', shade: '#4b4756', trim: '#76707f' }, // 회베이지
-    { wall: '#6e5948', shade: '#58463a', trim: '#87705b' }, // 황토
-    { wall: '#68604f', shade: '#524b3f', trim: '#807662' }, // 모래
-    { wall: '#5a5560', shade: '#47434e', trim: '#706a77' }, // 회색 석조
-  ],
-  roof: '#262b43',
-  roofDark: '#1d2136',
-  roofEdge: '#343a58',
-  chimney: '#3b3445',
-  chimneyCap: '#2a2533',
+export const TREE_LINE_COLORS = {
+  /** 밤이라 가라앉은 색 */
+  bark: '#3a3448',
+  barkDark: '#2b2638',
+  branchSnow: '#aab4d0',
+  needle: '#1c3d38',
+  needleLight: '#27544a',
+  firSnow: '#c4cee4',
+  bank: '#9aa6c6',
+  bankShade: '#7c88ac',
+} as const;
+
+/** 나무들 사이로 솟은 시계탑 (실제 건물을 본뜨지 않은 뾰족탑 시청사). x는 0.6 레이어 좌표 */
+export const CLOCK_TOWER = {
+  /** 트리를 가운데 둔 첫 화면에서 트리 오른쪽에 보이는 자리 */
+  x: 664,
+  /** 탑 아래 넓은 본관 */
+  hallWidth: 96,
+  hallHeight: 44,
+  hallRoofHeight: 9,
+  hallWindowEvery: 12,
+  hallWindowWidth: 5,
+  hallWindowHeight: 16,
+  /** 탑 몸통 */
+  shaftWidth: 26,
+  shaftHeight: 74,
+  /** 시계 판: 몸통 꼭대기에서 아래로 가운데까지, 반지름, 바늘 길이 */
+  clockBelowTop: 9,
+  clockRadius: 7,
+  minuteHand: 6,
+  hourHand: 4,
+  /** 종루 아치 창 (시계 아래) */
+  belfryBelowClock: 12,
+  belfryWindowWidth: 4,
+  belfryWindowHeight: 12,
+  /** 모서리 작은 첨탑, 꼭대기 등롱과 뾰족 지붕 */
+  pinnacleHeight: 9,
+  lanternWidth: 14,
+  lanternHeight: 11,
+  spireHeight: 20,
+  finialHeight: 3,
+  /** 아래에서 비추는 조명: 위쪽 이만큼이 금빛으로 물든다 */
+  uplightHeight: 60,
+  uplightMax: 0.5,
+  stoneEvery: 5,
+} as const;
+
+export const CLOCK_TOWER_COLORS = {
+  stone: '#5d586a',
+  stoneDark: '#474354',
+  stoneLight: '#757084',
+  uplight: '#e8b060',
   windowLit: '#ffc857',
-  windowLitDeep: '#f0a040',
-  windowDark: '#222337',
+  windowDeep: '#f0a040',
   windowFrame: '#2c2433',
-  door: '#3a2a22',
-  doorFrame: '#2a1e18',
-} as const;
-
-/** 건물 앞면 2층 높이에 처지게 걸린 전구 줄 */
-export const GARLAND = {
-  /** 건물이 서는 선에서 위로 (2층 높이) */
-  anchorAboveStreet: 40,
-  span: 34,
-  sag: 5,
-  bulbSpacing: 5,
-  bulbHeight: 2,
-  wire: '#14141c',
-  bulbs: ['#ffd36b', '#ffb347', '#fff0b8', '#ff9f5a'],
-  glowAlpha: 0.28,
-  glowRadius: 1,
+  roof: '#262b43',
+  roofLight: '#343a58',
+  snow: '#e8eef8',
+  face: '#fff1c4',
+  faceRim: '#e2b23e',
+  hands: '#2a1e2a',
+  gold: '#e2b23e',
 } as const;
 
 // ───────────── 바닥 (레이어 1) ─────────────
@@ -269,17 +276,9 @@ export const SNOWFALL = {
   /** 먼 눈 → 가까운 눈. parallax: 카메라가 움직일 때 밀리는 비율 */
   layers: [
     { name: 'far', count: 140, size: 1, minSpeed: 6, maxSpeed: 11, swayAmp: 1, parallax: LAYER_FACTORS.farBuildings, color: '#7f8bb4' },
-    { name: 'mid', count: 100, size: 1, minSpeed: 14, maxSpeed: 22, swayAmp: 1.5, parallax: LAYER_FACTORS.plazaBuildings, color: '#c9d2ea' },
+    { name: 'mid', count: 100, size: 1, minSpeed: 14, maxSpeed: 22, swayAmp: 1.5, parallax: LAYER_FACTORS.treeLine, color: '#c9d2ea' },
     { name: 'near', count: 60, size: 2, minSpeed: 28, maxSpeed: 40, swayAmp: 2.5, parallax: LAYER_FACTORS.foregroundSnow, color: '#ffffff' },
   ],
-} as const;
-
-// ───────────── 임시 그림 / 개발용 ─────────────
-
-/** 임시 그림(단색 상자)의 크기 */
-export const PLACEHOLDER = {
-  carouselHeight: 84,
-  rinkHeight: 70,
 } as const;
 
 // ───────────── 메인 광장 소품 ─────────────
@@ -393,49 +392,82 @@ export const TREE_COLORS = {
   },
 } as const;
 
-/** 나무 오두막 마켓 노점 */
-export const MARKET_STALL = {
-  wallHeight: 34,
-  counterHeight: 12,
+/** 마켓 오두막: 돌바닥 뒤쪽 끝(연석 바로 뒤)에 늘어선다. 크기도 종류도 제각각 (위치·폭·벽 높이는 world.ts의 HUTS) */
+export const MARKET_HUT = {
+  /** 종류별 지붕 높이 / 폭 */
+  roofRatio: {
+    /** 삼각 지붕이 앞을 보는 오두막 (처마에 초록 장식과 전구) */
+    gable: 0.38,
+    /** 옆으로 긴 오두막 (눈이 두껍게 쌓인 긴 지붕, 창구 여러 칸) */
+    longhouse: 0.16,
+    /** 줄무늬 차양을 단 작은 매점 */
+    kiosk: 0.16,
+    /** 뾰족한 원뿔 지붕 정자 */
+    pavilion: 0.5,
+  },
+  roofOverhang: 4,
+  /** 지붕 위 눈 두께 */
+  snowThickness: 4,
+  counterHeight: 11,
   postWidth: 4,
   openingTopGap: 4,
-  roofHeight: 20,
-  roofOverhang: 5,
-  /** 지붕 위 눈: 경사를 따라 쌓인 두께, 처마 끝 눈 덩이 */
-  snowThickness: 3,
-  eaveSnowWidth: 6,
-  plankEvery: 4,
-  counterPlankEvery: 4,
-  roofTextureEvery: 3,
-  shelfCount: 2,
+  shelfEvery: 8,
   itemSpacing: 5,
-  candleChance: 0.4,
-  candleHeight: 3,
-  bulbSpacing: 4,
+  itemChance: 0.75,
+  warmGlowMaxAlpha: 0.45,
+  /** 긴 오두막 창구 한 칸 폭 (대략) */
+  bayWidth: 30,
+  awningDrop: 8,
+  awningOut: 4,
+  awningStripe: 4,
+  /** 정자 꼭대기 금 장식 높이 */
+  finialHeight: 3,
+  bulbSpacing: 5,
+  /** 전구 반짝임: 한 주기 (초), 가장 어두울 때 */
+  bulbMinPeriod: 1.6,
+  bulbMaxPeriod: 4.5,
+  bulbMinAlpha: 0.45,
   bulbGlowAlpha: 0.3,
-  /** 안쪽 따뜻한 빛 (아래가 가장 밝다) */
-  warmGlowMaxAlpha: 0.35,
+  /** 처마 고드름: 간격, 가장 긴 길이, 진하기 */
+  icicleMinGap: 2,
+  icicleMaxGap: 4,
+  icicleMaxLength: 4,
+  icicleAlpha: 0.9,
+  /** 가게 주인: 창구가 이 폭 이상일 때, 이 확률로 서 있다 */
+  keeperMinBay: 14,
+  keeperChance: 0.7,
 } as const;
 
-export const STALL_COLORS = {
-  wood: '#5a3a26',
-  woodDark: '#432a1b',
-  woodLight: '#8a5a38',
-  counterTop: '#a8744a',
+export const MARKET_HUT_COLORS = {
+  woods: [
+    { wall: '#7a4e2e', dark: '#5a3820', light: '#a06a3e' },
+    { wall: '#6a4630', dark: '#4c3020', light: '#8c6040' },
+    { wall: '#86583a', dark: '#644028', light: '#aa7848' },
+  ],
+  /** 눈 아래로 보이는 지붕·차양 색 */
+  roofs: ['#5c2a26', '#2a3358', '#24493a', '#4a3328'],
+  awnings: [
+    ['#c8343e', '#f3e6c8'],
+    ['#2f7a52', '#f3e6c8'],
+  ],
   interior: '#2e1c12',
+  warmGlow: '#ffb347',
   shelf: '#6b4428',
-  /** 지붕 색 (구역마다 다르게) */
-  roofs: {
-    red: { roof: '#5c2a26', roofDark: '#45201d' },
-    navy: { roof: '#2a3358', roofDark: '#1f2645' },
-  },
+  items: ['#d23a3a', '#e8b83a', '#d6dbe8', '#3aa36b', '#f3e6c4'],
   snow: '#e8eef8',
   snowShade: '#b9c4dc',
-  candle: '#f3e6c4',
-  flame: '#ffd36b',
-  warmGlow: '#ffb347',
-  items: ['#d23a3a', '#e8b83a', '#d6dbe8', '#3aa36b'],
-  itemShine: '#ffffff',
+  garland: '#2b6249',
+  garlandDark: '#1f4a3a',
+  gold: '#e2b23e',
+  bulbs: ['#ffd36b', '#ffb347', '#fff0b8', '#ff9f5a'],
+  icicle: '#dcebfa',
+  wreath: '#2f7a52',
+  wreathDark: '#1f5a3c',
+  bow: '#d23a3a',
+  keeperSkin: '#ffdcbf',
+  keeperEye: '#2b1d26',
+  keeperHats: ['#d23c4e', '#3f8f5f', '#e2b23e', '#6a7fd0'],
+  keeperCoats: ['#7a4a6a', '#3d5a8a', '#8a5a3a', '#4a7a5a'],
 } as const;
 
 /** 주철 가로등 */
@@ -581,6 +613,209 @@ export const FIR = {
   trunkHalfWidth: 1,
 } as const;
 
+// ───────────── 스케이트장 구역 ─────────────
+
+/** 얼음 링크 (위치는 world.ts의 rink 장애물) */
+export const RINK = {
+  /** 둥근 모서리 반지름 (옆에서 보니 세로로 납작하다) */
+  cornerRadiusX: 48,
+  cornerRadiusY: 30,
+  /** 낮은 나무 울타리 높이, 기둥 간격·기둥이 더 솟는 높이 */
+  fenceHeight: 9,
+  fencePostEvery: 12,
+  fencePostRise: 2,
+  fenceBoardEvery: 4,
+  fenceSnowChance: 0.7,
+  /** 얼음 색 띠: 뒤(먼 쪽) → 앞. untilFraction = 링크 깊이 비율 */
+  iceBands: [
+    { untilFraction: 0.22, color: '#7aaccb' },
+    { untilFraction: 0.6, color: '#8fc0dc' },
+    { untilFraction: 1, color: '#a6d0e6' },
+  ],
+  /** 긁힌 자국 (가운데를 도는 타원 조각) */
+  scratchCount: 18,
+  scratchMinArc: 0.3,
+  scratchMaxArc: 1.1,
+  scratchMinRadiusX: 40,
+  scratchMaxRadiusX: 190,
+  /** 반짝이는 점 */
+  sparkleCount: 30,
+  sparkleMinPeriod: 1.5,
+  sparkleMaxPeriod: 4,
+  /** sin 값이 이보다 크면 반짝, 더 크면 십자 */
+  sparkleOn: 0.82,
+  sparkleCross: 0.96,
+  /** 닫힌 입구 문 폭, 문 기둥이 울타리보다 솟는 높이 */
+  gateWidth: 16,
+  gatePostRise: 4,
+  /** '준비 중' 팻말 (자물쇠 그림) 크기, 문 위로 솟는 높이 */
+  signWidth: 13,
+  signHeight: 12,
+  signRise: 5,
+} as const;
+
+/** 얼음 위 비침: 불빛이 세로로 길게, 원래 색의 반 밝기로 일렁인다 */
+export const REFLECTION = {
+  /** 원래 색에 섞는 검정 비율 (0.5 = 반 밝기) */
+  dim: 0.5,
+  alpha: 0.85,
+  /** 뒤 울타리에서 비침 시작까지 */
+  topGap: 3,
+  /** 전구 높이 차이를 비침 시작 위치로 옮기는 비율 (처진 줄 모양이 비친다) */
+  bulbDepthScale: 0.5,
+  bulbLength: 12,
+  lampLength: 32,
+  /** 비침을 그리는 줄 간격 (2 = 한 줄 걸러) */
+  rowStep: 2,
+  lampWidth: 3,
+  /** 일렁임: 줄마다 좌우로 흔들리는 폭과 속도 */
+  shimmerAmp: 1,
+  shimmerSpeed: 3.2,
+  shimmerRowFreq: 0.7,
+  flickerSpeed: 5,
+  flickerDepth: 0.3,
+} as const;
+
+/** 링크 양쪽 기둥 사이에 처지게 걸린 전구 줄 */
+export const RINK_LIGHTS = {
+  /** 기둥: 링크 가운데 깊이(옆 울타리)에 서서 이만큼 솟는다 */
+  poleHeight: 126,
+  poleWidth: 2,
+  /** 줄 걸이: 기둥 꼭대기에서 아래로 첫 걸이, 걸이 간격 */
+  firstHookBelowTop: 4,
+  hookGap: 6,
+  /** 줄마다 처지는 정도 (위 줄 → 아래 줄) */
+  sags: [14, 19, 24, 29],
+  bulbSpacing: 8,
+  bulbHeight: 2,
+  /** 빨강·초록·금·파랑이 차례로 밝아지는 한 바퀴 (초) */
+  cyclePeriod: 8,
+  minLevel: 0.3,
+  glowAlpha: 0.4,
+  /** 가장 어두울 때도 전구 알맹이는 이만큼 보인다 */
+  bulbMinAlpha: 0.35,
+  wire: '#14141c',
+  snow: '#e8eef8',
+  pole: '#17171f',
+  poleLight: '#2c2c3a',
+  bulbs: ['#ff5a5a', '#5ad67a', '#ffd36b', '#6ab4ff'],
+} as const;
+
+/** NPC 스케이터 3명: 링크 가운데를 도는 타원 */
+export const SKATERS = {
+  /** 타원 가운데가 링크 가운데보다 이만큼 앞 (앞 울타리에 발이 살짝 가린다) */
+  centerFrontShift: 6,
+  /** 미끄럼 자세 한 장 시간 */
+  glideFrameDuration: 0.8,
+  list: [
+    { outfit: 'red', radiusX: 168, radiusY: 34, period: 18, phase: 0, wobbles: false },
+    { outfit: 'green', radiusX: 136, radiusY: 22, period: 15, phase: 2.2, wobbles: true },
+    { outfit: 'plum', radiusX: 184, radiusY: 40, period: 22, phase: 4.3, wobbles: false },
+  ],
+  /** 비틀거림: 처음 몇 초 뒤, 그다음 30초마다, 얼마 동안 */
+  wobbleFirstDelay: 6,
+  wobbleInterval: 30,
+  wobbleDuration: 2,
+  /** 비틀거릴 때 몸이 기우는 최대 px, 흔들리는 횟수, 느려지는 비율, 발 바꾸는 간격 */
+  wobbleLean: 2,
+  wobbleSwings: 5,
+  wobbleSpeedFactor: 0.45,
+  wobbleFrameDuration: 0.12,
+  /** 얼음 자국: 남기는 간격, 남아 있는 시간, 진하기 */
+  trailInterval: 0.05,
+  trailLifetime: 1.4,
+  trailAlpha: 0.6,
+  trailColor: '#eef8ff',
+  /** 발 뒤쪽으로 자국을 남기는 거리 */
+  trailBehind: 2,
+} as const;
+
+/** 링크 색 */
+export const RINK_COLORS = {
+  scratch: '#c6e4f3',
+  scratchBright: '#eef8ff',
+  sparkle: '#ffffff',
+  fence: '#6a4529',
+  fenceDark: '#4a3020',
+  fenceLight: '#8a5a38',
+  snow: '#e8eef8',
+  gate: '#7a4e30',
+  signBoard: '#e8dcc0',
+  signBorder: '#4a3020',
+  lockBody: '#e2b23e',
+  lockShade: '#b0862a',
+  lockShackle: '#b9c4dc',
+  lockHole: '#3a2a22',
+} as const;
+
+// ───────────── 조명·분위기 ─────────────
+
+/** 조명·분위기 효과: 하늘 노을빛과 달, 먼 안개, 바닥에 번지는 불빛, 빛 번짐, 화면 가장자리 어둡게 */
+export const LIGHTING = {
+  /** 하늘: 이 y부터 지평선까지 보랏빛으로 밝아진다 (점묘로 섞음) */
+  horizonFromY: 34,
+  horizonColors: ['#161c44', '#222552', '#30295c', '#3f2f64'],
+  moon: { x: 78, y: 30, radius: 9, haloRadius: 26, haloAlpha: 0.16, haloRings: 4 },
+  cloudCount: 4,
+  cloudMinWidth: 36,
+  cloudMaxWidth: 90,
+  cloudMinY: 44,
+  cloudMaxY: 70,
+  cloudSpeed: 1.2,
+  cloudAlpha: 0.5,
+  /** 먼 건물 아래쪽 안개: 이 y부터 건물 선까지 점점 짙게 */
+  fogFromY: 62,
+  fogMaxAlpha: 0.6,
+  /** 오두막 앞 바닥에 쏟아지는 따뜻한 빛 (깊이, 양옆으로 퍼지는 폭, 단계) */
+  hutSpillDepth: 38,
+  hutSpillSpread: 18,
+  hutSpillAlpha: 0.24,
+  spillSteps: 8,
+  /** 가로등 아래 빛 웅덩이 */
+  lampPoolRadiusX: 40,
+  lampPoolRadiusY: 12,
+  lampPoolAlpha: 0.3,
+  /** 큰 트리 둘레 바닥 금빛 */
+  treePoolRadiusX: 120,
+  treePoolRadiusY: 34,
+  treePoolAlpha: 0.26,
+  /** 트리 자체의 빛 번짐 (세로로 긴 타원) */
+  treeHaloRadiusX: 80,
+  treeHaloRadiusY: 100,
+  treeHaloAlpha: 0.09,
+  hutHaloAlpha: 0.14,
+  hutHaloRise: 26,
+  lampHaloRadius: 22,
+  lampHaloAlpha: 0.2,
+  clockHaloRadius: 20,
+  clockHaloAlpha: 0.22,
+  rinkHazeAlpha: 0.1,
+  /** 바닥: 앞쪽(아래)으로 갈수록 밤 그늘, 연석 위 쌓인 눈 */
+  frontShadeFromY: 200,
+  frontShadeAlpha: 0.3,
+  curbSnowMin: 2,
+  curbSnowMax: 5,
+  /** 화면 가장자리 어둡게: 이 비율 밖부터, 가장 짙을 때 */
+  vignetteStart: 0.62,
+  vignetteAlpha: 0.42,
+  vignetteSteps: 5,
+} as const;
+
+export const LIGHTING_COLORS = {
+  moon: '#f6f1dc',
+  moonShade: '#d9d3c0',
+  moonHalo: '#c9d4ff',
+  cloud: '#232a5a',
+  fog: '#333c72',
+  warm: '#ffb14a',
+  gold: '#ffd27a',
+  shade: '#070a1e',
+  snow: '#e8eef8',
+  snowShade: '#b9c4dc',
+  rinkHaze: '#9fd0ff',
+  vignette: '#04061a',
+} as const;
+
 // ───────────── 소리 ─────────────
 
 /** 기준음 A4 (Hz), 미디 번호 */
@@ -615,10 +850,51 @@ export const MUSIC_BOX = {
   ],
 } as const;
 
+/** 스케이트장 소리: 날이 얼음을 스치는 소리(걸러 낸 잡음), 가끔 작은 웃음 같은 짧은 음 */
+export const RINK_SOUND = {
+  maxVolume: 0.13,
+  /** 링크 울타리에서 이 거리 안이면 최대, farDistance 밖은 안 들린다 */
+  nearDistance: 30,
+  farDistance: 300,
+  panDistance: 260,
+  smoothing: 0.15,
+  lookahead: 0.3,
+  scheduleIntervalMs: 100,
+  /** 사사삭: 한 번에 몇 번 긁고, 긁는 사이 간격, 다음 묶음까지 */
+  minStrokes: 1,
+  maxStrokes: 3,
+  strokeGap: 0.09,
+  minGap: 0.35,
+  maxGap: 1.1,
+  strokeAttack: 0.03,
+  minStrokeLength: 0.16,
+  maxStrokeLength: 0.32,
+  minFilterHz: 3500,
+  maxFilterHz: 6500,
+  filterQ: 0.9,
+  strokeGain: 0.9,
+  noiseSeconds: 1,
+  /** 웃음: 몇 초마다, 몇 번 끊어서, 한 마디 길이·사이, 높이 */
+  laughMinGap: 9,
+  laughMaxGap: 22,
+  laughMinPulses: 3,
+  laughMaxPulses: 4,
+  laughPulseLength: 0.07,
+  laughPulseGap: 0.06,
+  laughMinHz: 480,
+  laughMaxHz: 640,
+  /** 마디마다 낮아지는 비율, 한 마디 안에서 떨어지는 비율 */
+  laughStepDown: 0.94,
+  laughDroop: 0.85,
+  laughFormantHz: 1400,
+  laughFormantQ: 1.2,
+  laughGain: 0.35,
+} as const;
+
 /** ?sprites=1 확인 화면 */
 export const SPRITE_SHEET = {
   scale: 4,
-  columns: 6,
+  columns: 8,
   padding: 8,
   labelHeight: 14,
   titleHeight: 20,
@@ -639,7 +915,6 @@ export const COLORS = {
   nightSky: '#141a3a',
   bulbGold: '#ffc857',
   carouselGold: '#d9a93c',
-  rinkIce: '#8fd3f0',
   shadow: '#0a0d20',
   breath: '#ffffff',
   sheetBackground: '#141a3a',
@@ -679,6 +954,7 @@ export const CHARACTER_BASE_PALETTE: Readonly<Record<string, string>> = {
   l: '#2d2a45', // 뒷다리
   F: '#7a4a33', // 앞 부츠
   f: '#5e3825', // 뒤 부츠
+  K: '#c9d4ea', // 스케이트 날
 };
 
 /** 바꿔 끼우는 옷 색 (O/o = 코트, M/m = 목도리·장갑) */

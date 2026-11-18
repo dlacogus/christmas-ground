@@ -68,23 +68,52 @@ export const TREE_BED_DEPTH = 16;
 /** 트리는 광장 안쪽에 선다: 바닥 띠 윗선에서 이만큼 앞 (뒤로도 지나갈 수 있음) */
 export const TREE_BED_SETBACK = 86;
 
-/** 링크는 구역 왼쪽(광장 쪽)으로 붙이고, 입구도 광장 쪽 끝에 둔다 */
-export const RINK_FENCE_START_X = 970;
-export const RINK_FENCE_END_X = 1300;
-export const RINK_FENCE_DEPTH = 90;
-/** 울타리 왼쪽 끝에서 입구까지 */
+/** 얼음 링크: 울타리 선을 감싸는 상자 (모서리는 둥글게 그린다). 나중에 직접 탈 수 있게 구역 대부분을 쓴다.
+ *  뒤로는 가로등이 서는 좁은 길, 앞으로는 입구 앞을 지나는 길을 남긴다 */
+export const RINK_LEFT = 975;
+export const RINK_RIGHT = 1398;
+/** 바닥 띠 윗선에서 뒤 울타리까지 */
+export const RINK_SETBACK = 20;
+export const RINK_DEPTH = 104;
+/** 울타리 왼쪽 끝에서 입구(닫힌 문) 가운데까지 — 둥근 모서리를 지나 곧은 부분에 */
 export const RINK_GATE_OFFSET = 60;
 
-/** 마켓 노점 (뒤쪽): 메인 광장 트리 양옆 2곳 + 회전목마 구역 2곳. roof = 지붕 색 */
-export const STALLS = [
-  { x: 580, roof: 'red' },
-  { x: 860, roof: 'red' },
-  { x: 80, roof: 'navy' },
-  { x: 150, roof: 'navy' },
+/** 스케이트장 오른쪽 끝을 막는 전나무 줄 (이 x부터 못 들어간다) */
+export const RINK_FIR_LINE_X = 1404;
+export const RINK_FIRS = [
+  { x: 1430, y: 124, h: 36 },
+  { x: 1412, y: 138, h: 28 },
+  { x: 1428, y: 156, h: 40 },
+  { x: 1414, y: 176, h: 30 },
+  { x: 1432, y: 194, h: 38 },
+  { x: 1412, y: 214, h: 32 },
+  { x: 1430, y: 234, h: 36 },
+  { x: 1414, y: 254, h: 28 },
+  { x: 1434, y: 264, h: 26 },
 ] as const;
-export const STALL_WIDTH = 64;
-/** 노점 오두막이 바닥 띠를 차지하는 깊이 */
-export const STALL_BACK_DEPTH = 30;
+
+export type HutKind = 'gable' | 'longhouse' | 'kiosk' | 'pavilion';
+
+/**
+ * 마켓 오두막: 돌바닥이 끝나는 뒤쪽 끝, 연석 바로 뒤(STREET_LINE_Y)에 늘어선다 (x = 가운데, w = 폭, wall = 벽 높이).
+ * 걷는 바닥을 차지하지 않으므로 장애물이 없다. 크기도 종류도 제각각. 스케이트장 뒤에는 세우지 않는다.
+ */
+export const HUTS: readonly { x: number; w: number; kind: HutKind; wall: number }[] = [
+  { x: 61, w: 30, kind: 'kiosk', wall: 34 },
+  { x: 111, w: 58, kind: 'gable', wall: 27 },
+  { x: 166, w: 40, kind: 'pavilion', wall: 26 },
+  { x: 257, w: 86, kind: 'longhouse', wall: 25 },
+  { x: 339, w: 62, kind: 'gable', wall: 31 },
+  { x: 401, w: 46, kind: 'pavilion', wall: 29 },
+  { x: 467, w: 70, kind: 'longhouse', wall: 27 },
+  { x: 553, w: 66, kind: 'gable', wall: 30 },
+  { x: 611, w: 34, kind: 'kiosk', wall: 36 },
+  { x: 686, w: 100, kind: 'longhouse', wall: 24 },
+  { x: 768, w: 48, kind: 'pavilion', wall: 30 },
+  { x: 828, w: 56, kind: 'gable', wall: 26 },
+  { x: 880, w: 32, kind: 'kiosk', wall: 32 },
+  { x: 921, w: 42, kind: 'pavilion', wall: 27 },
+];
 
 /** 가로등: 구역마다 뒤쪽(등 하나)·앞쪽(등 둘). y는 발밑 */
 export const LAMPS = [
@@ -94,6 +123,9 @@ export const LAMPS = [
   { x: 840, y: 252, heads: 2 },
   { x: 196, y: 126, heads: 1 },
   { x: 196, y: 252, heads: 2 },
+  { x: 1110, y: 126, heads: 1 },
+  { x: 1270, y: 126, heads: 1 },
+  { x: 992, y: 252, heads: 2 },
 ] as const;
 /** 가로등 받침이 바닥을 차지하는 크기 */
 export const LAMP_FOOT_HALF_WIDTH = 3;
@@ -133,13 +165,6 @@ export const OBSTACLES: readonly Obstacle[] = [
     w: TREE_BED_HALF_WIDTH * 2,
     h: TREE_BED_DEPTH,
   },
-  ...STALLS.map((s, i) => ({
-    id: `stall-${i + 1}`,
-    x: s.x - STALL_WIDTH / 2,
-    y: WALK_AREA.y,
-    w: STALL_WIDTH,
-    h: STALL_BACK_DEPTH,
-  })),
   ...LAMPS.map((lamp, i) => ({
     id: `lamp-${i + 1}`,
     x: lamp.x - LAMP_FOOT_HALF_WIDTH,
@@ -148,11 +173,18 @@ export const OBSTACLES: readonly Obstacle[] = [
     h: LAMP_FOOT_DEPTH,
   })),
   {
-    id: 'rink-fence',
-    x: RINK_FENCE_START_X,
+    id: 'rink',
+    x: RINK_LEFT,
+    y: WALK_AREA.y + RINK_SETBACK,
+    w: RINK_RIGHT - RINK_LEFT,
+    h: RINK_DEPTH,
+  },
+  {
+    id: 'rink-firs',
+    x: RINK_FIR_LINE_X,
     y: WALK_AREA.y,
-    w: RINK_FENCE_END_X - RINK_FENCE_START_X,
-    h: RINK_FENCE_DEPTH,
+    w: WALK_AREA.x + WALK_AREA.w - RINK_FIR_LINE_X,
+    h: WALK_AREA.h,
   },
 ];
 
@@ -181,14 +213,9 @@ export const INTERACTION_POINTS: readonly InteractionPoint[] = [
   },
   {
     id: 'RINK_GATE',
-    x: RINK_FENCE_START_X + RINK_GATE_OFFSET,
-    y: WALK_AREA.y + RINK_FENCE_DEPTH + INTERACTION_FRONT_GAP,
+    x: RINK_LEFT + RINK_GATE_OFFSET,
+    y: WALK_AREA.y + RINK_SETBACK + RINK_DEPTH + INTERACTION_FRONT_GAP,
   },
-  ...STALLS.map((s, i) => ({
-    id: `STALL_${i + 1}`,
-    x: s.x,
-    y: WALK_AREA.y + STALL_BACK_DEPTH + INTERACTION_FRONT_GAP,
-  })),
 ];
 
 /** 연석 윗줄 = 건물들이 서 있는 선 (바닥 띠 바로 위 연석만큼) */

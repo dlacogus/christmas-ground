@@ -3,12 +3,12 @@
 // 글자 → 색은 constants.ts의 CHARACTER_BASE_PALETTE와 옷 색(OUTFITS)이 정한다.
 //   O/o = 코트(바꿔 끼움), M/m = 목도리·장갑(바꿔 끼움), u = 단추
 //   P/p = 방울, H/h = 털모자, b = 모자 띠, R = 머리, S/s = 피부, C = 볼, E = 눈
-//   L/l = 앞/뒷다리, F/f = 앞/뒤 부츠
+//   L/l = 앞/뒷다리, F/f = 앞/뒤 부츠, K = 스케이트 날
 
 import { CHARACTER } from '../constants';
 
 export type Facing = 'left' | 'right';
-export type PoseName = 'idle' | 'walk';
+export type PoseName = 'idle' | 'walk' | 'glide';
 
 const TRANSPARENT = '.';
 
@@ -75,6 +75,26 @@ const LEGS_PASS: readonly string[] = [
   '........FFFF....',
 ];
 
+/** 스케이트 미끄럼: 뒷발을 뒤로 뻗고 앞발 날로 미끄러진다 (발을 구르지 않는다) */
+const LEGS_GLIDE_REACH: readonly string[] = [
+  '.....lll.LLL....',
+  '....lll..LLL....',
+  '..llll...LLL....',
+  'ffff.....FFFF...',
+  'KKKK.....FFFF...',
+  '.........KKKKK..',
+];
+
+/** 스케이트 미끄럼: 두 발을 모으고 무릎을 살짝 굽힌다 */
+const LEGS_GLIDE_TUCK: readonly string[] = [
+  '.....lllLLL.....',
+  '.....lllLLL.....',
+  '.....lllLLL.....',
+  '.....ffffLLL....',
+  '.....ffffFFFF...',
+  '....KKKKKKKKKK..',
+];
+
 const LEGS_TOP_ROW = CHARACTER.spriteHeight - LEGS_STAND.length;
 
 /** 앞다리·뒷다리 색을 맞바꾼다 (반대쪽 발이 앞에 나온 프레임) */
@@ -119,6 +139,8 @@ export const POSES: Readonly<Record<PoseName, readonly string[][]>> = {
     compose(swapLegs(LEGS_CONTACT), 1, 0),
     compose(swapLegs(LEGS_PASS), 0, 0),
   ],
+  // 스케이트 미끄럼 2프레임: 뒷발 뻗기 → 모으며 살짝 웅크림
+  glide: [compose(LEGS_GLIDE_REACH, 0, 0), compose(LEGS_GLIDE_TUCK, 1, 0)],
 };
 
 export function mirrorRows(rows: readonly string[]): string[] {
@@ -128,6 +150,7 @@ export function mirrorRows(rows: readonly string[]): string[] {
 const mirrored: Record<PoseName, string[][]> = {
   idle: POSES.idle.map(mirrorRows),
   walk: POSES.walk.map(mirrorRows),
+  glide: POSES.glide.map(mirrorRows),
 };
 
 export function getFrame(pose: PoseName, index: number, facing: Facing): readonly string[] {

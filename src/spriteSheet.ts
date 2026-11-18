@@ -2,7 +2,7 @@
 
 import { getSpriteCanvas } from './character/render';
 import { POSES, type Facing, type PoseName } from './character/sprites';
-import { CHARACTER, COLORS, DEFAULT_OUTFIT, OUTFITS, SPRITE_SHEET, type OutfitName } from './constants';
+import { CHARACTER, COLORS, DEFAULT_OUTFIT, OUTFITS, SKATERS, SPRITE_SHEET, type OutfitName } from './constants';
 import { fitCanvasToWindow, frameDt } from './screen';
 
 interface Cell {
@@ -10,7 +10,7 @@ interface Cell {
   sprite(time: number): HTMLCanvasElement;
 }
 
-const POSE_LABELS: Record<PoseName, string> = { idle: '서기', walk: '걷기' };
+const POSE_LABELS: Record<PoseName, string> = { idle: '서기', walk: '걷기', glide: '미끄럼' };
 const FACING_LABELS: Record<Facing, string> = { right: '→', left: '←' };
 
 function poseCells(facing: Facing): Cell[] {
@@ -45,6 +45,7 @@ export function startSpriteSheet(canvas: HTMLCanvasElement): void {
       ...outfitCells,
       animatedCell('idle', CHARACTER.idleFrameDuration, DEFAULT_OUTFIT),
       animatedCell('walk', CHARACTER.walkFrameDuration, DEFAULT_OUTFIT),
+      animatedCell('glide', SKATERS.glideFrameDuration, SKATERS.list[0].outfit),
     ],
   ];
 

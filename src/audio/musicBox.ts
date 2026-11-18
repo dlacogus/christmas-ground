@@ -2,14 +2,12 @@
 
 import { MUSIC_BOX as M } from '../constants';
 import type { Point } from '../world';
+import { falloffVolume } from './falloff';
 import { parseSong, type NoteEvent } from './melody';
 
 /** 거리에 따른 음량 (가까우면 maxVolume, farDistance 밖은 0) */
 export function musicBoxVolume(distance: number): number {
-  if (distance <= M.nearDistance) return M.maxVolume;
-  if (distance >= M.farDistance) return 0;
-  const f = 1 - (distance - M.nearDistance) / (M.farDistance - M.nearDistance);
-  return M.maxVolume * f * f;
+  return falloffVolume(distance, M.nearDistance, M.farDistance, M.maxVolume);
 }
 
 /** 소리 위치 좌우 (-1 왼쪽 ~ 1 오른쪽): 소리 나는 곳이 듣는 사람 기준 어디인가 */

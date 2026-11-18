@@ -39,6 +39,12 @@ export function sortByDepth<T extends { footY: number }>(items: readonly T[]): T
 }
 
 /** zones의 시설과 actors(캐릭터 등)를 본 레이어에서 함께 y 정렬한다 */
+/** 하늘을 지나가는 것 (산타 썰매 등): 월드 좌표로 움직이고 시설(트리 등)보다 앞에 그린다 */
+export interface SkyFlyer {
+  update(dt: number): void;
+  draw(ctx: CanvasRenderingContext2D, offsetX: number): void;
+}
+
 /** 바닥에 납작하게 남는 자국 (발자국 등): 바닥 바로 위, 바닥 불빛 아래에 그린다 */
 export interface FloorMarks {
   draw(ctx: CanvasRenderingContext2D, offsetX: number): void;
@@ -49,6 +55,7 @@ export function createLayers(
   actors: readonly DepthDrawable[],
   seed = SCENERY_SEED,
   floorMarks: readonly FloorMarks[] = [],
+  skyFlyers: readonly SkyFlyer[] = [],
 ): Layer[] {
   const f = LAYER_FACTORS;
   const sky = createSky(createRng(seed));
@@ -108,6 +115,9 @@ export function createLayers(
     {
       name: 'main',
       factor: f.main,
+      update: (dt) => {
+        for (const flyer of skyFlyers) flyer.update(dt);
+      },
       draw: (ctx, camera) => {
         ground.draw(ctx, layerOffsetX(camera, f.main));
         for (const marks of floorMarks) marks.draw(ctx, layerOffsetX(camera, f.main));
@@ -117,6 +127,7 @@ export function createLayers(
         for (const zone of visible) zone.draw(ctx, camera);
         const drawables = sortByDepth([...visible.flatMap((z) => z.props), ...actors]);
         for (const d of drawables) d.draw(ctx, camera);
+        for (const flyer of skyFlyers) flyer.draw(ctx, layerOffsetX(camera, f.main));
         light.drawBloom(ctx, layerOffsetX(camera, f.main));
       },
     },

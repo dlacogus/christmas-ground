@@ -2,13 +2,14 @@ import { createCamera, layerOffsetX, snapCamera, updateCamera, type Camera } fro
 import { createCharacter, setWalkTarget } from './character/character';
 import { drawCharacter } from './character/render';
 import type { CharacterState } from './character/state';
-import { CAROUSEL, FOOTPRINTS, HINT, LAYER_FACTORS, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
+import { CAROUSEL, FOOTPRINTS, HINT, LAYER_FACTORS, SANTA, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
 import { createFpsMeter, drawDebugOverlay } from './debug';
 import { createInput } from './input';
 import { createLayers, drawLayers, updateLayers } from './layers';
 import { warmBuffers } from './scenery/buffer';
 import { createFootprints } from './scenery/footprints';
 import { isSnowAt } from './scenery/ground';
+import { createSanta } from './scenery/santa';
 import { fitCanvasToWindow, frameDt } from './screen';
 import { createAmbience } from './audio/ambience';
 import { advanceStepTimer, createFootsteps, createStepTimer } from './audio/footsteps';
@@ -108,7 +109,14 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   let lastX = character.x;
   let lastY = character.y;
   let walked = 0;
-  const layers = createLayers(zones, [characterDrawable], SCENERY_SEED, [footprints]);
+  // 5분에 한 번 트리 위를 지나가는 산타 썰매
+  const santa = createSanta();
+  if (debug) {
+    window.addEventListener('keydown', (e) => {
+      if (e.code === SANTA.debugKey) santa.fly();
+    });
+  }
+  const layers = createLayers(zones, [characterDrawable], SCENERY_SEED, [footprints], [santa]);
 
   const fpsMeter = createFpsMeter();
   // 화면 밖 구역의 그림도 틈틈이 미리 그려 둔다 (처음 들어설 때 멈칫하지 않게)
@@ -157,7 +165,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
 
     drawLayers(ctx, camera, layers);
     drawSoundButton(ctx, sound.started && !sound.muted);
-    if (debug) drawDebugOverlay(ctx, camera, character, zones, fps, [describeState(character.state.get()), 'B: friend']);
+    if (debug) drawDebugOverlay(ctx, camera, character, zones, fps, [describeState(character.state.get()), 'B: friend  N: santa']);
 
     const h = play.hint(touch);
     if (!h) hint.show(null);

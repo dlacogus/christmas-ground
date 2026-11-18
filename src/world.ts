@@ -70,13 +70,22 @@ export const FIRS = [
   { x: 32, y: 262, h: 24 },
 ] as const;
 
+/** 회전목마 왼쪽 빈 눈밭에 쓴 글씨 "Merry Christmas": 가운데 x, 첫 줄 기준선 y */
+export const SNOW_WRITING_AT = { centerX: 116, firstBaselineY: 152 } as const;
+
 /** 벤치 (발밑 가운데) */
 export const BENCHES = [
-  { x: 80, y: 238 },
-  { x: 150, y: 238 },
+  { x: 84, y: 238 },
+  { x: 152, y: 238 },
 ] as const;
-export const BENCH_HALF_WIDTH = 10;
-export const BENCH_DEPTH = 3;
+/** 두 사람이 나란히 앉을 수 있는 폭 (36px) */
+export const BENCH_HALF_WIDTH = 18;
+export const BENCH_DEPTH = 4;
+
+/** 메인 광장 이정표 (기둥 발밑). 위 판은 왼쪽 회전목마, 아래 판은 오른쪽 아이스링크를 가리킨다 */
+export const SIGNPOST: Point = { x: 542, y: 216 };
+export const SIGNPOST_FOOT_HALF_WIDTH = 3;
+export const SIGNPOST_FOOT_DEPTH = 3;
 
 export const TREE_X = 720;
 /** 낮은 원형 화단 (발밑 기준 사각형 = 타원 화단을 감싸는 상자) */
@@ -177,6 +186,13 @@ export const OBSTACLES: readonly Obstacle[] = [
     h: CAROUSEL_GATE.stepsDepth,
   })),
   { id: 'firs', x: WALK_AREA.x, y: WALK_AREA.y, w: FIR_LINE_X - WALK_AREA.x, h: WALK_AREA.h },
+  {
+    id: 'signpost',
+    x: SIGNPOST.x - SIGNPOST_FOOT_HALF_WIDTH,
+    y: SIGNPOST.y - SIGNPOST_FOOT_DEPTH,
+    w: SIGNPOST_FOOT_HALF_WIDTH * 2,
+    h: SIGNPOST_FOOT_DEPTH,
+  },
   ...BENCHES.map((b, i) => ({
     id: `bench-${i + 1}`,
     x: b.x - BENCH_HALF_WIDTH,

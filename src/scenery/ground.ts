@@ -4,6 +4,7 @@ import { GROUND, GROUND_COLORS as G, SCENERY_SEED, SCREEN_HEIGHT } from '../cons
 import { createRng, pick, randInt, type Rng } from '../random';
 import { MAP_WIDTH, STREET_LINE_Y, WALK_AREA } from '../world';
 import { drawSlice, lazyBuffer } from './buffer';
+import { paintSnowWriting } from './snowWriting';
 
 export interface SlabRow {
   y: number;
@@ -186,6 +187,8 @@ function paintGround(ctx: CanvasRenderingContext2D, width: number, slabs: readon
 
   // 판석 위에 쌓인 눈
   paintSnowCover(ctx, walkTop);
+  // 눈 위에 쓴 글씨
+  paintSnowWriting(ctx, top);
 
   // 아래쪽 눈둑
   ctx.fillStyle = G.snowShade;

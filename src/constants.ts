@@ -79,6 +79,47 @@ export const SKY = {
   ditherRows: 3,
 } as const;
 
+/** 5분에 한 번 하늘을 가로질러 트리 위를 지나가는 산타 썰매 */
+export const SANTA = {
+  /** 들어와서 처음 나타날 때까지, 그 뒤로는 이 간격마다 (초) — 5분에 한 번 */
+  firstDelay: 60,
+  interval: 300,
+  /** 나는 빠르기 (px/초). 맵 오른쪽 끝에서 왼쪽 끝까지 */
+  speed: 60,
+  /** 평소 나는 높이(썰매 위쪽 y)와 트리 꼭대기 별 위를 지날 때 높이, 트리 앞뒤로 솟아오르는 구간 폭 */
+  cruiseY: 34,
+  overTreeY: 0,
+  treeRiseWidth: 150,
+  bobHeight: 1,
+  bobPeriod: 2.2,
+  /** 다리를 번갈아 움직이는 간격 */
+  gallopSeconds: 0.18,
+  /** 루돌프끼리, 루돌프와 썰매 사이 간격 */
+  harnessGap: 3,
+  /** 뒤로 흩날리는 금빛 가루 */
+  sparkleEvery: 0.05,
+  sparkleLife: 1.1,
+  sparkleFall: 5,
+  /** 개발용(?debug=1): 이 키를 누르면 바로 날아온다 */
+  debugKey: 'KeyN',
+} as const;
+
+export const SANTA_COLORS = {
+  antler: '#d9b77a',
+  fur: '#9a6438',
+  furDark: '#6a4222',
+  eye: '#1a1210',
+  nose: '#ff4a3a',
+  white: '#f6f8ff',
+  suit: '#e23b3b',
+  skin: '#f2c9a0',
+  sack: '#3f8a5a',
+  sleigh: '#b8262f',
+  gold: '#f0c24a',
+  reins: '#6a4222',
+  sparkle: '#ffe9a8',
+} as const;
+
 export const STARS = {
   minCount: 40,
   maxCount: 60,
@@ -251,6 +292,35 @@ export const GROUND_COLORS = {
   snowCover: '#d2dbee',
   snowCoverLight: '#e2e9f6',
   snowCoverEdge: '#a3afcc',
+} as const;
+
+/** 눈 위에 흘림체로 쓴 글씨 (위치는 world.ts의 SNOW_WRITING_AT) */
+export const SNOW_WRITING = {
+  lines: ['Merry', 'Christmas'],
+  /** 소문자 높이 (px). 대문자와 위로 뻗는 획은 그 두 배 */
+  scale: 15,
+  /** 바닥에 누운 글씨라 세로로 납작하다 */
+  flatten: 0.62,
+  /** 오른쪽으로 기운 정도 */
+  slant: 0.28,
+  lineGap: 37,
+  /** 획 굵기, 곡선을 잇는 촘촘함 */
+  thickness: 2,
+  curveSteps: 14,
+  /** 글씨 둘레를 고른 눈으로 덮는 폭 */
+  snowPadX: 5,
+  snowPadY: 4,
+  /** 마지막 낱말 아래 밑줄 장식: 마지막 글자가 끝난 자리에서 그대로 이어져 아래로 휘감는다. [낱말 폭 대비 x, 기준선 아래 px] */
+  flourish: [
+    [1.0, -1], [1.05, 0], [1.08, 4], [1.0, 9], [0.7, 9], [0.3, 11], [0.04, 10], [-0.04, 7], [0.03, 5], [0.14, 8], [0.3, 12],
+  ],
+} as const;
+
+export const SNOW_WRITING_COLORS = {
+  snow: '#d2dbee',
+  groove: '#a3b0cf',
+  grooveDeep: '#8493b8',
+  rim: '#eef3fb',
 } as const;
 
 /** 눈 위에 남는 발자국 */
@@ -780,11 +850,13 @@ export const CAROUSEL_COLORS = {
 
 /** 나무 벤치 (위에 눈 살짝) */
 export const BENCH = {
-  seatAbove: 7,
+  seatAbove: 9,
   seatThickness: 2,
-  backTopAbove: 13,
-  backSlats: 2,
-  legInset: 1,
+  backTopAbove: 18,
+  backSlats: 3,
+  legInset: 2,
+  /** 양 끝 팔걸이가 앉는 판 위로 올라온 높이 */
+  armAbove: 4,
   snowChance: 0.6,
 } as const;
 
@@ -793,6 +865,46 @@ export const BENCH_COLORS = {
   woodDark: '#6a4529',
   iron: '#17171f',
   snow: '#e8eef8',
+} as const;
+
+/** 나무 이정표 (위치는 world.ts의 SIGNPOST). 캐릭터 키(32)보다 조금 큰 아담한 크기 */
+export const SIGNPOST = {
+  /** 기둥 키·굵기, 꼭대기 눈 모자 높이 */
+  height: 44,
+  postWidth: 3,
+  snowCap: 3,
+  /** 위에서부터 판 순서대로: 글자와 화살표 방향 */
+  boards: [
+    { text: '회전목마', direction: 'left' },
+    { text: '아이스링크', direction: 'right' },
+  ],
+  boardHeight: 11,
+  /** 기둥 꼭대기에서 첫 판까지, 판 사이 간격 */
+  firstBoardBelowTop: 5,
+  boardGap: 3,
+  /** 글자 양옆 여백, 글자 사이, 화살촉 길이 */
+  paddingX: 3,
+  letterGap: 1,
+  tipLength: 5,
+  /** 화살촉 반대쪽 끝이 기둥 가운데를 지나 나온 길이 */
+  tailPastPost: 7,
+} as const;
+
+export const SIGNPOST_COLORS = {
+  post: '#4a2f1c',
+  postLight: '#63402a',
+  postShade: '#321f12',
+  /** 짙은 원목 판, 크림색 글씨 */
+  board: '#5e3d24',
+  boardLight: '#7d5433',
+  boardShade: '#3c2515',
+  text: '#f3e3bd',
+  nail: '#d9b25a',
+  snow: '#e8eef8',
+  /** 기둥 꼭대기 호랑가시 장식 */
+  holly: '#2f7a52',
+  hollyDark: '#1f5a3c',
+  berry: '#d23a3a',
 } as const;
 
 /** 구역 끝을 막는 작은 전나무 */

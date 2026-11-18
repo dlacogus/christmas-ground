@@ -113,7 +113,7 @@ export function createSession(deps: SessionDeps): Session {
     if (net.status !== 'online') return;
     thing.synced = true;
     if (thing.kind === 'ball') net.send({ t: 'put', id: thing.netId, kind: 'ball', data: ballData(thing) });
-    else net.send({ t: 'put', id: thing.netId, kind: 'snowman', data: { x: thing.x, y: thing.y, tiers: thing.tiers, seed: thing.seed, owner: thing.owner, makers: thing.makers, props: thing.props, hat: thing.hat, headless: thing.headless } });
+    else net.send({ t: 'put', id: thing.netId, kind: 'snowman', data: { x: thing.x, y: thing.y, tiers: thing.tiers, seed: thing.seed, owner: thing.owner, makers: thing.makers, props: thing.props, hat: thing.hat, headless: thing.headless, born: thing.born } });
   };
   let lastBallSent = 0;
 
@@ -127,7 +127,7 @@ export function createSession(deps: SessionDeps): Session {
     for (let k = snowWorld.snowmen.length - 1; k >= 0; k--) if (snowWorld.snowmen[k].synced) snowWorld.snowmen.splice(k, 1);
     for (const o of message.objects) {
       if (o.kind === 'ball') snowWorld.upsertBall(o.id, o.data, null, Math.max(0, (message.now - o.updatedAt) / 1000));
-      else snowWorld.upsertSnowman(o.id, o.data);
+      else snowWorld.upsertSnowman(o.id, { ...o.data, born: o.data.born ?? o.updatedAt });
     }
     for (const r of message.rolling) snowWorld.upsertBall(r.id, { ...r, owner: r.owner }, r.owner).holders = [r.owner];
     for (const thing of [...snowWorld.balls, ...snowWorld.snowmen]) {
@@ -286,7 +286,7 @@ export function createSession(deps: SessionDeps): Session {
         else {
           const old = snowWorld.findNet(message.object.id);
           const before = old && old.kind === 'snowman' ? old.props.map((a) => `${a.p}:${a.by}`) : [];
-          const snowman = snowWorld.upsertSnowman(message.object.id, message.object.data);
+          const snowman = snowWorld.upsertSnowman(message.object.id, { ...message.object.data, born: message.object.data.born ?? message.object.updatedAt });
           // 누가 소품을 달아줬다: 만든 사람이 아닌 친구가 달았으면 '♥ 닉네임'
           for (const a of snowman.props) {
             if (before.includes(`${a.p}:${a.by}`)) continue;
@@ -322,6 +322,8 @@ export function createSession(deps: SessionDeps): Session {
   /** 마지막으로 키·터치 입력이 있던 때 */
   let lastInput = seconds();
   const net = createNet(onMessage, onStatus);
+  // 눈사람 나이는 서버 시각으로 잰다 (모든 화면에서 같은 때 녹는다)
+  snowWorld.setClock(() => net.serverNow());
 
   const enter = () => {
     if (!profile) return;

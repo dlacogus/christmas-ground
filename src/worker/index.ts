@@ -83,6 +83,14 @@ export class Plaza extends DurableObject<Env> {
     );
   }
 
+  /** 저장된 눈사람이 처음 만들어진 때 (없으면 null) */
+  private bornOf(id: string): number | null {
+    const rows = this.ctx.storage.sql.exec("SELECT data FROM objects WHERE id = ? AND kind = 'snowman' LIMIT 1", id).toArray();
+    if (rows.length === 0) return null;
+    const born = (JSON.parse(String(rows[0].data)) as { born?: unknown }).born;
+    return typeof born === 'number' ? born : null;
+  }
+
   /** 그 눈사람이 있나 (전체를 읽지 않고 한 줄만 조회한다) */
   private hasSnowman(id: string): boolean {
     return this.ctx.storage.sql.exec("SELECT 1 FROM objects WHERE id = ? AND kind = 'snowman' LIMIT 1", id).toArray().length > 0;
@@ -127,7 +135,7 @@ export class Plaza extends DurableObject<Env> {
       session.player = { id, name: message.name, scarf: message.scarf, x: 720, y: 244, f: 1, state: { kind: 'walk' }, hat: 'on' };
       ws.serializeAttachment(session);
       // 예전에 브라우저에만 저장해 둔 내 눈사람을 서버로 옮긴다
-      (message.legacy ?? []).forEach((data, i) => this.put({ id: `${id}-old${i}`, kind: 'snowman', data: { ...data, owner: id }, updatedAt: now - 1000 + i }));
+      (message.legacy ?? []).forEach((data, i) => this.put({ id: `${id}-old${i}`, kind: 'snowman', data: { ...data, owner: id, born: now }, updatedAt: now - 1000 + i }));
       const objects = this.cleanup(now);
       this.send(ws, {
         t: 'welcome',
@@ -210,6 +218,8 @@ export class Plaza extends DurableObject<Env> {
         break;
       case 'put': {
         const object = { id: message.id, kind: message.kind, data: message.data, updatedAt: now } as WireObject;
+        // 눈사람은 처음 만든 때를 서버가 적어 둔다 (나중에 소품을 달거나 머리가 떨어져도 그대로) — 10분 뒤 녹는다
+        if (object.kind === 'snowman') object.data.born = this.bornOf(object.id) ?? now;
         this.put(object);
         if (session.rolling?.id === message.id) session.rolling = null;
         // 놓였다: 잡고 있던 사람은 모두 손을 뗀 것으로

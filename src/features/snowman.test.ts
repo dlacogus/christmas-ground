@@ -481,3 +481,32 @@ describe('둘이 같이 밀기 · 이어서 굴리기', () => {
     expect(snowmanLook(s.seed, 'medium', [{ name: '산타', scarf: 1 }]).stripes).toBeNull();
   });
 });
+
+describe('눈사람은 만든 지 10분 뒤 녹는다', () => {
+  it('10분이 지나면 녹기 시작해 없어지고, 그 전에는 남아 있다', () => {
+    const world = createSnowWorld(() => 0.5);
+    let now = 1_000_000;
+    world.setClock(() => now);
+    const s = world.addSnowman(600, 240, [20, 12], 'me');
+    expect(s.born).toBe(now);
+    now += (SNOWMAN.lifeSeconds - 1) * 1000;
+    world.update(1 / 60);
+    expect(s.melt).toBeLessThan(0);
+    now += 2000;
+    world.update(1 / 60);
+    expect(s.melt).toBeGreaterThanOrEqual(0);
+    for (let t = 0; t < SNOWMAN.meltSeconds + 0.5; t += 0.1) world.update(0.1);
+    expect(world.snowmen).toHaveLength(0);
+  });
+
+  it('서버에서 받은 눈사람은 서버가 적은 만든 때를 따른다', () => {
+    const world = createSnowWorld(() => 0.5);
+    const now = 5_000_000;
+    world.setClock(() => now);
+    const old = world.upsertSnowman('a-1', { x: 600, y: 240, tiers: [20, 12], seed: 1, owner: 'a', born: now - SNOWMAN.lifeSeconds * 1000 - 1 });
+    const fresh = world.upsertSnowman('a-2', { x: 650, y: 240, tiers: [20, 12], seed: 1, owner: 'a', born: now - 1000 });
+    world.update(1 / 60);
+    expect(old.melt).toBeGreaterThanOrEqual(0);
+    expect(fresh.melt).toBeLessThan(0);
+  });
+});

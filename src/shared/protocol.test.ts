@@ -158,13 +158,27 @@ describe('광장 서버 규칙', () => {
     expect(leavePlaza(c, 6000, sessions).dropped?.id).toBe('ball-1');
   });
 
+  it('눈사람은 만든 지 10분이 지나면 녹는다 (소품을 달아 고쳐 써도 처음 만든 때부터 센다)', () => {
+    const now = 10_000_000;
+    const life = SNOWMAN.lifeSeconds * 1000;
+    expect(SNOWMAN.lifeSeconds).toBe(600);
+    const snowman = (id: string, bornAgo: number, updatedAgo: number): WireObject => ({ id, kind: 'snowman', data: { x: 1, y: 1, tiers: [10, 5], seed: 0, owner: 'a', born: now - bornAgo }, updatedAt: now - updatedAgo });
+    expect(expiredObjects([snowman('young', life - 1000, life - 1000)], now)).toEqual([]);
+    expect(expiredObjects([snowman('old', life + 1000, life + 1000)], now)).toEqual(['old']);
+    // 방금 소품을 달았어도 (updatedAt이 새로워도) 만든 지 10분이 넘었으면 녹는다
+    expect(expiredObjects([snowman('decorated', life + 1000, 5)], now)).toEqual(['decorated']);
+    // born이 없는 예전 눈사람은 마지막으로 고친 때부터 센다
+    const legacy: WireObject = { id: 'legacy', kind: 'snowman', data: { x: 1, y: 1, tiers: [10, 5], seed: 0, owner: 'a' }, updatedAt: now - life - 1 };
+    expect(expiredObjects([legacy], now)).toEqual(['legacy']);
+  });
+
   it('녹는 시간 정리: 5분 넘게 놓아둔 눈덩이, 12개를 넘는 오래된 눈사람', () => {
     const now = 10_000_000;
     const ball = (id: string, age: number): WireObject => ({ id, kind: 'ball', data: { x: 1, y: 1, d: 5, roll: 0, seed: 0, owner: 'a' }, updatedAt: now - age * 1000 });
     const snowman = (id: string, age: number): WireObject => ({ id, kind: 'snowman', data: { x: 1, y: 1, tiers: [10, 5], seed: 0, owner: 'a' }, updatedAt: now - age * 1000 });
     expect(expiredObjects([ball('fresh', 10), ball('old', SNOWBALL.idleSeconds + 1)], now)).toEqual(['old']);
-    // 눈사람은 시간이 지나도 남는다 (12개까지)
-    const twelve = Array.from({ length: SNOWMAN.maxCount }, (_, i) => snowman(`s${i}`, 100000 - i));
+    // 눈사람은 10분 안에서는 남는다 (12개까지)
+    const twelve = Array.from({ length: SNOWMAN.maxCount }, (_, i) => snowman(`s${i}`, 500 - i));
     expect(expiredObjects(twelve, now)).toEqual([]);
     // 넘으면 가장 오래된 것부터
     expect(expiredObjects([...twelve, snowman('new1', 5), snowman('new2', 1)], now)).toEqual(['s0', 's1']);

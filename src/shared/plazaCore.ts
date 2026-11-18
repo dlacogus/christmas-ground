@@ -115,14 +115,22 @@ export function leavePlaza(
 
 /**
  * 녹아 없어질 것들의 id. 타이머 없이, 누군가 들어오거나 뭔가를 놓을 때 updatedAt을 보고 정리한다:
- * 놓아둔 지 5분 넘은 눈덩이, 12개를 넘는 오래된 눈사람.
+ * 놓아둔 지 5분 넘은 눈덩이, 만든 지 10분 넘은 눈사람, 12개를 넘는 오래된 눈사람.
  */
 export function expiredObjects(objects: readonly WireObject[], now: number): string[] {
   const gone: string[] = [];
   for (const o of objects) {
     if (o.kind === 'ball' && now - o.updatedAt > SNOWBALL.idleSeconds * 1000) gone.push(o.id);
   }
-  const snowmen = objects.filter((o) => o.kind === 'snowman').sort((a, b) => a.updatedAt - b.updatedAt);
+  // 눈사람: 처음 만든 때(born)부터 10분. 소품을 달아 updatedAt이 바뀌어도 born은 그대로다
+  const bornAt = (o: WireObject) => (o.kind === 'snowman' && typeof o.data.born === 'number' ? o.data.born : o.updatedAt);
+  const snowmen: WireObject[] = [];
+  for (const o of objects) {
+    if (o.kind !== 'snowman') continue;
+    if (now - bornAt(o) > SNOWMAN.lifeSeconds * 1000) gone.push(o.id);
+    else snowmen.push(o);
+  }
+  snowmen.sort((a, b) => bornAt(a) - bornAt(b));
   for (let i = 0; i < snowmen.length - SNOWMAN.maxCount; i++) gone.push(snowmen[i].id);
   return gone;
 }

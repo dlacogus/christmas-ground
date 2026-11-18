@@ -732,6 +732,8 @@ export const SNOWMAN = {
   cheerSeconds: 0.9,
   peekSeconds: 1.1,
   shrugSeconds: 0.7,
+  /** 눈사람은 만든 지 이만큼 지나면 녹아 없어진다 (소품을 달거나 머리가 떨어져도 처음 만든 때부터 센다) */
+  lifeSeconds: 600,
   /** 광장 전체 눈사람 수 상한. 넘으면 가장 오래된 것이 meltSeconds에 걸쳐 녹는다 */
   maxCount: 12,
   meltSeconds: 10,

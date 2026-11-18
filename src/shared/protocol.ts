@@ -94,6 +94,8 @@ export interface SnowmanData {
   hat?: SnowmanHat | null;
   /** 머리가 떨어져 몸통만 남았다 (한 단만 남을 수도 있다) */
   headless?: boolean;
+  /** 처음 만든 때 (서버 시각, ms). 서버가 적는다 — 10분 뒤 녹는다 */
+  born?: number;
 }
 
 export type WireObject =
@@ -253,6 +255,7 @@ export function validSnowman(v: unknown): v is SnowmanData {
     inMap(s.x, s.y) &&
     Array.isArray(s.tiers) &&
     (s.headless === undefined || typeof s.headless === 'boolean') &&
+    (s.born === undefined || isNum(s.born)) &&
     s.tiers.length >= (s.headless === true ? 1 : 2) &&
     s.tiers.length <= SNOWMAN.maxTiers &&
     s.tiers.every(isSize) &&

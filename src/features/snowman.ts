@@ -190,6 +190,8 @@ export interface Snowman {
   hat: SnowmanHat | null;
   /** 머리가 떨어져 몸통만 남았다 */
   headless: boolean;
+  /** 처음 만든 때 (서버 시각, ms) — lifeSeconds가 지나면 녹는다 */
+  born: number;
   /** 머리를 맞은 횟수와 마지막으로 맞은 때 (초) — 30초 지나면 0부터 */
   hits: number;
   hitAt: number;
@@ -252,9 +254,12 @@ export interface SavedSnowman {
   props?: AttachedProp[];
   hat?: SnowmanHat | null;
   headless?: boolean;
+  born?: number;
 }
 
 export interface SnowWorld {
+  /** 눈사람 나이를 재는 시계를 바꿔 끼운다 (서버 시각) */
+  setClock(now: () => number): void;
   readonly balls: Ball[];
   readonly snowmen: Snowman[];
   addBall(x: number, y: number, d: number, owner: string, roll?: number): Ball;
@@ -285,6 +290,8 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
   const snowmen: Snowman[] = [];
   let nextId = 1;
   let order = 0;
+  /** 지금 시각 (ms). 서버에 붙으면 서버 시각으로 바꿔 끼운다 — 모두 같은 때 녹게 */
+  let clock: () => number = Date.now;
   /** 이 접속에서 만든 것들의 id 앞머리 (다른 사람 것과 겹치지 않게) */
   const prefix = Math.floor(random() * 0xffffff).toString(36) + Date.now().toString(36).slice(-4);
 
@@ -300,13 +307,16 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
       balls.push(ball);
       return ball;
     },
+    setClock(now) {
+      clock = now;
+    },
     removeBall(ball) {
       const i = balls.indexOf(ball);
       if (i >= 0) balls.splice(i, 1);
     },
     addSnowman(x, y, tiers, owner, seed = Math.floor(random() * 1e6)) {
       const id = nextId++;
-      const snowman: Snowman = { kind: 'snowman', id, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0, netId: `${prefix}-${id}`, synced: false, makers: [], props: [], hat: null, headless: false, hits: 0, hitAt: -999 };
+      const snowman: Snowman = { kind: 'snowman', id, x, y, tiers, seed, owner, order: order++, melt: -1, wobble: 0, capped: false, age: 0, netId: `${prefix}-${id}`, synced: false, makers: [], props: [], hat: null, headless: false, hits: 0, hitAt: -999, born: clock() };
       snowmen.push(snowman);
       // 상한을 넘으면 (아직 안 녹는 것 가운데) 가장 오래된 것부터 녹는다
       const standing = snowmen.filter((s) => s.melt < 0);
@@ -335,6 +345,8 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
         const s = snowmen[k];
         s.age += dt;
         s.wobble = Math.max(0, s.wobble - dt);
+        // 만든 지 10분이 지나면 녹기 시작한다
+        if (s.melt < 0 && clock() - s.born > M.lifeSeconds * 1000) s.melt = 0;
         if (s.melt < 0) continue;
         s.melt += dt / M.meltSeconds;
         if (s.melt >= 1) snowmen.splice(k, 1);
@@ -391,6 +403,7 @@ export function createSnowWorld(random: () => number = Math.random): SnowWorld {
       if (data.props) snowman.props = data.props.map((a) => ({ ...a }));
       snowman.hat = data.hat ? { ...data.hat } : null;
       snowman.headless = data.headless === true;
+      if (typeof data.born === 'number') snowman.born = data.born;
       return snowman;
     },
     removeNet(netId) {

@@ -7,6 +7,7 @@ import {
   foliageHalfWidth,
   generateLights,
   generateOrnaments,
+  generateSnowflakes,
   lightLevel,
   starBox,
   starLevel,
@@ -17,20 +18,32 @@ import {
 describe('큰 트리 모양', () => {
   const tiers = treeTiers();
 
-  it('잎 단 5~6개, 아래로 갈수록 넓어진다', () => {
-    expect(tiers.length).toBeGreaterThanOrEqual(5);
-    expect(tiers.length).toBeLessThanOrEqual(6);
+  it('잎 단이 8개 이상 빽빽이 겹치고, 아래로 갈수록 넓어진다', () => {
+    expect(tiers.length).toBeGreaterThanOrEqual(8);
+    for (let i = 1; i < tiers.length; i++) expect(tiers[i].top).toBeLessThan(tiers[i - 1].bottom);
     for (let i = 1; i < tiers.length; i++) expect(tiers[i].bottomHalf).toBeGreaterThan(tiers[i - 1].bottomHalf);
   });
 
-  it('높이 약 200px(화면의 3/4), 맨 아래 폭 약 130px', () => {
+  it('높이 약 200px(화면의 3/4), 맨 아래 폭 약 176px로 풍성하다', () => {
     const star = starBox();
     const bed = getObstacle('tree-bed');
     const total = bed.y + bed.h - star.top;
     expect(total).toBeGreaterThanOrEqual(190);
     expect(total).toBeLessThanOrEqual(215);
     expect(total / SCREEN_HEIGHT).toBeGreaterThan(0.7);
-    expect(tiers.at(-1)!.bottomHalf * 2).toBe(130);
+    expect(tiers.at(-1)!.bottomHalf * 2).toBe(176);
+  });
+
+  it('꼭대기부터 아래까지 한 줄기 원뿔로 매끈하게 넓어진다 (어깨가 튀어나오지 않는다)', () => {
+    let prev = 0;
+    for (let y = TREE.tipY; y <= TREE.foliageBottomY; y++) {
+      const half = foliageHalfWidth(y);
+      // 단이 끝나는 자리에서만 가지 끝만큼 살짝 들어간다
+      expect(half).toBeGreaterThanOrEqual(prev - 6);
+      expect(half - prev).toBeLessThanOrEqual(4);
+      prev = half;
+    }
+    expect(foliageHalfWidth(TREE.tipY + 10)).toBeLessThanOrEqual(8);
   });
 
   it('꼭대기 별이 화면 위로 잘리지 않는다', () => {
@@ -42,7 +55,7 @@ describe('큰 트리 모양', () => {
 });
 
 describe('트리 장식', () => {
-  it('장식볼 30~40개가 잎 안에 서로 떨어져 흩어진다 (시드 고정)', () => {
+  it('장식볼 50~60여 개가 잎 안에 서로 떨어져 흩어진다 (시드 고정)', () => {
     const a = generateOrnaments(createRng(5));
     expect(a).toEqual(generateOrnaments(createRng(5)));
     expect(a.length).toBeGreaterThanOrEqual(TREE.ornamentMinCount);
@@ -60,10 +73,11 @@ describe('트리 장식', () => {
     expect(new Set(a.map((o) => o.colorIndex)).size).toBe(3);
   });
 
-  it('전구 60~80개가 잎 안에 있고 각자 다른 박자로 반짝인다', () => {
+  it('꼬마전구 200개 넘게 잎 안에 있고 각자 다른 박자로 반짝인다', () => {
     const lights = generateLights(createRng(5));
     expect(lights.length).toBeGreaterThanOrEqual(TREE.lightMinCount);
     expect(lights.length).toBeLessThanOrEqual(TREE.lightMaxCount);
+    expect(lights.length).toBeGreaterThan(200);
     for (const l of lights) expect(Math.abs(l.x - TREE_X)).toBeLessThanOrEqual(foliageHalfWidth(l.y));
     expect(new Set(lights.map((l) => l.period.toFixed(3))).size).toBeGreaterThan(lights.length * 0.9);
     // 물결이 없을 때는 은은하게
@@ -71,6 +85,16 @@ describe('트리 장식', () => {
       const level = lightLevel(l, 1);
       expect(level).toBeGreaterThanOrEqual(TREE.lightMinAlpha);
       expect(level).toBeLessThanOrEqual(TREE.lightMaxAlpha);
+    }
+  });
+
+  it('눈꽃 장식은 잎 안에서 장식볼과 떨어져 있다', () => {
+    const balls = generateOrnaments(createRng(5));
+    const flakes = generateSnowflakes(createRng(6), balls);
+    expect(flakes.length).toBeGreaterThan(TREE.snowflakeCount / 2);
+    for (const f of flakes) {
+      expect(Math.abs(f.x - TREE_X)).toBeLessThanOrEqual(foliageHalfWidth(f.y));
+      for (const o of balls) expect(Math.hypot(o.x - f.x, o.y - f.y)).toBeGreaterThanOrEqual(TREE.snowflakeGap);
     }
   });
 

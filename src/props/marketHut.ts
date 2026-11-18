@@ -5,7 +5,7 @@
 // 오두막은 한 번 그려 두고 전구 반짝임만 매 프레임 그린다.
 
 import { layerOffsetX, type Camera } from '../camera';
-import { LAYER_FACTORS, MARKET_HUT as M, MARKET_HUT_COLORS as C } from '../constants';
+import { LAYER_FACTORS, MARKET_HUT as M, MARKET_HUT_COLORS as C, SCREEN_WIDTH } from '../constants';
 import { createRng, pick, randInt, randRange, type Rng } from '../random';
 import { lazyBuffer } from '../scenery/buffer';
 import { HUTS, STREET_LINE_Y, inZone, type HutKind, type ZoneName } from '../world';
@@ -353,6 +353,7 @@ export function createMarketHut(spec: HutSpec, rng: Rng): MarketHut {
     },
     draw(ctx: CanvasRenderingContext2D, camera: Camera) {
       const left = Math.round(spec.x - spec.w / 2) - pad - layerOffsetX(camera, LAYER_FACTORS.main);
+      if (left + bufW < 0 || left > SCREEN_WIDTH) return;
       const top = bottom - bufH;
       ctx.drawImage(getBuffer().canvas, left, top);
       ctx.save();

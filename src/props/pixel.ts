@@ -64,3 +64,15 @@ export function stampPixels(
     });
   });
 }
+
+const BAYER = [
+  [0, 8, 2, 10],
+  [12, 4, 14, 6],
+  [3, 11, 1, 9],
+  [15, 7, 13, 5],
+];
+
+/** 점묘: v(0~1)가 클수록 더 많은 칸이 켜진다 */
+export function dither(x: number, y: number, v: number): boolean {
+  return v > (BAYER[y & 3][x & 3] + 0.5) / 16;
+}

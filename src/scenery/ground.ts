@@ -3,7 +3,7 @@
 import { GROUND, GROUND_COLORS as G, SCREEN_HEIGHT } from '../constants';
 import { pick, randInt, type Rng } from '../random';
 import { STREET_LINE_Y, WALK_AREA } from '../world';
-import { lazyBuffer } from './buffer';
+import { drawSlice, lazyBuffer } from './buffer';
 
 export interface SlabRow {
   y: number;
@@ -126,7 +126,7 @@ export function createGround(rng: Rng, width: number) {
     slabs,
     drifts,
     draw(ctx: CanvasRenderingContext2D, offsetX: number) {
-      ctx.drawImage(getBuffer().canvas, -offsetX, STREET_LINE_Y);
+      drawSlice(ctx, getBuffer().canvas, offsetX, STREET_LINE_Y);
     },
   };
 }

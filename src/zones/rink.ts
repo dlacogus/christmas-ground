@@ -3,7 +3,7 @@
 // 링크는 장애물이라 들어갈 수 없다 — 입구 문은 닫혀 있고 앞에 RINK_GATE 자리만 있다.
 
 import type { Camera } from '../camera';
-import { LAMP_COLORS, REFLECTION, SCENERY_SEED, SKATERS } from '../constants';
+import { LAMP_COLORS, SCENERY_SEED, SKATERS, STREET_LAMP } from '../constants';
 import { createFirTree } from '../props/firTree';
 import { createIceRink, rinkBounds, type IceLight } from '../props/iceRink';
 import { createRinkLights } from '../props/rinkLights';
@@ -26,15 +26,17 @@ export function createRinkZone(): Zone {
   const lamps = lampSpecs.map(createStreetLamp);
   const firs = RINK_FIRS.map(createFirTree);
 
-  // 링크 뒤에 선 가로등만 얼음에 비친다 (앞에 선 것은 얼음 너머가 아니다)
+  // 얼음에는 링크 뒤에 선 가로등만 비친다 (전구 줄은 비추지 않는다. 앞에 선 가로등은 뒤집힌 상이 얼음 밖에 생긴다).
+  // 상은 가로등 발밑을 기준으로 뒤집힌 자리에 맺힌다
   const lampLights: IceLight[] = lampSpecs
     .filter((l) => l.y <= b.top)
     .flatMap((l) =>
       lanternCenters(l).map((c) => ({
         x: l.x + c.dx,
-        top: b.top + REFLECTION.topGap,
-        length: REFLECTION.lampLength,
-        width: REFLECTION.lampWidth,
+        footY: l.y,
+        sourceY: c.y,
+        poleX: l.x,
+        poleTopY: l.y - STREET_LAMP.height,
         color: LAMP_COLORS.glow,
         level: 1,
       })),
@@ -52,7 +54,8 @@ export function createRinkZone(): Zone {
       for (const s of skaters) s.update(dt);
     },
     draw(ctx: CanvasRenderingContext2D, camera: Camera) {
-      rink.drawIce(ctx, camera, [...lampLights, ...lights.iceLights()]);
+      rink.drawIce(ctx, camera, lampLights);
+      for (const s of skaters) s.drawReflection(ctx, camera);
       for (const s of skaters) s.drawTrail(ctx, camera);
     },
   };

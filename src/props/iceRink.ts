@@ -1,18 +1,20 @@
 // 얼음 링크: 옆에서 본 모서리 둥근 사각형. 얼음(바닥에 납작), 뒤 울타리, 앞 울타리(스케이터보다 앞)로 나눠 그린다.
-// 얼음 위에는 주변 불빛이 세로로 길게, 반 밝기로 일렁이며 비친다.
+// 얼음은 거울처럼 링크 뒤 가로등을 비춘다: 발밑을 기준으로 뒤집힌 자리에 등 불빛이 세로로 길게 맺히고,
+// 표면의 잔 흠집 때문에 둘레로 옅은 빛이 알갱이처럼 흩어진다. 뒤집힌 기둥은 아주 옅고 흐리게만 비친다.
+// 단단한 얼음판이라 물처럼 흔들리지 않는다.
 // 앞 울타리 입구는 닫힌 문 + '준비 중' 자물쇠 그림 팻말.
 
 import { layerOffsetX, type Camera } from '../camera';
-import { LAYER_FACTORS, REFLECTION as F, RINK as K, RINK_COLORS as C } from '../constants';
+import { LAYER_FACTORS, REFLECTION as F, RINK as K, RINK_COLORS as C, SCREEN_WIDTH } from '../constants';
 import { createRng, randRange, type Rng } from '../random';
 import { lazyBuffer } from '../scenery/buffer';
 import { RINK_GATE_OFFSET, getObstacle } from '../world';
 import type { DepthDrawable } from '../zones/zone';
-import { mixColor, stampPixels } from './pixel';
+import { dither, mixColor, stampPixels } from './pixel';
 
 // ───────────── 모양 (순수) ─────────────
 
-export function rinkBounds() {
+const BOUNDS = (() => {
   const o = getObstacle('rink');
   return {
     left: o.x,
@@ -22,17 +24,28 @@ export function rinkBounds() {
     centerX: o.x + o.w / 2,
     midY: Math.round(o.y + o.h / 2),
   };
+})();
+
+export function rinkBounds() {
+  return BOUNDS;
 }
 
-/** 열 x에서 뒤 울타리 y와 앞 울타리 y (모서리에서는 둥글게 안으로 들어온다). 링크 밖이면 null */
-export function rinkEdgeAt(x: number): { top: number; bottom: number } | null {
-  const b = rinkBounds();
-  if (x < b.left || x >= b.right) return null;
+function computeEdge(x: number): { top: number; bottom: number } {
+  const b = BOUNDS;
   const fromSide = Math.min(x - b.left, b.right - 1 - x);
   if (fromSide >= K.cornerRadiusX) return { top: b.top, bottom: b.bottom - 1 };
   const a = 1 - fromSide / K.cornerRadiusX;
   const k = Math.round(K.cornerRadiusY * (1 - Math.sqrt(1 - a * a)));
   return { top: b.top + k, bottom: b.bottom - 1 - k };
+}
+
+/** 열마다 울타리 선을 미리 계산해 둔다 (비침을 그릴 때 매 프레임 수천 번 묻는다) */
+const EDGES = Array.from({ length: BOUNDS.right - BOUNDS.left }, (_, i) => computeEdge(BOUNDS.left + i));
+
+/** 열 x에서 뒤 울타리 y와 앞 울타리 y (모서리에서는 둥글게 안으로 들어온다). 링크 밖이면 null */
+export function rinkEdgeAt(x: number): { top: number; bottom: number } | null {
+  if (x < BOUNDS.left || x >= BOUNDS.right) return null;
+  return EDGES[Math.floor(x) - BOUNDS.left];
 }
 
 /** (x, y)가 얼음 위인가 (울타리 선 안쪽) */
@@ -47,18 +60,100 @@ export function gateSpan(): { left: number; right: number } {
   return { left: center - K.gateWidth / 2, right: center + K.gateWidth / 2 };
 }
 
-/** 비친 색: 원래 색의 반 밝기 */
-export function reflectionColor(color: string): string {
-  return mixColor(color, '#000000', F.dim);
+/** 거울 자리: 발밑(footY)을 기준으로 위아래를 뒤집은 y. 발밑 위로 높이 있는 것일수록 얼음 앞쪽(아래)에 비친다 */
+export function mirrorY(footY: number, sourceY: number): number {
+  return footY + (footY - sourceY);
 }
 
-/** 얼음에 비치는 불빛 하나 */
+/** 빛의 심: 거울 자리에서 가장 밝고, 옆으로는 좁게·세로로는 길게 옅어진다 (dy 음수 = 위·먼 쪽) */
+export function coreAlpha(dx: number, dy: number): number {
+  const sigmaY = dy < 0 ? F.sigmaUp : F.sigmaDown;
+  return F.alpha * Math.exp(-((dx / F.coreSigmaX) ** 2) - (dy / sigmaY) ** 2);
+}
+
+/** 심 둘레로 흩어진 빛: 훨씬 옅고 넓게, 세로로도 조금 더 길게 */
+export function haloAlpha(dx: number, dy: number): number {
+  const sigmaY = (dy < 0 ? F.sigmaUp : F.sigmaDown) * F.haloStretch;
+  return F.haloAlpha * Math.exp(-((dx / F.haloSigmaX) ** 2) - (dy / sigmaY) ** 2);
+}
+
+/** 비친 빛 한 칸의 진하기 (심 + 흩어진 빛) */
+export function streakAlpha(dx: number, dy: number): number {
+  return Math.min(1, coreAlpha(dx, dy) + haloAlpha(dx, dy));
+}
+
+/** 줄마다 늘 같은 0~1 값 (얼음 흠집이 비친 빛을 가로로 끊는 자리) */
+function scratchAt(row: number): number {
+  return (((Math.imul(row + 17, 2654435761) >>> 0) % 1000) / 1000) ** 2;
+}
+
+/**
+ * 부드러운 진하기를 몇 단계로 끊고 점묘로 섞어 칸을 찍는다 — 가장자리가 매끈한 띠가 아니라 알갱이처럼 흩어진다.
+ */
+function paintScattered(ctx: CanvasRenderingContext2D, x: number, y: number, alpha: number): void {
+  const level = alpha * F.steps;
+  const step = Math.floor(level) + (dither(x, y, level - Math.floor(level)) ? 1 : 0);
+  if (step <= 0) return;
+  ctx.globalAlpha = Math.min(1, step / F.steps);
+  ctx.fillRect(x, y, 1, 1);
+}
+
+const spriteCache = new Map<string, HTMLCanvasElement>();
+
+function cachedSprite(key: string, width: number, height: number, paint: (ctx: CanvasRenderingContext2D) => void): HTMLCanvasElement {
+  const cached = spriteCache.get(key);
+  if (cached) return cached;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  paint(canvas.getContext('2d')!);
+  spriteCache.set(key, canvas);
+  return canvas;
+}
+
+/** 거울 자리에 맺힌 등 불빛 (가운데 = (reachSide, reachUp)). 흩어진 빛을 먼저, 그 위에 흰빛 섞인 심 */
+function streakSprite(color: string): HTMLCanvasElement {
+  return cachedSprite(`streak|${color}`, F.reachSide * 2 + 1, F.reachUp + F.reachDown + 1, (ctx) => {
+    const core = mixColor(color, F.white, F.coreWhite);
+    for (let row = 0; row <= F.reachUp + F.reachDown; row++) {
+      const dy = row - F.reachUp;
+      // 흠집이 지나는 줄은 빛이 덜 비친다
+      const scratch = 1 - F.scratchBreak * scratchAt(row);
+      for (let x = 0; x <= F.reachSide * 2; x++) {
+        const dx = x - F.reachSide;
+        ctx.fillStyle = color;
+        paintScattered(ctx, x, row, haloAlpha(dx, dy) * scratch);
+        ctx.fillStyle = core;
+        paintScattered(ctx, x, row, coreAlpha(dx, dy) * scratch);
+      }
+    }
+  });
+}
+
+/** 가로등 불빛이 가까운 얼음에 직접 떨어져 번진 빛 (가운데 = (poolReachSide, 0), 아래쪽 절반만) */
+function poolSprite(color: string): HTMLCanvasElement {
+  return cachedSprite(`pool|${color}`, F.poolReachSide * 2 + 1, F.poolReachDown, (ctx) => {
+    ctx.fillStyle = color;
+    for (let row = 0; row < F.poolReachDown; row++) {
+      for (let x = 0; x <= F.poolReachSide * 2; x++) {
+        const dx = x - F.poolReachSide;
+        paintScattered(ctx, x, row, F.poolAlpha * Math.exp(-((dx / F.poolSigmaX) ** 2) - (row / F.poolSigmaY) ** 2));
+      }
+    }
+  });
+}
+
+/** 얼음에 비치는 불빛 하나 (기둥 위에 달린 등) */
 export interface IceLight {
+  /** 등 가운데 x */
   x: number;
-  /** 비침이 시작하는 y (뒤 울타리 아래) */
-  top: number;
-  length: number;
-  width: number;
+  /** 기둥이 땅에 닿은 발밑 y — 거울 뒤집기의 기준 */
+  footY: number;
+  /** 등 가운데 y (화면에서) */
+  sourceY: number;
+  /** 기둥 x와 기둥 꼭대기 y (뒤집혀 어둡게 비친다) */
+  poleX: number;
+  poleTopY: number;
   color: string;
   /** 0~1 지금 밝기 */
   level: number;
@@ -244,22 +339,45 @@ export function createIceRink(seed: number): IceRink {
   }
   let time = 0;
 
+  /** 얼음 밖으로 나가는 부분을 잘라 내고 찍는다 (얼음 가장자리는 열마다 다르지만 불빛이 좁아 가운데 열 기준으로 자른다) */
+  const drawCropped = (ctx: CanvasRenderingContext2D, sprite: HTMLCanvasElement, left: number, spriteTop: number, iceTop: number, iceBottom: number) => {
+    const top = Math.max(spriteTop, iceTop);
+    const height = Math.min(spriteTop + sprite.height, iceBottom) - top;
+    if (height > 0) ctx.drawImage(sprite, 0, top - spriteTop, sprite.width, height, left, top, sprite.width, height);
+  };
+
+  /**
+   * 얼음에 비친 가로등: 발밑을 기준으로 뒤집힌 자리에 상이 생긴다.
+   * 가까운 얼음에 직접 떨어진 빛 → 뒤집힌 기둥(아주 옅고 흐리게) → 거울 자리에 세로로 길게 흩어진 등 불빛.
+   */
   const drawReflection = (ctx: CanvasRenderingContext2D, light: IceLight, ox: number) => {
-    const color = reflectionColor(light.color);
-    ctx.fillStyle = color;
-    // 한 줄 걸러 끊어진 물결 무늬로 (빈 줄 사이로 얼음이 보인다)
-    for (let r = 0; r < light.length; r += F.rowStep) {
-      const y = light.top + r;
-      // 줄마다 좌우로 살짝 흔들리고 깜빡인다
-      const sway = Math.round(Math.sin(time * F.shimmerSpeed + y * F.shimmerRowFreq + light.x * 0.37) * F.shimmerAmp);
-      const flicker = 1 - F.flickerDepth * (0.5 + 0.5 * Math.sin(time * F.flickerSpeed + y * 1.3 + light.x));
-      ctx.globalAlpha = F.alpha * light.level * flicker * (1 - r / light.length);
-      for (let w = 0; w < light.width; w++) {
-        const x = Math.round(light.x) - Math.floor(light.width / 2) + w + sway;
-        if (!onIce(x, y)) continue;
-        ctx.fillRect(x - ox, y, 1, 1);
-      }
+    const edge = rinkEdgeAt(Math.round(light.x));
+    if (!edge) return;
+    const x = Math.round(light.x) - ox;
+    // 화면 밖 불빛은 건너뛴다
+    if (x + F.poolReachSide < 0 || x - F.poolReachSide > SCREEN_WIDTH) return;
+    const iceTop = edge.top + 1;
+
+    ctx.globalAlpha = light.level;
+    drawCropped(ctx, poolSprite(light.color), x - F.poolReachSide, iceTop, iceTop, edge.bottom);
+
+    // 뒤집힌 기둥: 거친 얼음에는 가는 기둥이 또렷이 비치지 않는다. 맨 뒤에서만 옅게 보이다 앞으로 올수록 사라진다
+    const poleEnd = Math.min(mirrorY(light.footY, light.poleTopY), edge.bottom);
+    const poleX = Math.round(light.poleX) - ox;
+    ctx.fillStyle = F.pole;
+    for (let y = iceTop; y < poleEnd; y++) {
+      const t = (y - iceTop) / Math.max(1, poleEnd - iceTop);
+      const alpha = F.poleFarAlpha + (F.poleNearAlpha - F.poleFarAlpha) * t;
+      ctx.globalAlpha = alpha;
+      ctx.fillRect(poleX, y, 1, 1);
+      ctx.globalAlpha = alpha * F.poleBlur;
+      ctx.fillRect(poleX - 1, y, 1, 1);
+      ctx.fillRect(poleX + 1, y, 1, 1);
     }
+
+    // 등 불빛: 거울 자리를 가운데로, 세로로 길게 흩어진다
+    ctx.globalAlpha = light.level;
+    drawCropped(ctx, streakSprite(light.color), x - F.reachSide, Math.round(mirrorY(light.footY, light.sourceY)) - F.reachUp, iceTop, edge.bottom);
   };
 
   return {

@@ -2,7 +2,7 @@
 
 import { FOREGROUND as F, FOREGROUND_COLORS as C, SCREEN_HEIGHT } from '../constants';
 import { randInt, type Rng } from '../random';
-import { lazyBuffer } from './buffer';
+import { drawSlice, lazyBuffer } from './buffer';
 
 export interface Mound {
   /** 가운데 x */
@@ -81,7 +81,7 @@ export function createForeground(rng: Rng, width: number) {
     mounds,
     shrubs,
     draw(ctx: CanvasRenderingContext2D, offsetX: number) {
-      ctx.drawImage(getBuffer().canvas, -offsetX, SCREEN_HEIGHT - F.height);
+      drawSlice(ctx, getBuffer().canvas, offsetX, SCREEN_HEIGHT - F.height);
     },
   };
 }

@@ -1,4 +1,4 @@
-// ?debug=1 — 바닥 띠, 장애물, 상호작용 지점, 구역 경계를 겹쳐 보여주고 카메라·캐릭터 좌표를 표시한다.
+// ?debug=1 — 바닥 띠, 장애물, 상호작용 지점, 구역 경계를 겹쳐 보여주고 fps·카메라·캐릭터 좌표를 표시한다.
 
 import { layerOffsetX, type Camera } from './camera';
 import { footRect, type Character } from './character/character';
@@ -11,6 +11,7 @@ export function drawDebugOverlay(
   camera: Camera,
   character: Character,
   zones: readonly Zone[],
+  fps: number,
 ): void {
   const ox = layerOffsetX(camera, LAYER_FACTORS.main);
   const pad = DEBUG.labelOffset;
@@ -64,6 +65,7 @@ export function drawDebugOverlay(
 
   // 구석 표시
   const lines = [
+    `fps ${fps.toFixed(0)}`,
     `camera x ${camera.x.toFixed(1)}`,
     `char x ${character.x.toFixed(1)} y ${character.y.toFixed(1)}`,
   ];
@@ -77,4 +79,24 @@ export function drawDebugOverlay(
   });
 
   ctx.restore();
+}
+
+/** 최근 fpsWindow초 동안의 평균 fps */
+export function createFpsMeter() {
+  let frames = 0;
+  let elapsed = 0;
+  let fps = 0;
+  return {
+    /** seconds = 이번 프레임에 실제로 흐른 시간 (dt 상한을 적용하지 않은 값) */
+    tick(seconds: number): number {
+      frames++;
+      elapsed += seconds;
+      if (elapsed >= DEBUG.fpsWindow) {
+        fps = frames / elapsed;
+        frames = 0;
+        elapsed = 0;
+      }
+      return fps;
+    },
+  };
 }

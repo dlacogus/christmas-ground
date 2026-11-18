@@ -3,25 +3,16 @@
 // 움직이지 않는 것은 한 번 그려 두고 찍어 쓴다. 빛은 '더하기(lighter)'로 얹어 바닥과 벽이 실제로 밝아진다.
 
 import { CLOCK_TOWER, LIGHTING as L, LIGHTING_COLORS as C, SCREEN_HEIGHT, SCREEN_WIDTH, TREE } from '../constants';
+import { carouselGeometry } from '../props/carousel';
 import { hutRoofHeight } from '../props/marketHut';
-import { fillPixelCircle, fillPixelEllipse } from '../props/pixel';
+import { dither, fillPixelCircle, fillPixelEllipse } from '../props/pixel';
 import { lanternCenters } from '../props/streetLamp';
 import { randInt, randRange, type Rng } from '../random';
-import { HUTS, LAMPS, MAP_WIDTH, STREET_LINE_Y, TREE_X, WALK_AREA, getObstacle } from '../world';
-import { lazyBuffer } from './buffer';
+import { CAROUSEL_X, HUTS, LAMPS, MAP_WIDTH, STREET_LINE_Y, TREE_X, WALK_AREA, getObstacle } from '../world';
+import { drawSlice, lazyBuffer } from './buffer';
 import { clockTowerGeometry } from './clockTower';
 
-const BAYER = [
-  [0, 8, 2, 10],
-  [12, 4, 14, 6],
-  [3, 11, 1, 9],
-  [15, 7, 13, 5],
-];
-
-/** 점묘: v(0~1)가 클수록 더 많은 칸이 켜진다 */
-export function dither(x: number, y: number, v: number): boolean {
-  return v > (BAYER[y & 3][x & 3] + 0.5) / 16;
-}
+export { dither };
 
 /** 가운데가 진하고 바깥으로 계단처럼 옅어지는 타원 */
 function softEllipse(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, alpha: number, color: string): void {
@@ -152,6 +143,9 @@ export function createGroundLight(rng: Rng) {
     for (const hut of HUTS) softEllipse(ctx, hut.x, WALK_AREA.y, hut.w / 2 + L.hutSpillSpread, L.hutSpillDepth, L.hutSpillAlpha, C.warm);
     for (const lamp of LAMPS) softEllipse(ctx, lamp.x, lamp.y, L.lampPoolRadiusX, L.lampPoolRadiusY, L.lampPoolAlpha, C.warm);
     softEllipse(ctx, TREE_X, bed.y + bed.h / 2, L.treePoolRadiusX, L.treePoolRadiusY, L.treePoolAlpha, C.gold);
+    softEllipse(ctx, CAROUSEL_X, carouselGeometry().rimBottom, L.carouselPoolRadiusX, L.carouselPoolRadiusY, L.carouselPoolAlpha, C.gold);
+    // 링크 전구 줄 빛이 앞쪽 바닥에 번진다
+    softEllipse(ctx, rink.x + rink.w / 2, rink.y + rink.h + 4, rink.w / 2, L.rinkSpillRadiusY, L.rinkSpillAlpha, C.rinkHaze);
     ctx.restore();
   });
 
@@ -166,22 +160,24 @@ export function createGroundLight(rng: Rng) {
       for (const c of lanternCenters(lamp)) softEllipse(ctx, lamp.x + c.dx, c.y, L.lampHaloRadius, L.lampHaloRadius, L.lampHaloAlpha, C.warm);
     }
     softEllipse(ctx, rink.x + rink.w / 2, rink.y - 40, rink.w / 2, 46, L.rinkHazeAlpha, C.rinkHaze);
+    const carousel = carouselGeometry();
+    softEllipse(ctx, CAROUSEL_X, (carousel.apexY + carousel.platformY) / 2, L.carouselHaloRadiusX, L.carouselHaloRadiusY, L.carouselHaloAlpha, C.gold);
   });
 
   return {
     /** 바닥 바로 위 (시설보다 먼저) */
     drawGround(ctx: CanvasRenderingContext2D, offsetX: number) {
-      ctx.drawImage(getShade().canvas, -offsetX, 0);
+      drawSlice(ctx, getShade().canvas, offsetX);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.drawImage(getLight().canvas, -offsetX, 0);
+      drawSlice(ctx, getLight().canvas, offsetX);
       ctx.restore();
     },
     /** 시설을 다 그린 뒤 */
     drawBloom(ctx: CanvasRenderingContext2D, offsetX: number) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.drawImage(getBloom().canvas, -offsetX, 0);
+      drawSlice(ctx, getBloom().canvas, offsetX);
       ctx.restore();
     },
   };

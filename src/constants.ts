@@ -8,6 +8,9 @@ export const SCREEN_HEIGHT = 270;
 /** 최소 확대 배율 */
 export const MIN_SCALE = 1;
 
+/** 미리 그려 두는 버퍼: 시작 뒤 이만큼 기다렸다가, 한 번에 몇 개씩, 이 간격으로 */
+export const WARM_BUFFERS = { delayMs: 300, perStep: 2, stepMs: 30 } as const;
+
 /** 프레임 간 dt 상한 (초) — 탭 전환 후 큰 점프 방지 */
 export const MAX_FRAME_DT = 0.1;
 
@@ -289,19 +292,30 @@ export const TREE = {
   tipY: 18,
   /** 잎 맨 아래 y */
   foliageBottomY: 198,
-  /** 맨 아래 잎 단의 반폭 (폭 약 130px) */
-  baseHalfWidth: 65,
-  tiers: 6,
+  /** 맨 아래 잎 단의 반폭 (폭 약 176px — 풍성하게) */
+  baseHalfWidth: 88,
+  /** 잎 단이 많고 서로 깊이 겹쳐 빽빽해 보인다 */
+  tiers: 9,
   /** 윗단이 아랫단을 덮는 줄 수 */
-  tierOverlap: 10,
-  /** 각 단 윗변 폭 / 아랫변 폭 */
-  tierTopRatio: 0.45,
+  tierOverlap: 13,
+  /** 각 단 윗변 폭 / 그 높이에서의 원뿔 폭 */
+  tierTopRatio: 0.85,
   /** 바깥쪽 밝은 초록 테두리 두께 */
   edgeWidth: 2,
   /** 단 아래 그늘 줄 수 */
-  shadowRows: 2,
+  shadowRows: 4,
+  /** 단 아래쪽 가지 끝이 밝게 빛나는 줄 수, 그중 맨 끝 가장 밝은 줄 수 */
+  tipRows: 6,
+  tipBrightRows: 2,
+  /** 잎 결: 밝은 점·어두운 점이 섞이는 비율 (%) */
+  fleckLight: 14,
+  fleckDark: 12,
+  /** 옆 테두리가 줄마다 들쭉날쭉한 정도 (px) */
+  sideJag: [0, 1, 2, 1, 0, 2, 1, 0, 1, 2, 0, 1],
+  /** 가지 끝에 얹힌 눈 비율 (%) */
+  tipSnowChance: 38,
   /** 단 아래 테두리 들쭉날쭉 패턴 (열마다 아래로 더 내려가는 px) */
-  jagPattern: [0, 1, 2, 1, 0, 0, 1, 2, 2, 1, 0, 1],
+  jagPattern: [0, 1, 3, 4, 5, 5, 4, 2, 1, 0, 0, 2, 3, 4, 3, 1],
   trunkHalfWidth: 5,
   /** 별 가운데 = 잎 꼭대기에서 위로 */
   starCenterAbove: 4,
@@ -310,21 +324,20 @@ export const TREE = {
   starGlowRadius: 9,
   starGlowMinAlpha: 0.25,
   starGlowMaxAlpha: 0.6,
-  ornamentMinCount: 30,
-  ornamentMaxCount: 40,
+  ornamentMinCount: 52,
+  ornamentMaxCount: 62,
   ornamentMinGap: 9,
   /** 장식을 잎 테두리 안쪽으로 들이는 거리 */
   ornamentInset: 4,
   ornamentTopMargin: 20,
   ornamentBottomMargin: 6,
-  ornamentSizes: [3, 4],
-  ribbonThickness: 3,
-  /** 리본 기울기 (x 1px당 y) */
-  ribbonSlope: 0.45,
-  /** 리본이 트리 가운데를 지나는 y */
-  ribbonCenterYs: [72, 140],
-  lightMinCount: 60,
-  lightMaxCount: 80,
+  ornamentSizes: [3, 4, 4, 5],
+  /** 흰 눈꽃 장식 개수, 다른 장식과 띄우는 거리 */
+  snowflakeCount: 12,
+  snowflakeGap: 10,
+  /** 꼬마전구를 빽빽하게 두른다 */
+  lightMinCount: 230,
+  lightMaxCount: 270,
   lightInset: 2,
   lightTopMargin: 8,
   lightMinPeriod: 1.6,
@@ -364,7 +377,11 @@ export const TREE = {
 export const TREE_COLORS = {
   needleDark: '#1d4a34',
   needleLight: '#2f7348',
+  needleTip: '#3f8a55',
   needleShadow: '#143526',
+  needleDeep: '#0f2a1f',
+  tipSnow: '#dfe8f4',
+  snowflake: '#f4f8ff',
   trunk: '#4a3020',
   trunkShade: '#36231a',
   star: '#ffd34d',
@@ -372,9 +389,6 @@ export const TREE_COLORS = {
   starGlow: '#ffe08a',
   light: '#fff1c2',
   lightHalo: '#ffd98a',
-  ribbon: '#f1d48a',
-  ribbonLight: '#fff3cf',
-  ribbonShade: '#c9a85e',
   ornaments: [
     { base: '#e8b83a', shade: '#b8862a' }, // 금
     { base: '#d6dbe8', shade: '#9aa2b8' }, // 은
@@ -552,7 +566,8 @@ export const CAROUSEL = {
   flagHeight: 7,
   flagWavePeriod: 0.6,
   /** 주변 바닥에 번지는 불빛 */
-  floorGlowRadiusX: 190,
+  /** 구역 경계(x 480)를 넘지 않게 — 더 넓게 번지는 빛은 scenery/lighting이 맡는다 */
+  floorGlowRadiusX: 138,
   floorGlowRadiusY: 34,
   floorGlowAlpha: 0.24,
   floorGlowRings: 4,
@@ -654,26 +669,49 @@ export const RINK = {
   signRise: 5,
 } as const;
 
-/** 얼음 위 비침: 불빛이 세로로 길게, 원래 색의 반 밝기로 일렁인다 */
+/**
+ * 얼음 위 비침 (링크 뒤 가로등). 얼음판은 거울처럼 비춘다:
+ * - 비친 상은 가로등이 땅에 닿은 발밑을 기준으로 위아래가 뒤집힌 자리에 생긴다 (등이 발밑 위로 h만큼 높으면, 상은 발밑 아래로 h).
+ *   그래서 빛은 울타리 바로 밑이 아니라 얼음 한가운데쯤에 맺히고, 그 위로는 뒤집힌 기둥이 어둡게 비친다.
+ * - 얼음 표면의 잔 흠집이 상을 보는 방향(세로)으로 길게 늘이고, 빛을 사방으로 조금씩 흩는다.
+ *   그래서 밝은 심 둘레로 옅은 빛이 넓게 번지고, 가장자리는 알갱이처럼 흩어진다. 보는 사람 쪽(아래)으로 더 길게 끌린다.
+ * - 가로등 불빛은 가까운 얼음에도 직접 떨어져 울타리 밑에 은은하게 번진다.
+ * - 단단한 얼음이라 물처럼 흔들리지 않는다.
+ */
 export const REFLECTION = {
-  /** 원래 색에 섞는 검정 비율 (0.5 = 반 밝기) */
-  dim: 0.5,
-  alpha: 0.85,
-  /** 뒤 울타리에서 비침 시작까지 */
-  topGap: 3,
-  /** 전구 높이 차이를 비침 시작 위치로 옮기는 비율 (처진 줄 모양이 비친다) */
-  bulbDepthScale: 0.5,
-  bulbLength: 12,
-  lampLength: 32,
-  /** 비침을 그리는 줄 간격 (2 = 한 줄 걸러) */
-  rowStep: 2,
-  lampWidth: 3,
-  /** 일렁임: 줄마다 좌우로 흔들리는 폭과 속도 */
-  shimmerAmp: 1,
-  shimmerSpeed: 3.2,
-  shimmerRowFreq: 0.7,
-  flickerSpeed: 5,
-  flickerDepth: 0.3,
+  /** 빛의 심: 거울 자리(가장 밝은 곳)의 진하기, 옆으로 좁게 */
+  alpha: 0.7,
+  coreSigmaX: 1.4,
+  /** 심 둘레로 넓게 흩어진 빛: 진하기, 옆으로 퍼지는 거리, 세로로는 심보다 이만큼 더 길게 */
+  haloAlpha: 0.3,
+  haloSigmaX: 7,
+  haloStretch: 1.3,
+  /** 세로로 늘어나는 정도: 거울 자리에서 위(먼 쪽)·아래(보는 사람 쪽)로 옅어지는 거리 */
+  sigmaUp: 12,
+  sigmaDown: 19,
+  /** 빛을 그리는 범위 (거울 자리에서 위·아래·양옆) */
+  reachUp: 34,
+  reachDown: 52,
+  reachSide: 16,
+  /** 진하기를 이 단계로 끊고 점묘로 섞는다 — 가장자리가 알갱이처럼 흩어진다 */
+  steps: 5,
+  /** 얼음 흠집 때문에 줄마다 밝기가 끊기는 정도 (0 = 매끈, 1 = 크게 끊김) */
+  scratchBreak: 0.35,
+  /** 가운데에 섞는 흰빛 (빛의 심) */
+  coreWhite: 0.55,
+  white: '#ffffff',
+  /** 가로등 불빛이 가까운 얼음에 직접 떨어져 번지는 빛 (뒤 울타리 밑) */
+  poolAlpha: 0.26,
+  poolSigmaX: 24,
+  poolSigmaY: 9,
+  poolReachSide: 46,
+  poolReachDown: 22,
+  /** 뒤집혀 비친 기둥: 아주 옅고 가장자리가 흐리다. 얼음 맨 뒤와 등 가까이의 진하기 */
+  pole: '#1a2140',
+  poleFarAlpha: 0.13,
+  poleNearAlpha: 0.03,
+  /** 기둥 양옆으로 흐려지는 칸의 진하기 (가운데 대비) */
+  poleBlur: 0.4,
 } as const;
 
 /** 링크 양쪽 기둥 사이에 처지게 걸린 전구 줄 */
@@ -728,6 +766,9 @@ export const SKATERS = {
   trailColor: '#eef8ff',
   /** 발 뒤쪽으로 자국을 남기는 거리 */
   trailBehind: 2,
+  /** 얼음에 비친 스케이터: 발밑 아래로 뒤집혀 비치는 높이, 진하기 */
+  reflectionHeight: 16,
+  reflectionAlpha: 0.3,
 } as const;
 
 /** 링크 색 */
@@ -785,6 +826,16 @@ export const LIGHTING = {
   treeHaloAlpha: 0.09,
   hutHaloAlpha: 0.14,
   hutHaloRise: 26,
+  /** 회전목마 천막 둘레 빛 번짐, 링크 앞 바닥에 번지는 전구 빛 */
+  carouselHaloRadiusX: 150,
+  carouselHaloRadiusY: 70,
+  carouselHaloAlpha: 0.1,
+  /** 회전목마 둘레 바닥에 넓게 번지는 금빛 */
+  carouselPoolRadiusX: 190,
+  carouselPoolRadiusY: 34,
+  carouselPoolAlpha: 0.12,
+  rinkSpillRadiusY: 20,
+  rinkSpillAlpha: 0.14,
   lampHaloRadius: 22,
   lampHaloAlpha: 0.2,
   clockHaloRadius: 20,
@@ -822,11 +873,98 @@ export const LIGHTING_COLORS = {
 export const A4_FREQUENCY = 440;
 export const A4_MIDI = 69;
 
+/** 소리 전체: 기본 볼륨, 켜고 끄기 */
+export const SOUND = {
+  masterVolume: 0.4,
+  /** 켜고 끌 때 부드럽게 (초) */
+  muteFade: 0.05,
+  /** 앞으로 날 소리를 예약하는 간격 */
+  scheduleIntervalMs: 100,
+  /** 음소거 여부를 기억하는 localStorage 열쇠 */
+  storageKey: 'christmas-plaza.muted',
+  /** 켜고 끄는 키 */
+  toggleKey: 'KeyM',
+} as const;
+
+/** 오른쪽 위 스피커 버튼 */
+export const SOUND_BUTTON = {
+  margin: 4,
+  padding: 3,
+  /** 누를 수 있는 범위를 버튼 밖으로 넓히는 정도 (손가락용) */
+  hitSlop: 8,
+  back: '#0a0d20',
+  backAlpha: 0.55,
+  offAlpha: 0.6,
+  icon: '#e8eef8',
+  wave: '#ffc857',
+  cross: '#ff6b6b',
+} as const;
+
+/** 광장 전체 배경 소리 */
+export const AMBIENCE = {
+  noiseSeconds: 4,
+  murmurVolume: 0.5,
+  /** 웅성거림 층: 대역(hz, q), 세기, 느린 물결과 말소리 떨림의 빠르기 */
+  murmurLayers: [
+    { hz: 190, q: 0.7, gain: 1, swellHz: 0.06, babbleHz: 2.3 },
+    { hz: 420, q: 0.9, gain: 0.6, swellHz: 0.09, babbleHz: 3.1 },
+    { hz: 760, q: 1.1, gain: 0.3, swellHz: 0.13, babbleHz: 4.2 },
+    { hz: 1300, q: 1.4, gain: 0.1, swellHz: 0.17, babbleHz: 5.3 },
+  ],
+  /** 크기가 일렁이는 정도 (세기 대비) */
+  swellDepth: 0.35,
+  babbleDepth: 0.2,
+  /** 종: 처음 울리기까지, 그다음부터 간격 (초) — 아주 가끔 */
+  bellFirstMinDelay: 25,
+  bellFirstMaxDelay: 50,
+  bellMinGap: 70,
+  bellMaxGap: 150,
+  bellMinStrokes: 1,
+  bellMaxStrokes: 3,
+  bellStrokeGap: 1.8,
+  bellLead: 0.1,
+  bellMinHz: 330,
+  bellMaxHz: 440,
+  bellVolume: 0.22,
+  bellAttack: 0.01,
+  bellLength: 7,
+  /** 멀리서 들리듯 높은 음을 깎는다 */
+  bellLowpassHz: 1500,
+  /** 종 배음: 기준음 대비 비율, 세기, 사라지는 빠르기 */
+  bellPartials: [
+    { ratio: 0.5, gain: 0.5, decay: 1.8 },
+    { ratio: 1, gain: 1, decay: 1.3 },
+    { ratio: 1.19, gain: 0.5, decay: 0.9 },
+    { ratio: 1.5, gain: 0.35, decay: 0.7 },
+    { ratio: 2, gain: 0.3, decay: 0.5 },
+    { ratio: 2.51, gain: 0.15, decay: 0.3 },
+  ],
+} as const;
+
+/** 눈 밟는 발자국 */
+export const FOOTSTEPS = {
+  /** 발 디디는 간격 = 걷기 그림 두 장 */
+  interval: 0.28,
+  volume: 0.5,
+  noiseSeconds: 0.5,
+  filterQ: 1.6,
+  attack: 0.004,
+  /** 눌리는 소리, 살짝 늦게 으스러지는 소리 */
+  pressHz: 900,
+  pressLength: 0.07,
+  crunchHz: 2400,
+  crunchLength: 0.05,
+  crunchDelay: 0.03,
+  crunchLevel: 0.6,
+  pitchVariation: 0.2,
+} as const;
+
 /** 회전목마 오르골 */
 export const MUSIC_BOX = {
   /** 4분음표 빠르기 (bpm) */
   tempo: 100,
-  maxVolume: 0.16,
+  /** 전체 볼륨(SOUND.masterVolume)을 곱하기 전 크기 */
+  maxVolume: 0.4,
   /** 이 거리 안에서는 최대, farDistance 밖에서는 들리지 않는다 (px) */
   nearDistance: 70,
   farDistance: 380,
@@ -834,9 +972,8 @@ export const MUSIC_BOX = {
   panDistance: 260,
   /** 음량·좌우 변화를 부드럽게 (초) */
   smoothing: 0.15,
-  /** 미리 예약하는 시간, 예약 점검 간격 */
+  /** 미리 예약하는 시간 */
   lookahead: 0.3,
-  scheduleIntervalMs: 100,
   attack: 0.004,
   /** 소리가 남아 있는 시간 */
   noteLength: 2.2,
@@ -852,14 +989,13 @@ export const MUSIC_BOX = {
 
 /** 스케이트장 소리: 날이 얼음을 스치는 소리(걸러 낸 잡음), 가끔 작은 웃음 같은 짧은 음 */
 export const RINK_SOUND = {
-  maxVolume: 0.13,
+  maxVolume: 0.32,
   /** 링크 울타리에서 이 거리 안이면 최대, farDistance 밖은 안 들린다 */
   nearDistance: 30,
   farDistance: 300,
   panDistance: 260,
   smoothing: 0.15,
   lookahead: 0.3,
-  scheduleIntervalMs: 100,
   /** 사사삭: 한 번에 몇 번 긁고, 긁는 사이 간격, 다음 묶음까지 */
   minStrokes: 1,
   maxStrokes: 3,
@@ -903,6 +1039,8 @@ export const SPRITE_SHEET = {
 
 /** ?debug=1 겹쳐 보기 */
 export const DEBUG = {
+  /** fps를 평균 내는 시간 (초) */
+  fpsWindow: 0.5,
   font: '8px monospace',
   labelOffset: 2,
   pointSize: 3,

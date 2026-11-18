@@ -1,8 +1,8 @@
-// 메인 광장의 큰 트리.
-// 잎 단·리본·장식볼·화단·선물은 처음 한 번 그려 두고, 전구 반짝임·빛 물결·별 밝기만 매 프레임 그린다.
+// 메인 광장의 큰 트리: 빽빽이 겹친 잎 단, 늘어진 가지 끝, 꼬마전구 수백 개, 장식볼과 눈꽃 장식.
+// 잎 단·장식·화단·선물은 처음 한 번 그려 두고, 전구 반짝임·빛 물결·별 밝기만 매 프레임 그린다.
 
 import { layerOffsetX, type Camera } from '../camera';
-import { LAYER_FACTORS, TREE, TREE_COLORS as C } from '../constants';
+import { LAYER_FACTORS, SCREEN_WIDTH, TREE, TREE_COLORS as C } from '../constants';
 import { pickIndexExcept, randInt, randRange, type Rng } from '../random';
 import { lazyBuffer } from '../scenery/buffer';
 import { TREE_X, getObstacle, type Point } from '../world';
@@ -25,7 +25,8 @@ export function treeTiers(): Tier[] {
     const bottom = TREE.tipY + Math.round((height * (i + 1)) / TREE.tiers);
     const top = i === 0 ? TREE.tipY : TREE.tipY + Math.round((height * i) / TREE.tiers) - TREE.tierOverlap;
     const bottomHalf = Math.round((TREE.baseHalfWidth * (i + 1)) / TREE.tiers);
-    const topHalf = i === 0 ? 0 : Math.round(bottomHalf * TREE.tierTopRatio);
+    // 단 윗변은 그 높이의 원뿔 폭보다 살짝 좁게 — 꼭대기까지 한 줄기 원뿔로 자연스럽게 이어진다
+    const topHalf = Math.round(((TREE.baseHalfWidth * (top - TREE.tipY)) / height) * TREE.tierTopRatio);
     return { top, bottom, topHalf, bottomHalf };
   });
 }
@@ -64,7 +65,7 @@ export interface Ornament extends Point {
   colorIndex: number;
 }
 
-/** 장식볼 30~40개, 서로 너무 붙지 않게 골고루 */
+/** 장식볼 수십 개, 서로 너무 붙지 않게 골고루 */
 export function generateOrnaments(rng: Rng): Ornament[] {
   const count = randInt(rng, TREE.ornamentMinCount, TREE.ornamentMaxCount);
   const result: Ornament[] = [];
@@ -76,6 +77,17 @@ export function generateOrnaments(rng: Rng): Ornament[] {
     prevColor = colorIndex;
     const size = TREE.ornamentSizes[randInt(rng, 0, TREE.ornamentSizes.length - 1)];
     result.push({ ...p, size, colorIndex });
+  }
+  return result;
+}
+
+/** 흰 눈꽃 장식: 장식볼과도, 서로도 떨어져 있게 */
+export function generateSnowflakes(rng: Rng, ornaments: readonly Ornament[]): Point[] {
+  const result: Point[] = [];
+  for (let tries = 0; result.length < TREE.snowflakeCount && tries < TREE.snowflakeCount * 200; tries++) {
+    const p = pointInFoliage(rng, TREE.ornamentInset + 2, TREE.ornamentTopMargin, TREE.ornamentBottomMargin);
+    if ([...ornaments, ...result].some((o) => Math.hypot(o.x - p.x, o.y - p.y) < TREE.snowflakeGap)) continue;
+    result.push(p);
   }
   return result;
 }
@@ -148,49 +160,58 @@ export function starBox(): { left: number; top: number; size: number } {
 // ───────────── 미리 그리기 ─────────────
 
 /** 버퍼 왼쪽 = TREE_X - BUFFER_HALF */
-const BUFFER_HALF = TREE.baseHalfWidth + Math.max(...TREE.jagPattern) + TREE.bedRimWidth * 4;
+const BUFFER_HALF = TREE.baseHalfWidth + Math.max(...TREE.jagPattern) + Math.max(...TREE.sideJag) + TREE.bedRimWidth * 4;
+
+/** 자리마다 늘 같은 0~99 값 (잎 결을 고르게 흩뿌리는 데 쓴다) */
+function fleck(dx: number, y: number): number {
+  return ((Math.imul(dx + 977, 73856093) ^ Math.imul(y + 131, 19349663)) >>> 0) % 100;
+}
 
 function paintFoliage(ctx: CanvasRenderingContext2D, ox: number): void {
   // 아랫단부터 그리고 윗단이 그 위를 덮는다
   for (let i = TIERS.length - 1; i >= 0; i--) {
     const t = TIERS[i];
     const below = TIERS[i + 1];
-    for (let dx = -t.bottomHalf; dx <= t.bottomHalf; dx++) {
-      const colBottom = t.bottom + jagAt(dx, i);
+    const reach = t.bottomHalf + Math.max(...TREE.sideJag);
+    for (let dx = -reach; dx <= reach; dx++) {
+      const droop = jagAt(dx, i);
+      const colBottom = t.bottom + droop;
       for (let y = t.top; y <= colBottom; y++) {
-        const half = tierHalfAt(t, Math.min(y, t.bottom));
+        // 옆 테두리는 줄마다 들쭉날쭉 (가지가 삐져나온 모습)
+        const half = tierHalfAt(t, Math.min(y, t.bottom)) + TREE.sideJag[(y + i * 3) % TREE.sideJag.length];
         if (Math.abs(dx) > half) continue;
-        const edge = Math.abs(dx) > half - TREE.edgeWidth || y > colBottom - TREE.edgeWidth;
-        ctx.fillStyle = edge ? C.needleLight : C.needleDark;
+        const fromTip = colBottom - y;
+        const side = Math.abs(dx) > half - TREE.edgeWidth;
+        const f = fleck(dx, y);
+        let color: string;
+        if (fromTip < TREE.tipBrightRows) color = C.needleTip;
+        else if (fromTip < TREE.tipRows || side) color = f < TREE.fleckDark ? C.needleDark : C.needleLight;
+        else if (f < TREE.fleckLight) color = C.needleLight;
+        else if (f > 99 - TREE.fleckDark) color = C.needleShadow;
+        else color = C.needleDark;
+        ctx.fillStyle = color;
         ctx.fillRect(ox + dx, y, 1, 1);
       }
-      // 윗단 아래로 드리운 그늘 (아랫단 위에만)
+      // 늘어진 가지 끝마다 눈이 조금 얹힌다
+      if (droop === Math.max(...TREE.jagPattern) && fleck(dx, i) < TREE.tipSnowChance && Math.abs(dx) < t.bottomHalf - 2) {
+        ctx.fillStyle = C.tipSnow;
+        ctx.fillRect(ox + dx - 1, colBottom - TREE.tipRows, 3, 1);
+        ctx.fillRect(ox + dx, colBottom - TREE.tipRows - 1, 1, 1);
+      }
+      // 윗단 아래로 드리운 깊은 그늘 (아랫단 위에만)
       if (!below) continue;
-      ctx.fillStyle = C.needleShadow;
       for (let s = 1; s <= TREE.shadowRows; s++) {
         const y = colBottom + s;
-        if (Math.abs(dx) <= tierHalfAt(below, y) - TREE.edgeWidth) ctx.fillRect(ox + dx, y, 1, 1);
+        if (Math.abs(dx) > tierHalfAt(below, y) - TREE.edgeWidth) continue;
+        ctx.fillStyle = s <= TREE.shadowRows / 2 ? C.needleDeep : C.needleShadow;
+        ctx.fillRect(ox + dx, y, 1, 1);
       }
     }
   }
 }
 
-/** 대각선으로 두른 흰금색 리본 — 이미 그린 잎 위에만 (source-atop) */
-function paintRibbons(ctx: CanvasRenderingContext2D, ox: number): void {
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-atop';
-  const colors = [C.ribbonLight, C.ribbon, C.ribbonShade];
-  for (const centerY of TREE.ribbonCenterYs) {
-    for (let dx = -TREE.baseHalfWidth; dx <= TREE.baseHalfWidth; dx++) {
-      const y = Math.round(centerY + dx * TREE.ribbonSlope);
-      for (let k = 0; k < TREE.ribbonThickness; k++) {
-        ctx.fillStyle = colors[Math.min(k, colors.length - 1)];
-        ctx.fillRect(ox + dx, y + k, 1, 1);
-      }
-    }
-  }
-  ctx.restore();
-}
+/** 흰 눈꽃 장식 (5x5) */
+const SNOWFLAKE = ['X.X.X', '.XXX.', 'XXXXX', '.XXX.', 'X.X.X'];
 
 function paintOrnament(ctx: CanvasRenderingContext2D, o: Ornament, ox: number): void {
   const { base, shade } = C.ornaments[o.colorIndex];
@@ -278,6 +299,7 @@ export interface TreeProp extends DepthDrawable {
 export function createTree(rng: Rng): TreeProp {
   const bed = getObstacle('tree-bed');
   const ornaments = generateOrnaments(rng);
+  const snowflakes = generateSnowflakes(rng, ornaments);
   const lights = generateLights(rng);
   const bedRng = rng;
   const height = bed.y + bed.h + TREE.bedWallHeight;
@@ -286,8 +308,8 @@ export function createTree(rng: Rng): TreeProp {
     const bedCenterY = bed.y + TREE.bedCenterFromTop;
     paintTrunk(ctx, ox, bedCenterY);
     paintFoliage(ctx, ox);
-    paintRibbons(ctx, ox);
     for (const o of ornaments) paintOrnament(ctx, o, ox);
+    for (const f of snowflakes) stampPixels(ctx, SNOWFLAKE, { X: C.snowflake }, ox + (f.x - TREE_X) - 2, f.y - 2);
     paintBed(ctx, ox, bedRng);
     paintGifts(ctx, ox, bedCenterY);
   });
@@ -303,15 +325,19 @@ export function createTree(rng: Rng): TreeProp {
     },
     draw(ctx: CanvasRenderingContext2D, camera: Camera) {
       const screenX = TREE_X - layerOffsetX(camera, LAYER_FACTORS.main);
+      if (screenX + BUFFER_HALF < 0 || screenX - BUFFER_HALF > SCREEN_WIDTH) return;
       ctx.drawImage(getBuffer().canvas, screenX - BUFFER_HALF, 0);
 
       // 전구: 각자 박자로 반짝이고, 밝을 때 둘레에 은은한 번짐. 물결이 지나가면 더 크게 번진다
+      const wave = waveProgress(time) !== null;
+      ctx.save();
       for (const light of lights) {
         const level = lightLevel(light, time);
-        const boost = waveBoost(light, time);
         const x = screenX + (light.x - TREE_X);
-        if (boost > 0) fillSoftGlow(ctx, x, light.y, TREE.waveGlowRadius, TREE.waveGlowAlpha * boost, C.lightHalo, 2);
-        ctx.save();
+        if (wave) {
+          const boost = waveBoost(light, time);
+          if (boost > 0) fillSoftGlow(ctx, x, light.y, TREE.waveGlowRadius, TREE.waveGlowAlpha * boost, C.lightHalo, 2);
+        }
         if (level >= TREE.lightHaloLevel) {
           ctx.globalAlpha = (TREE.lightHaloAlpha * (level - TREE.lightHaloLevel)) / (1 - TREE.lightHaloLevel);
           ctx.fillStyle = C.lightHalo;
@@ -321,8 +347,8 @@ export function createTree(rng: Rng): TreeProp {
         ctx.globalAlpha = level;
         ctx.fillStyle = C.light;
         ctx.fillRect(x, light.y, 1, 1);
-        ctx.restore();
       }
+      ctx.restore();
 
       // 별: 빛 번짐 → 별 그림, 함께 밝아졌다 어두워진다
       const level = starLevel(time);

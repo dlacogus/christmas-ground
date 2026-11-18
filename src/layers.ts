@@ -28,6 +28,11 @@ export function layerWidth(factor: number): number {
   return SCREEN_WIDTH + (MAP_WIDTH - SCREEN_WIDTH) * factor;
 }
 
+/** 이 구역이 지금 화면에 걸쳐 있나. 구역의 그림은 모두 자기 x 범위 안에 있어야 한다 */
+export function zoneVisible(zone: { startX: number; endX: number }, cameraX: number): boolean {
+  return zone.endX > cameraX && zone.startX < cameraX + SCREEN_WIDTH;
+}
+
 /** 발밑 y 오름차순 (뒤 → 앞) */
 export function sortByDepth<T extends { footY: number }>(items: readonly T[]): T[] {
   return [...items].sort((a, b) => a.footY - b.footY);
@@ -96,8 +101,10 @@ export function createLayers(zones: readonly Zone[], actors: readonly DepthDrawa
       draw: (ctx, camera) => {
         ground.draw(ctx, layerOffsetX(camera, f.main));
         light.drawGround(ctx, layerOffsetX(camera, f.main));
-        for (const zone of zones) zone.draw(ctx, camera);
-        const drawables = sortByDepth([...zones.flatMap((z) => z.props), ...actors]);
+        // 화면 밖 구역은 건너뛴다
+        const visible = zones.filter((z) => zoneVisible(z, camera.x));
+        for (const zone of visible) zone.draw(ctx, camera);
+        const drawables = sortByDepth([...visible.flatMap((z) => z.props), ...actors]);
         for (const d of drawables) d.draw(ctx, camera);
         light.drawBloom(ctx, layerOffsetX(camera, f.main));
       },

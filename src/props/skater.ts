@@ -6,7 +6,7 @@ import { getSpriteCanvas } from '../character/render';
 import { POSES, type Facing } from '../character/sprites';
 import { CHARACTER, COLORS, LAYER_FACTORS, SKATERS as S, type OutfitName } from '../constants';
 import type { DepthDrawable } from '../zones/zone';
-import { rinkBounds } from './iceRink';
+import { rinkBounds, rinkEdgeAt } from './iceRink';
 
 export interface SkaterSpec {
   outfit: OutfitName;
@@ -75,6 +75,8 @@ export interface Skater extends DepthDrawable {
   update(dt: number): void;
   /** 얼음 자국 (바닥에 납작, 시설보다 먼저) */
   drawTrail(ctx: CanvasRenderingContext2D, camera: Camera): void;
+  /** 얼음에 뒤집혀 비친 모습 (발밑 아래로, 멀어질수록 옅게) */
+  drawReflection(ctx: CanvasRenderingContext2D, camera: Camera): void;
 }
 
 /** 윗몸만 기울여 그리는 줄 범위: [시작 줄, 기우는 비율] (머리는 많이, 허리는 반만) */
@@ -127,6 +129,26 @@ export function createSkater(spec: SkaterSpec): Skater {
       for (const m of trail) {
         ctx.globalAlpha = S.trailAlpha * (1 - m.age / S.trailLifetime);
         ctx.fillRect(Math.round(m.x) - ox, Math.round(m.y) - 1, 2, 1);
+      }
+      ctx.restore();
+    },
+    drawReflection(ctx: CanvasRenderingContext2D, camera: Camera) {
+      const { x, y, facing } = state();
+      const edge = rinkEdgeAt(Math.round(x));
+      if (!edge) return;
+      const footY = Math.round(y);
+      const height = Math.min(S.reflectionHeight, edge.bottom - footY);
+      if (height <= 0) return;
+      const sprite = getSpriteCanvas('glide', Math.floor(time / S.glideFrameDuration) % POSES.glide.length, facing, spec.outfit);
+      const W = CHARACTER.spriteWidth;
+      const H = CHARACTER.spriteHeight;
+      ctx.save();
+      ctx.translate(Math.round(x) - layerOffsetX(camera, LAYER_FACTORS.main) - W / 2, footY);
+      ctx.scale(1, -1);
+      // 두 줄씩 뒤집어 찍으며 발에서 멀어질수록 옅게
+      for (let i = 0; i < height; i += 2) {
+        ctx.globalAlpha = S.reflectionAlpha * (1 - i / S.reflectionHeight);
+        ctx.drawImage(sprite, 0, H - i - 2, W, 2, 0, -i - 2, W, 2);
       }
       ctx.restore();
     },

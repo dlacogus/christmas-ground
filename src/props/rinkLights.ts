@@ -2,10 +2,10 @@
 // 빨강·초록·금·파랑이 차례로 천천히 밝아진다. 기둥과 전선은 미리 그려 두고 전구만 매 프레임 그린다.
 
 import { layerOffsetX, type Camera } from '../camera';
-import { LAYER_FACTORS, REFLECTION, RINK_LIGHTS as L } from '../constants';
+import { LAYER_FACTORS, RINK_LIGHTS as L, SCREEN_WIDTH } from '../constants';
 import { lazyBuffer } from '../scenery/buffer';
 import type { DepthDrawable } from '../zones/zone';
-import { rinkBounds, type IceLight } from './iceRink';
+import { rinkBounds } from './iceRink';
 
 // ───────────── 위치 계산 (순수) ─────────────
 
@@ -56,13 +56,10 @@ export function bulbColorLevel(colorIndex: number, time: number): number {
 
 export interface RinkLights extends DepthDrawable {
   update(dt: number): void;
-  /** 얼음에 비칠 전구들 */
-  iceLights(): IceLight[];
 }
 
 export function createRinkLights(): RinkLights {
   const p = lightPoles();
-  const b = rinkBounds();
   const bulbs = rinkBulbs();
   const width = p.rightX - p.leftX + 1 + 4;
   const bufferTop = p.top - 3;
@@ -93,16 +90,6 @@ export function createRinkLights(): RinkLights {
     update(dt: number) {
       time += dt;
     },
-    iceLights() {
-      return bulbs.map((bulb) => ({
-        x: bulb.x,
-        top: b.top + REFLECTION.topGap + Math.round((bulb.y - p.top) * REFLECTION.bulbDepthScale),
-        length: REFLECTION.bulbLength,
-        width: 1,
-        color: L.bulbs[bulb.colorIndex],
-        level: bulbColorLevel(bulb.colorIndex, time),
-      }));
-    },
     draw(ctx: CanvasRenderingContext2D, camera: Camera) {
       const ox = layerOffsetX(camera, LAYER_FACTORS.main);
       ctx.drawImage(frame().canvas, p.leftX - 2 - ox, bufferTop);
@@ -111,6 +98,7 @@ export function createRinkLights(): RinkLights {
       for (const bulb of bulbs) {
         const level = levels[bulb.colorIndex];
         const x = bulb.x - ox;
+        if (x < -1 || x > SCREEN_WIDTH) continue;
         ctx.fillStyle = L.bulbs[bulb.colorIndex];
         ctx.globalAlpha = L.glowAlpha * level;
         ctx.fillRect(x - 1, bulb.y - 1, 3, L.bulbHeight + 2);

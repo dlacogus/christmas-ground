@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { nearestOnRect, rinkPan, rinkVolume } from '../audio/rinkSounds';
 import { canStandAt } from '../character/character';
 import { POSES } from '../character/sprites';
-import { CHARACTER, DEFAULT_OUTFIT, RINK, RINK_LIGHTS, RINK_SOUND, SKATERS } from '../constants';
+import { CHARACTER, DEFAULT_OUTFIT, REFLECTION, RINK, RINK_LIGHTS, RINK_SOUND, SKATERS } from '../constants';
 import { INTERACTION_POINTS, LAMPS, OBSTACLES, RINK_FIRS, RINK_FIR_LINE_X, WALK_AREA, ZONE_BOUNDS, getObstacle, inZone } from '../world';
-import { gateSpan, onIce, reflectionColor, rinkBounds, rinkEdgeAt } from './iceRink';
+import { coreAlpha, gateSpan, haloAlpha, mirrorY, onIce, rinkBounds, rinkEdgeAt, streakAlpha } from './iceRink';
+import { lanternCenters } from './streetLamp';
 import { bulbColorLevel, lightPoles, rinkBulbs, stringY } from './rinkLights';
 import { skaterPose, updateTrail, wobbleLean, wobbleProgress, type SkaterSpec, type TrailMark } from './skater';
 
@@ -47,9 +48,39 @@ describe('얼음 링크 모양', () => {
     expect(canStandAt(point.x, point.y)).toBe(true);
   });
 
-  it('비친 색은 원래 색의 반 밝기', () => {
-    expect(reflectionColor('#ff8040')).toBe('#804020');
-    expect(reflectionColor('#ffffff')).toBe('#808080');
+  it('가로등은 발밑을 기준으로 뒤집힌 자리에 비치고, 그 자리는 얼음 위다', () => {
+    expect(mirrorY(126, 64)).toBe(188);
+    const behind = LAMPS.filter((l) => inZone('rink', l.x) && l.y <= b.top);
+    for (const l of behind) {
+      for (const c of lanternCenters(l)) {
+        const y = mirrorY(l.y, c.y);
+        // 등이 높이 달려 있으니 상은 울타리 밑이 아니라 얼음 안쪽에 맺힌다
+        expect(onIce(l.x + c.dx, y)).toBe(true);
+        expect(y - b.top).toBeGreaterThan((b.bottom - b.top) / 4);
+      }
+    }
+  });
+
+  it('비친 빛은 거울 자리가 가장 밝고, 세로로 길게 늘어나며 보는 사람 쪽으로 더 길다', () => {
+    expect(streakAlpha(0, 0)).toBeGreaterThan(streakAlpha(2, 0));
+    expect(streakAlpha(0, 0)).toBeGreaterThan(streakAlpha(0, -8));
+    expect(streakAlpha(0, 14)).toBeGreaterThan(streakAlpha(0, -14));
+    expect(streakAlpha(0, 10)).toBeGreaterThan(streakAlpha(10, 0));
+    expect(streakAlpha(0, REFLECTION.reachDown)).toBeLessThan(0.02);
+  });
+
+  it('밝은 심 둘레로 옅은 빛이 넓게 흩어진다 (뚝 끊기지 않는다). 흔들리지는 않는다', () => {
+    // 심은 옆으로 금방 사라지지만 흩어진 빛은 멀리까지 남는다
+    expect(coreAlpha(5, 0)).toBeLessThan(0.01);
+    expect(haloAlpha(5, 0)).toBeGreaterThan(REFLECTION.haloAlpha / 2);
+    expect(haloAlpha(0, 0)).toBeLessThan(coreAlpha(0, 0));
+    // 그리는 범위 끝에서는 거의 0이라 가장자리가 잘린 듯 보이지 않는다
+    expect(streakAlpha(REFLECTION.reachSide, 0)).toBeLessThan(1 / (REFLECTION.steps * 4));
+    expect(streakAlpha(0, -REFLECTION.reachUp)).toBeLessThan(1 / (REFLECTION.steps * 4));
+    // 뒤집힌 기둥은 등 불빛보다 훨씬 옅다
+    expect(REFLECTION.poleFarAlpha).toBeLessThan(REFLECTION.alpha / 4);
+    expect(REFLECTION.poleNearAlpha).toBeLessThan(REFLECTION.poleFarAlpha);
+    expect(Object.keys(REFLECTION).some((k) => /shimmer|flicker|sway/i.test(k))).toBe(false);
   });
 });
 

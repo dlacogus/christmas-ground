@@ -3,7 +3,7 @@
 import { FAR_CITY } from '../constants';
 import { randInt, type Rng } from '../random';
 import { STREET_LINE_Y } from '../world';
-import { lazyBuffer } from './buffer';
+import { drawSlice, lazyBuffer } from './buffer';
 
 export type FarRoof = 'flat' | 'gable' | 'stepped';
 
@@ -66,7 +66,7 @@ export function createFarCity(rng: Rng, width: number) {
   return {
     row,
     draw(ctx: CanvasRenderingContext2D, offsetX: number) {
-      ctx.drawImage(getBuffer().canvas, -offsetX, 0);
+      drawSlice(ctx, getBuffer().canvas, offsetX);
     },
   };
 }

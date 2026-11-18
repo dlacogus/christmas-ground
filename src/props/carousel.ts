@@ -3,7 +3,7 @@
 // 판·기둥·지붕(줄무늬가 도는 모습 몇 장)은 미리 그려 두고, 말·전구·깃발만 매 프레임 그린다.
 
 import { layerOffsetX, type Camera } from '../camera';
-import { CAROUSEL as K, CAROUSEL_COLORS as C, LAYER_FACTORS } from '../constants';
+import { CAROUSEL as K, CAROUSEL_COLORS as C, LAYER_FACTORS, SCREEN_WIDTH } from '../constants';
 import { lazyBuffer, type PixelBuffer } from '../scenery/buffer';
 import { CAROUSEL_X, getObstacle } from '../world';
 import type { DepthDrawable } from '../zones/zone';
@@ -317,6 +317,7 @@ export function createCarousel(): CarouselProp {
     draw(ctx: CanvasRenderingContext2D, camera: Camera) {
       const ox = layerOffsetX(camera, LAYER_FACTORS.main);
       const cx = CAROUSEL_X - ox;
+      if (cx + R + 2 < 0 || cx - R - 2 > SCREEN_WIDTH) return;
       const horses = horseStates(time);
 
       ctx.drawImage(platformBuffer().canvas, cx - g.platformRadiusX - 1, g.platformY - K.platformRadiusY);

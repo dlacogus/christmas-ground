@@ -5,7 +5,7 @@
 import { CLOCK_TOWER, TREE_LINE as M, TREE_LINE_COLORS as C } from '../constants';
 import { createRng, randInt, randRange, type Rng } from '../random';
 import { STREET_LINE_Y } from '../world';
-import { lazyBuffer } from './buffer';
+import { drawSlice, lazyBuffer } from './buffer';
 import { drawClockHands, paintClockTower } from './clockTower';
 
 export interface BackTree {
@@ -100,7 +100,7 @@ export function createTreeLine(rng: Rng, width: number) {
   return {
     trees,
     draw(ctx: CanvasRenderingContext2D, offsetX: number) {
-      ctx.drawImage(getBuffer().canvas, -offsetX, 0);
+      drawSlice(ctx, getBuffer().canvas, offsetX);
       drawClockHands(ctx, CLOCK_TOWER.x - offsetX, new Date());
     },
   };

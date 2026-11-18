@@ -97,6 +97,7 @@ export type HutKind = 'gable' | 'longhouse' | 'kiosk' | 'pavilion';
 /**
  * 마켓 오두막: 돌바닥이 끝나는 뒤쪽 끝, 연석 바로 뒤(STREET_LINE_Y)에 늘어선다 (x = 가운데, w = 폭, wall = 벽 높이).
  * 걷는 바닥을 차지하지 않으므로 장애물이 없다. 크기도 종류도 제각각. 스케이트장 뒤에는 세우지 않는다.
+ * 처마까지 포함해 구역 경계(x 480, 960)를 넘지 않게 둔다 — 화면 밖 구역은 통째로 그리지 않기 때문.
  */
 export const HUTS: readonly { x: number; w: number; kind: HutKind; wall: number }[] = [
   { x: 61, w: 30, kind: 'kiosk', wall: 34 },
@@ -105,7 +106,7 @@ export const HUTS: readonly { x: number; w: number; kind: HutKind; wall: number 
   { x: 257, w: 86, kind: 'longhouse', wall: 25 },
   { x: 339, w: 62, kind: 'gable', wall: 31 },
   { x: 401, w: 46, kind: 'pavilion', wall: 29 },
-  { x: 467, w: 70, kind: 'longhouse', wall: 27 },
+  { x: 452, w: 30, kind: 'kiosk', wall: 35 },
   { x: 553, w: 66, kind: 'gable', wall: 30 },
   { x: 611, w: 34, kind: 'kiosk', wall: 36 },
   { x: 686, w: 100, kind: 'longhouse', wall: 24 },
@@ -118,7 +119,7 @@ export const HUTS: readonly { x: number; w: number; kind: HutKind; wall: number 
 /** 가로등: 구역마다 뒤쪽(등 하나)·앞쪽(등 둘). y는 발밑 */
 export const LAMPS = [
   { x: 510, y: 126, heads: 1 },
-  { x: 950, y: 126, heads: 1 },
+  { x: 946, y: 126, heads: 1 },
   { x: 600, y: 252, heads: 2 },
   { x: 840, y: 252, heads: 2 },
   { x: 196, y: 126, heads: 1 },
@@ -188,8 +189,10 @@ export const OBSTACLES: readonly Obstacle[] = [
   },
 ];
 
+const OBSTACLE_BY_ID = new Map(OBSTACLES.map((o) => [o.id, o]));
+
 export function getObstacle(id: string): Obstacle {
-  const found = OBSTACLES.find((o) => o.id === id);
+  const found = OBSTACLE_BY_ID.get(id);
   if (!found) throw new Error(`장애물 없음: ${id}`);
   return found;
 }

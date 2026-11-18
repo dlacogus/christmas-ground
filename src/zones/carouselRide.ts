@@ -15,6 +15,8 @@ export interface Occupant {
   outfit: OutfitName;
   /** 손 흔들기가 끝날 때까지 남은 시간 (0이면 안 흔듦) */
   waveLeft: number;
+  /** 모자가 벗겨져 대머리인가 */
+  bald?: boolean;
 }
 
 /** seats[탈 것 번호][자리 번호] = 앉은 사람 또는 null */
@@ -196,7 +198,7 @@ export function riderViews(seats: Seats, time: number): RiderView[] {
       const other = slots.findIndex((o, i) => o !== null && i !== slot);
       let lookAt: Facing | null = null;
       if (other >= 0) lookAt = seatPosition(mount, other, time).x > seatPosition(mount, slot, time).x ? 'right' : 'left';
-      views.push({ mount, slot, outfit: who.outfit, waving: who.waveLeft > 0, lookAt });
+      views.push({ mount, slot, outfit: who.outfit, waving: who.waveLeft > 0, lookAt, bald: who.bald === true });
     });
   });
   return views;

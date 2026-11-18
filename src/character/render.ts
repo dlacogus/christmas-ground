@@ -19,12 +19,19 @@ export function buildPalette(outfit: OutfitName): Record<string, string> {
 const cache = new Map<string, HTMLCanvasElement>();
 
 /** 한 프레임을 1배 크기 캔버스로 구워 둔다 */
-export function getSpriteCanvas(pose: PoseName, index: number, facing: Facing, outfit: OutfitName): HTMLCanvasElement {
-  const key = `${outfit}|${pose}|${index}|${facing}`;
+export function getSpriteCanvas(
+  pose: PoseName,
+  index: number,
+  facing: Facing,
+  outfit: OutfitName,
+  bald = false,
+  eyesClosed = false,
+): HTMLCanvasElement {
+  const key = `${outfit}|${pose}|${index}|${facing}|${bald}|${eyesClosed}`;
   const cached = cache.get(key);
   if (cached) return cached;
 
-  const rows = getFrame(pose, index, facing);
+  const rows = getFrame(pose, index, facing, bald);
   const palette = buildPalette(outfit);
   const canvas = document.createElement('canvas');
   canvas.width = CHARACTER.spriteWidth;
@@ -32,8 +39,10 @@ export function getSpriteCanvas(pose: PoseName, index: number, facing: Facing, o
   const ctx = canvas.getContext('2d')!;
   rows.forEach((row, y) => {
     [...row].forEach((ch, x) => {
-      const color = palette[ch];
+      let color = palette[ch];
       if (!color) return;
+      // 눈을 감으면: 세로 2px 눈의 윗칸을 피부색으로 덮어 가는 줄만 남긴다
+      if (eyesClosed && ch === 'E' && rows[y + 1]?.[x] === 'E') color = palette.S;
       ctx.fillStyle = color;
       ctx.fillRect(x, y, 1, 1);
     });
@@ -93,9 +102,10 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, ch: Character, offs
   }
 
   const frame = options.pose ? { pose: options.pose, index: options.index ?? 0 } : getCharacterFrame(ch);
-  const sprite = getSpriteCanvas(frame.pose, frame.index, options.facing ?? ch.facing, ch.outfit);
+  // 모자가 벗겨져 있으면 대머리
+  const sprite = getSpriteCanvas(frame.pose, frame.index, options.facing ?? ch.facing, ch.outfit, ch.hat.get() !== 'on', ch.eyesClosed);
   const lift = Math.round(options.lift ?? 0);
-  drawLeaning(ctx, sprite, footX - CHARACTER.spriteWidth / 2, footY - CHARACTER.spriteHeight - lift, options.lean ?? 0);
+  drawLeaning(ctx, sprite, footX - CHARACTER.spriteWidth / 2, footY - CHARACTER.spriteHeight - lift, (options.lean ?? 0) + ch.lean);
 
   drawPuffs(ctx, ch.puffs, offsetX);
 }

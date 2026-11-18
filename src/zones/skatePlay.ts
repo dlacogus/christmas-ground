@@ -75,6 +75,8 @@ export interface SkatePlay {
   update(dt: number): void;
   /** 모바일: 링크를 탭 (걷는 중이면 입구로 걸어가서 신는다) */
   tapRink(): void;
+  /** 잠깐 몸을 숙인다 (미끄러지며 모자를 낚아챌 때) */
+  swoop(seconds: number): void;
   /** 모바일: 타는 중 탭 — 벗을 수 있으면 벗는다. 처리했으면 true */
   tapWhileSkating(): boolean;
   hint(touch: boolean): PlayHint | null;
@@ -93,6 +95,7 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
   let bumpCooldown = 0;
   let spinHeld = false;
   let pressedInAir = false;
+  let swoopLeft = 0;
   let startOnArrive = false;
   let sprayTimer = 0;
   let lastMark: { x: number; y: number } | null = null;
@@ -232,6 +235,7 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
     update(dt) {
       time += dt;
       bumpCooldown = Math.max(0, bumpCooldown - dt);
+      swoopLeft = Math.max(0, swoopLeft - dt);
       tipsLeft = Math.max(0, tipsLeft - dt);
       for (const m of marks) m.age += dt;
       while (marks.length > 0 && marks[0].age >= S.trailSeconds) marks.shift();
@@ -327,6 +331,9 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
       setWalkTarget(character, g.x, g.y);
       startOnArrive = true;
     },
+    swoop(seconds) {
+      swoopLeft = seconds;
+    },
     tapWhileSkating() {
       if (phase === 'on' && skate && canTakeOff(skate)) {
         takeOff();
@@ -366,9 +373,10 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
       if (skate.phase === 'fallen' && skate.timer > S.getUpSeconds) {
         // 벌러덩: 뒤로 젖혀지며 눕고, 머리 위로 별이 돈다
         const tip = Math.min(1, (S.fallSeconds - skate.timer) / S.fallTipSeconds);
-        drawLying(ctx, getSpriteCanvas('skateGlide', 0, skate.facing, character.outfit), Math.round(skate.x) - ox, Math.round(skate.y), skate.facing, tip, time);
+        drawLying(ctx, getSpriteCanvas('skateGlide', 0, skate.facing, character.outfit, character.hat.get() !== 'on'), Math.round(skate.x) - ox, Math.round(skate.y), skate.facing, tip, time);
       } else {
-        drawCharacter(ctx, character, ox, skateDrawOptions(skate, time));
+        const opts = skateDrawOptions(skate, time);
+        drawCharacter(ctx, character, ox, swoopLeft > 0 ? { ...opts, pose: 'crouch', index: 0 } : opts);
       }
       if (spray.length > 0) {
         for (const p of spray) {
@@ -392,7 +400,7 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
       // 누워 있을 때는 비친 모습을 그리지 않는다 (누운 몸은 얼음에 붙어 있다)
       if (phase === 'on' && skate && !(skate.phase === 'fallen' && skate.timer > S.getUpSeconds)) {
         const opts = skateDrawOptions(skate, time);
-        const sprite = getSpriteCanvas(opts.pose!, opts.index ?? 0, opts.facing ?? skate.facing, character.outfit);
+        const sprite = getSpriteCanvas(opts.pose!, opts.index ?? 0, opts.facing ?? skate.facing, character.outfit, character.hat.get() !== 'on');
         drawSpriteReflection(ctx, sprite, skate.x, skate.y + Math.round(opts.lift ?? 0), ox);
       }
     },

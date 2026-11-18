@@ -11,6 +11,35 @@ export type CharacterState =
   | { kind: 'skating'; vx: number; vy: number }
   | { kind: 'sitting'; bench: number; slot: number };
 
+/** 털모자: 쓰고 있거나('on'), 벗겨져 바닥 어딘가(발밑 기준 좌표)에 떨어져 있다. 벗겨져 있는 동안 캐릭터는 대머리다 */
+export type HatState = 'on' | { x: number; y: number };
+
+export interface HatStore {
+  get(): HatState;
+  set(next: HatState): void;
+  /** 바뀌면 알린다 — 나중에 친구들도 내 대머리와 떨어진 모자를 보게 네트워크로 보낼 자리 */
+  onChange(listener: (next: HatState, previous: HatState) => void): () => void;
+}
+
+export function createHatState(): HatStore {
+  let current: HatState = 'on';
+  const listeners = new Set<(next: HatState, previous: HatState) => void>();
+  return {
+    get: () => current,
+    set(next) {
+      const same = next === current || (next !== 'on' && current !== 'on' && next.x === current.x && next.y === current.y);
+      if (same) return;
+      const previous = current;
+      current = next;
+      for (const listener of listeners) listener(current, previous);
+    },
+    onChange(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
 export type StateListener = (next: CharacterState, previous: CharacterState) => void;
 
 export interface CharacterStateStore {

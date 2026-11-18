@@ -34,8 +34,9 @@ export type PlayEvent = 'boarded' | 'alighted' | 'passedFront';
 export interface PlayHint {
   text: string;
   sub?: string;
-  /** head = 캐릭터 머리 위, arch = 입구 아치 위, bottom = 화면 아래 */
-  anchor: 'head' | 'arch' | 'bottom';
+  /** head = 캐릭터 머리 위, arch = 입구 아치 위, bottom = 화면 아래, point = 맵의 한 자리(at) 위 */
+  anchor: 'head' | 'arch' | 'bottom' | 'point';
+  at?: { x: number; y: number };
 }
 
 export interface CarouselPlay {
@@ -112,6 +113,7 @@ export function createCarouselPlay(character: Character, zone: CarouselZone): Ca
     },
     update() {
       const time = zone.rideTime();
+      me.bald = character.hat.get() !== 'on';
       const events: PlayEvent[] = [];
       const result = updateBoarding(boarding, seats, time, me);
       if (result === 'boarded') {

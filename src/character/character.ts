@@ -4,7 +4,7 @@ import { CHARACTER, DEFAULT_OUTFIT, type OutfitName } from '../constants';
 import { OBSTACLES, WALK_AREA, rectsOverlap, type Point, type Rect } from '../world';
 import { nextBreathInterval, spawnPuff, updatePuffs, type BreathPuff } from './breath';
 import { POSES, type Facing, type PoseName } from './sprites';
-import { createCharacterState, type CharacterStateStore } from './state';
+import { createCharacterState, createHatState, type CharacterStateStore, type HatStore } from './state';
 
 export interface Character {
   /** 발밑 좌표 */
@@ -20,6 +20,14 @@ export interface Character {
   puffs: BreathPuff[];
   /** 지금 무엇을 하고 있나: 걷기 / 회전목마 타기 / 스케이트 (바뀌면 onChange로 알린다) */
   state: CharacterStateStore;
+  /** 털모자: 쓰고 있나, 벗겨져 어디에 떨어져 있나 (벗겨져 있으면 대머리로 그린다) */
+  hat: HatStore;
+  /** 윗몸을 옆으로 기울이는 px (재채기·떨림). 어떤 자세로 그리든 더해진다 */
+  lean: number;
+  /** 걷는 빠르기 배율 (재채기 준비 중에는 느려진다) */
+  speedFactor: number;
+  /** 눈을 감았나 (재채기하는 동안) */
+  eyesClosed: boolean;
 }
 
 /** 키 입력 방향 (-1~1) */
@@ -40,6 +48,10 @@ export function createCharacter(x: number, y: number, outfit: OutfitName = DEFAU
     breathTimer: nextBreathInterval(),
     puffs: [],
     state: createCharacterState(),
+    hat: createHatState(),
+    lean: 0,
+    speedFactor: 1,
+    eyesClosed: false,
   };
 }
 
@@ -93,7 +105,7 @@ function moveAxis(ch: Character, axis: 'x' | 'y', amount: number): void {
 export function updateCharacter(ch: Character, dt: number, input: MoveInput): void {
   let dirX = 0;
   let dirY = 0;
-  let maxDistance = CHARACTER.speed * dt;
+  let maxDistance = CHARACTER.speed * ch.speedFactor * dt;
 
   if (input.x !== 0 || input.y !== 0) {
     // 키 입력이 탭 목적지보다 우선

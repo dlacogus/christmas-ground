@@ -2,7 +2,7 @@ import { createCamera, layerOffsetX, snapCamera, updateCamera, type Camera } fro
 import { createCharacter, setWalkTarget } from './character/character';
 import { drawCharacter } from './character/render';
 import type { CharacterState } from './character/state';
-import { BENCH_SIT, CAROUSEL, CHARACTER, FOOTPRINTS, HINT, LAYER_FACTORS, ROOF_SNOW, SANTA, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
+import { BENCH_SIT, CAROUSEL, CHARACTER, COLD, FOOTPRINTS, HAT, HINT, LAYER_FACTORS, ROOF_SNOW, SANTA, SKATE, SNEEZE, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
 import { createFpsMeter, drawDebugOverlay } from './debug';
 import { createInput } from './input';
 import { createLayers, drawLayers, updateLayers } from './layers';
@@ -17,6 +17,10 @@ import { createMusicBox } from './audio/musicBox';
 import { createRinkSounds } from './audio/rinkSounds';
 import { createSoundSystem } from './audio/soundSystem';
 import { createRoofSnowSounds } from './audio/roofSnowSounds';
+import { createSneezeSound } from './audio/sneezeSound';
+import { createCold, isWarmAt } from './character/cold';
+import { createBaldHead, createHat, createSneeze, drawRedNose } from './features/sneeze';
+import { actionsFor, nearestInteraction, withoutSpace } from './input/interact';
 import { createSkateSounds } from './audio/skateSounds';
 import { createRoofSnow, createSnowHits } from './features/roofSnow';
 import { createWind } from './audio/wind';
@@ -24,9 +28,10 @@ import { createHint } from './ui/hint';
 import { drawSoundButton, hitSoundButton } from './ui/soundButton';
 import { carouselGeometry } from './props/carousel';
 import { gateGeometry } from './props/carouselEntrance';
-import { CAROUSEL_GATE, CAROUSEL_X, SPAWN, TREE_X, WALK_AREA, getObstacle } from './world';
+import { CAROUSEL_GATE, CAROUSEL_X, INTERACTION_POINTS, SPAWN, TREE_X, WALK_AREA, getObstacle } from './world';
 import { createWorldZones } from './zones';
-import { benchAt, createBenchPlay } from './zones/benchPlay';
+import { benchAt, createBenchPlay, seatNear } from './zones/benchPlay';
+import { canTakeOff, rinkExitInside, rinkGate } from './zones/skating';
 import { MY_ID, createCarouselPlay, nearEntry, onCarousel, type PlayHint } from './zones/carouselPlay';
 import { createSkatePlay } from './zones/skatePlay';
 import { rinkBounds } from './props/iceRink';
@@ -65,7 +70,9 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   const musicBox = createMusicBox({ x: CAROUSEL_X, y: carouselGeometry().platformY });
   const skateSounds = createSkateSounds();
   const roofSnowSounds = createRoofSnowSounds();
+  const sneezeSound = createSneezeSound();
   const sound = createSoundSystem([
+    sneezeSound,
     roofSnowSounds,
     createAmbience(),
     musicBox,
@@ -96,14 +103,26 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       return;
     }
     const worldX = sx + layerOffsetX(camera, LAYER_FACTORS.main);
-    // 스케이트를 타는 동안: 입구에서 멈췄으면 벗고, 아니면 누르고 있는 쪽으로 민다 (매 프레임 따로 읽는다)
+    // 스케이트를 타는 동안: 모자 곁이면 낚아채고, 출구에서 멈췄으면 벗고, 아니면 누르고 있는 쪽으로 민다 (매 프레임 따로 읽는다)
     if (skate.active) {
-      skate.tapWhileSkating();
+      if (hat.canPickUp(character.x, character.y)) {
+        hat.putOn();
+        skate.swoop(HAT.swoopSeconds);
+      } else skate.tapWhileSkating();
       return;
     }
     // 앉아 있으면 일어난다
     if (bench.seated) {
       bench.standUp();
+      return;
+    }
+    // 떨어진 모자를 탭하면 걸어가서 줍는다
+    if (play.boarding.phase === 'none' && !hat.on && !hat.moving && Math.abs(worldX - hat.x) <= 10 && sy >= hat.y - 14 && sy <= hat.y + 5) {
+      if (hat.canPickUp(character.x, character.y)) startPickup();
+      else {
+        setWalkTarget(character, hat.x, hat.y);
+        pickOnArrive = true;
+      }
       return;
     }
     // 회전목마를 탭하면 타거나 내린다. 타는 동안에는 어디를 탭해도 내리기
@@ -138,22 +157,56 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   /** ?debug=1의 T: 시간 0.25배속 (눈이 떨어지는 과정을 천천히 본다) */
   let slowMotion = false;
 
+  // 추위 → 재채기 → 모자가 날아감 → 대머리 → 주워서 다시 쓰기
+  const cold = createCold();
+  const sneeze = createSneeze();
+  const hat = createHat(character);
+  const baldHead = createBaldHead();
+  const carouselEntry = INTERACTION_POINTS.find((p) => p.id === 'CAROUSEL_ENTRY')!;
+  /** 줍는 동작이 끝나기까지 남은 시간 (허리를 굽혀 줍고 → 털어서 쓴다) */
+  let pickLeft = 0;
+  /** 모자를 탭해서 걸어가는 중 — 도착하면 줍는다 */
+  let pickOnArrive = false;
+  /** 스케이트로 낚아챈 스페이스가 떼질 때 점프가 나가지 않게 한 번 삼킨다 */
+  let swallowSpace = false;
+  let wasFrozen = false;
+  /** 이번 프레임에 고른 상호작용 (힌트도 이것만 띄운다) */
+  let choice: 'hat' | 'carousel' | 'skate' | 'bench' | 'exit' | null = null;
+  const startSneeze = () => {
+    if (sneeze.start()) sneezeSound.windup();
+  };
+  const startPickup = () => {
+    pickLeft = HAT.pickSeconds;
+    pickOnArrive = false;
+    character.target = null;
+    character.moving = false;
+  };
+  const distanceTo = (p: { x: number; y: number }) => Math.hypot(character.x - p.x, character.y - p.y);
+
   const characterDrawable: DepthDrawable = {
     get footY() {
       return character.y;
     },
     draw(c: CanvasRenderingContext2D, cam: Camera) {
-      // 타는 동안에는 회전목마가 탈 것과 함께 그린다
       const kind = character.state.get().kind;
-      if (kind === 'riding') return;
       const ox = layerOffsetX(cam, LAYER_FACTORS.main);
-      const footX = Math.round(character.x) - ox;
-      const footY = Math.round(character.y);
-      if (skate.active) skate.drawCharacter(c, cam);
-      else if (kind === 'sitting') bench.draw(c, cam);
-      else if (snowHits.snowman) snowHits.drawSnowman(c, footX, footY);
-      else drawCharacter(c, character, ox, { lean: snowHits.shakeLean() });
-      snowHits.drawOver(c, footX, footY, ox);
+      // 타는 동안에는 회전목마가 탈 것과 함께 그린다
+      if (kind !== 'riding') {
+        const footX = Math.round(character.x) - ox;
+        const footY = Math.round(character.y);
+        const bending = pickLeft > HAT.pickSeconds - HAT.pickBendSeconds;
+        if (skate.active) skate.drawCharacter(c, cam);
+        else if (kind === 'sitting') bench.draw(c, cam);
+        else if (snowHits.snowman) snowHits.drawSnowman(c, footX, footY);
+        else drawCharacter(c, character, ox, bending ? { pose: 'crouch', index: 0 } : { lean: snowHits.shakeLean() });
+        if (!snowHits.snowman && !bending) {
+          const lift = kind === 'sitting' ? BENCH_SIT.lift : 0;
+          if (!hat.on) baldHead.draw(c, footX, footY, character.facing, lift);
+          if (cold.redNose) drawRedNose(c, footX, footY, character.facing, lift);
+        }
+        snowHits.drawOver(c, footX, footY, ox);
+      }
+      sneeze.draw(c, ox);
     },
   };
   // 눈 위 발자국 (입구 카펫과 벽돌이 드러난 곳에는 남지 않는다)
@@ -169,6 +222,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   if (debug) {
     window.addEventListener('keydown', (e) => {
       if (e.code === SANTA.debugKey) santa.fly();
+      // N: 즉시 재채기
+      if (e.code === SNEEZE.debugKey) startSneeze();
       // R: 캐릭터에게서 가장 가까운 지붕 눈을 가득 채워 바로 떨어뜨린다
       if (e.code === ROOF_SNOW.debugDropKey) {
         let nearest = 0;
@@ -183,7 +238,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   }
   const layers = createLayers(
     zones,
-    [characterDrawable, ...roofSnow.drawables],
+    [characterDrawable, hat, ...roofSnow.drawables],
     SCENERY_SEED,
     [footprints, { draw: (c, ox) => roofSnow.drawFloor(c, ox) }],
     [santa],
@@ -201,19 +256,99 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     const actions = input.takeActions();
     const dir = input.direction();
     if (debug && actions.debugFriend) play.toggleFriend();
+
+    // 추위와 재채기 (회전목마·스케이트 중에도 한다)
+    const kindNow = character.state.get().kind;
+    if (wasFrozen && !snowHits.frozen) cold.sneezeIn(COLD.afterSnowmanSeconds);
+    wasFrozen = snowHits.frozen;
+    const lit = isWarmAt(character.x, character.y);
+    if (cold.update(dt, { warm: lit, bald: !hat.on, canSneeze: !sneeze.active && !snowHits.frozen && pickLeft <= 0 })) startSneeze();
+    if (sneeze.update(dt)) {
+      // 에취! 입김 구름이 터지고 모자가 날아간다
+      sneezeSound.achoo();
+      cold.add(-COLD.sneezeRelief);
+      sneeze.burst(character.x, character.y - (kindNow === 'sitting' ? BENCH_SIT.lift : 0), character.facing);
+      const s = skate.skate;
+      hat.launch(
+        { x: character.x, y: character.y },
+        character.facing,
+        s ? { kind: 'ice', vx: s.vx, vy: s.vy } : kindNow === 'riding' ? { kind: 'carousel', frontY: carouselGeometry().rimBottom, safe: carouselEntry } : { kind: 'ground' },
+      );
+    }
+    hat.update(dt);
+    baldHead.update(dt, lit);
+    // 줍는 동작: 허리를 굽혀 줍고, 털어서 다시 쓴다
+    let pickShake = 0;
+    if (pickLeft > 0) {
+      const before = pickLeft;
+      pickLeft = Math.max(0, pickLeft - dt);
+      const putOnAt = HAT.pickSeconds - HAT.pickBendSeconds;
+      if (before > putOnAt && pickLeft <= putOnAt) hat.putOn();
+      if (pickLeft > 0 && pickLeft <= putOnAt) pickShake = Math.floor(pickLeft / 0.05) % 2 === 0 ? 1 : -1;
+    }
+    character.lean = sneeze.lean(character.facing) + cold.shiverLean() + pickShake;
+    character.speedFactor = sneeze.speedFactor();
+    // 재채기하는 동안('흐… 흐… 에취')은 눈을 감는다
+    character.eyesClosed = sneeze.active;
+
+    choice = null;
+    const hatLying = !hat.on && !hat.moving;
     if (snowHits.frozen) {
       // 눈사람: 못 움직인다. 방향키를 연타하면 더 빨리 빠져나온다
       snowHits.struggle(actions.moveTaps ?? 0);
       character.moving = false;
       character.target = null;
+    } else if (pickLeft > 0) {
+      character.moving = false;
+      character.target = null;
     } else if (skate.active) {
       const p = input.pointer();
       const pointerWorld = p ? { x: p.sx + layerOffsetX(camera, LAYER_FACTORS.main), y: p.sy } : null;
-      skate.handleInput(dir, actions, input.spaceHeld(), pointerWorld);
+      const s = skate.skate;
+      // 얼음 위: 모자 줍기와 출구에서 벗기 가운데 가까운 쪽만. 줍기는 점프·스핀보다 먼저
+      if (s) {
+        choice = nearestInteraction([
+          { id: 'hat', distance: hatLying ? distanceTo(hat) : Infinity, radius: HAT.pickRadius },
+          { id: 'exit', distance: canTakeOff(s) ? distanceTo(rinkExitInside()) : Infinity, radius: SKATE.exitRadius },
+        ]);
+      }
+      let skateActions = actions;
+      if (swallowSpace && (actions.tap || actions.hold)) {
+        swallowSpace = false;
+        skateActions = withoutSpace(actions);
+      }
+      if (choice === 'hat') {
+        // 미끄러지면서 낚아채듯 줍는다
+        if (actions.spaceDown || actions.tap || actions.hold) {
+          hat.putOn();
+          skate.swoop(HAT.swoopSeconds);
+          swallowSpace = actions.spaceDown === true && !actions.tap;
+        }
+        skateActions = withoutSpace(actions);
+      }
+      skate.handleInput(dir, skateActions, choice === 'hat' || swallowSpace ? false : input.spaceHeld(), pointerWorld);
     } else if (bench.seated) {
       bench.handleSeated(dt, dir, actions);
-    } else if (play.boarding.phase !== 'none' || !(skate.handleWalking(actions, dir) || bench.handleWalking(actions, dir))) {
+    } else if (play.boarding.phase !== 'none') {
       play.handleInput(dt, dir, actions);
+    } else {
+      // 걸어 다니는 중: 스페이스는 가장 가까운 상호작용 하나에만 간다
+      const seat = seatNear(character.x, character.y);
+      choice = nearestInteraction([
+        { id: 'hat', distance: hatLying ? distanceTo(hat) : Infinity, radius: HAT.pickRadius },
+        { id: 'carousel', distance: distanceTo(carouselEntry), radius: CAROUSEL.entryRadius },
+        { id: 'skate', distance: distanceTo(rinkGate()), radius: SKATE.gateRadius },
+        { id: 'bench', distance: seat ? Math.hypot(character.x - seat.frontX, character.y - seat.frontY) : Infinity, radius: BENCH_SIT.sitRadius },
+      ]);
+      if (dir.x !== 0 || dir.y !== 0) pickOnArrive = false;
+      if (choice === 'hat' && (actions.tap || actions.hold)) startPickup();
+      else if (pickOnArrive && !character.target) {
+        pickOnArrive = false;
+        if (hat.canPickUp(character.x, character.y)) startPickup();
+      }
+      if (pickLeft <= 0 && !(skate.handleWalking(actionsFor('skate', choice, actions), dir) || bench.handleWalking(actionsFor('bench', choice, actions), dir))) {
+        play.handleInput(dt, dir, actionsFor('carousel', choice, actions));
+      }
     }
     for (const zone of zones) zone.update(dt);
     skate.update(dt);
@@ -227,7 +362,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
         canBeHit: character.state.get().kind === 'walk' && !skate.active && play.boarding.phase === 'none',
       },
     ]);
-    snowHits.handle(roofEvents, MY_ID);
+    snowHits.handle(roofEvents, MY_ID, (amount) => cold.add(amount));
     snowHits.follow(character.x, character.y);
     snowHits.update(dt);
     // 소리: 미끄러지는 동안 스르르, 덩어리가 닿을 때마다 퍽
@@ -273,12 +408,19 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     drawLayers(ctx, camera, layers);
     drawSoundButton(ctx, sound.started && !sound.muted);
     if (debug) {
-      drawDebugOverlay(ctx, camera, character, zones, fps, [describeState(character.state.get()), `B: friend  N: santa  R: roof snow  T: slow${slowMotion ? ' ON' : ''}`]);
+      drawDebugOverlay(ctx, camera, character, zones, fps, [describeState(character.state.get()), `cold ${cold.value.toFixed(0)}  B: friend  H: santa  N: sneeze  R: roof snow  T: slow${slowMotion ? ' ON' : ''}`]);
       roofSnow.drawDebug(ctx, camera);
     }
 
-    const h: PlayHint | null = skate.hint(touch) ?? bench.hint(touch) ?? play.hint(touch);
-    if (!h) hint.show(null);
+    // 힌트도 고른 상호작용 하나만
+    let h: PlayHint | null;
+    if (choice === 'hat') h = { text: touch ? '탭해서 줍기' : 'Space 줍기', anchor: 'point', at: { x: hat.x, y: hat.y - HAT.hintAbove } };
+    else if (choice === 'skate' || choice === 'exit') h = skate.hint(touch);
+    else if (choice === 'bench') h = bench.hint(touch);
+    else if (choice === 'carousel') h = play.hint(touch);
+    else h = skate.hint(touch) ?? bench.hint(touch) ?? play.hint(touch);
+    if (!h || pickLeft > 0) hint.show(null);
+    else if (h.anchor === 'point' && h.at) hint.show({ text: h.text, sub: h.sub, sx: h.at.x - layerOffsetX(camera, LAYER_FACTORS.main), sy: h.at.y });
     else if (h.anchor === 'bottom') hint.show({ text: h.text, sub: h.sub, sx: SCREEN_WIDTH / 2, sy: HINT.bottomY });
     else if (h.anchor === 'arch') {
       // 타기 힌트는 입구 아치 위에

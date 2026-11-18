@@ -383,12 +383,14 @@ export interface RiderView {
   waving: boolean;
   /** 손 흔들 때 볼 방향 (옆자리 사람 쪽). 없으면 탈 것이 가는 방향 */
   lookAt: Facing | null;
+  /** 모자가 벗겨져 대머리인가 */
+  bald?: boolean;
 }
 
 /** 탄 사람 그림: 탈 것과 같은 크기·밝기로 미리 만들어 둔다 */
-function riderSprite(pose: PoseName, frame: number, facing: Facing, outfit: OutfitName, small: boolean, level: number): HTMLCanvasElement {
-  return cached(`rider|${pose}|${frame}|${facing}|${outfit}|${small}|${level}`, () => {
-    const source = getSpriteCanvas(pose, frame, facing, outfit);
+function riderSprite(pose: PoseName, frame: number, facing: Facing, outfit: OutfitName, small: boolean, level: number, bald: boolean): HTMLCanvasElement {
+  return cached(`rider|${pose}|${frame}|${facing}|${outfit}|${small}|${level}|${bald}`, () => {
+    const source = getSpriteCanvas(pose, frame, facing, outfit, bald);
     const scale = small ? K.backScale : 1;
     const w = Math.round(CHARACTER.spriteWidth * scale);
     const h = Math.round(CHARACTER.spriteHeight * scale);
@@ -606,7 +608,7 @@ export function createCarousel(): CarouselProp {
     const pose: PoseName = rider.waving ? (`${base}Wave` as PoseName) : base;
     const frame = rider.waving ? Math.floor(time / K.waveFrameDuration) % POSES[pose].length : 0;
     const facing = rider.waving && rider.lookAt ? rider.lookAt : m.facing;
-    const sprite = riderSprite(pose, frame, facing, rider.outfit, m.z < 0, shadeLevel(m.z));
+    const sprite = riderSprite(pose, frame, facing, rider.outfit, m.z < 0, shadeLevel(m.z), rider.bald === true);
     ctx.drawImage(sprite, seat.x - Math.floor(sprite.width / 2) - ox, seat.y - Math.round(K.riderAboveSeat * seat.scale));
   };
 

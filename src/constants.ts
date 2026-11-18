@@ -105,7 +105,7 @@ export const SANTA = {
   sparkleLife: 1.1,
   sparkleFall: 5,
   /** 개발용(?debug=1): 이 키를 누르면 바로 날아온다 */
-  debugKey: 'KeyN',
+  debugKey: 'KeyH',
 } as const;
 
 export const SANTA_COLORS = {
@@ -467,6 +467,140 @@ export const ROOF_SNOW_SOUND = {
   rustleVolume: 0.3,
   rustleHz: 5200,
   rustleSeconds: 0.3,
+} as const;
+
+/** 추위 (0~100). 화면에 숫자는 보여주지 않는다 */
+export const COLD = {
+  max: 100,
+  /** 밖에 있으면 오르는 빠르기 (초당) = 분당 15, 대머리면 이 배수로 */
+  risePerSecond: 15 / 60,
+  baldFactor: 2,
+  /** 따뜻한 곳(트리 빛 안, 가로등 밑)에서 줄어드는 빠르기 (초당) */
+  warmFallPerSecond: 40 / 60,
+  /** 이보다 추우면 가끔 몸을 부르르 떨고 코끝이 빨개진다 */
+  shiverFrom: 60,
+  shiverMinGap: 3,
+  shiverMaxGap: 7,
+  shiverSeconds: 0.5,
+  shiverEvery: 0.06,
+  /** 이보다 추우면 가끔 재채기. 추위 100이면 평균 이 초에 한 번 (추울수록 자주) */
+  sneezeFrom: 50,
+  sneezeSecondsAtMax: 40,
+  /** 재채기하면 내려가는 추위 */
+  sneezeRelief: 25,
+  /** 눈사람에서 빠져나오면 이 초 뒤 반드시 재채기 */
+  afterSnowmanSeconds: 1,
+} as const;
+
+/** 재채기: '흐… 흐…' 준비 2번 → '에취!' */
+export const SNEEZE = {
+  /** 준비 동작 전체 시간과 횟수 (머리를 뒤로 젖힌다), 그동안 걷는 빠르기 */
+  windupSeconds: 1,
+  windupCount: 2,
+  windupLean: 2,
+  windupSpeedFactor: 0.45,
+  /** 에취: 몸이 앞으로 확 꺾이는 px와 돌아오는 시간 */
+  achooLean: 4,
+  achooSeconds: 0.4,
+  /** 큰 입김 구름: 입 위치(발밑 기준), 부푸는 크기와 사라지는 시간, 앞으로 밀려가는 속도 */
+  mouthOffsetX: 7,
+  mouthAbove: 14,
+  cloudRadius: 6,
+  cloudSeconds: 0.7,
+  cloudSpeed: 16,
+  cloudAlphas: [0.75, 0.5, 0.3, 0.14],
+  /** 앞으로 튀는 침방울 */
+  dropletCount: 6,
+  dropletSpeed: 70,
+  dropletLife: 0.35,
+  dropletGravity: 160,
+  /** ?debug=1: 즉시 재채기 */
+  debugKey: 'KeyN',
+} as const;
+
+/** 날아간 털모자 */
+export const HAT = {
+  /** 바라보는 방향으로 날아가는 거리, 앞뒤(깊이)로 흩어지는 폭 */
+  flyMinDistance: 30,
+  flyMaxDistance: 60,
+  flyDepthSpread: 8,
+  /** 날아가는 시간, 포물선 높이, 머리에서 떠나는 높이, 도는 횟수 */
+  flySeconds: 0.6,
+  flyArc: 18,
+  headHeight: 26,
+  spinTurns: 2.5,
+  /** 바닥에서 통통 튀는 횟수 범위, 첫 높이와 시간, 튈 때마다 줄어드는 비율, 튈 때마다 앞으로 가는 px */
+  bounceMin: 2,
+  bounceMax: 3,
+  bounceHeight: 7,
+  bounceSeconds: 0.26,
+  bounceDecay: 0.55,
+  bounceDrift: 3,
+  /** 바닥 띠 가장자리·장애물에서 띄우는 여유 */
+  margin: 4,
+  /** 회전목마에서 날아가면 바닥 판 앞 이만큼에 떨어진다 */
+  carouselFrontMin: 10,
+  carouselFrontMax: 22,
+  /** 얼음 위: 내 속도를 이 비율로 받아 미끄러진다 (최소 속도), 줄어드는 빠르기, 벽에서 튕길 때 남는 속도 */
+  slideKeep: 0.9,
+  slideMinSpeed: 30,
+  slideFriction: 30,
+  slideBounce: 0.5,
+  /** 모자에서 이 거리 안이면 주울 수 있다 */
+  pickRadius: 16,
+  /** 줍는 동작: 전체 시간, 그중 허리를 굽히는 시간 (그 뒤 털어서 쓴다) */
+  pickSeconds: 0.6,
+  pickBendSeconds: 0.3,
+  /** 스케이트로 낚아챌 때 몸을 숙이는 시간 */
+  swoopSeconds: 0.3,
+  /** 힌트를 모자 위 이만큼에 띄운다 */
+  hintAbove: 12,
+  shadowWidth: 10,
+  shadowAlpha: 0.3,
+} as const;
+
+/** 대머리 */
+export const BALD = {
+  /** 정수리 (발밑에서 위로, 얼굴 쪽으로 옆으로) */
+  crownAbove: 28,
+  crownForward: 2,
+  /** 가끔 반짝: 간격, 반짝이는 시간. 빛(가로등·트리) 근처에서는 더 자주, 더 크게 */
+  gleamEvery: 1.8,
+  gleamSeconds: 0.22,
+  litGleamEvery: 0.7,
+  litGleamSeconds: 0.35,
+  /** 눈송이가 내려앉았다 녹는 점: 간격, 녹는 시간, 머리 위 흩어지는 폭 */
+  flakeEvery: 2.4,
+  flakeSeconds: 1,
+  flakeSpread: 5,
+  /** 추울 때 빨개지는 코 (발밑에서 위로, 두 눈 사이에서 얼굴 앞쪽으로): 두 눈 사이 바로 아래 */
+  noseAbove: 20,
+  noseForward: 1,
+} as const;
+
+export const SNEEZE_COLORS = {
+  cloud: '#ffffff',
+  droplet: '#d9ecff',
+  gleam: '#ffffff',
+  flake: '#ffffff',
+  nose: '#ff6b6b',
+  hatShadow: '#101424',
+} as const;
+
+/** 재채기 소리 */
+export const SNEEZE_SOUND = {
+  noiseSeconds: 0.6,
+  /** '흐…' 숨 들이쉬는 소리 */
+  breathVolume: 0.18,
+  breathHz: 1800,
+  breathSeconds: 0.28,
+  /** '에취': 짧은 잡음 + 뚝 떨어지는 짧은 톤 */
+  achooVolume: 0.6,
+  achooNoiseHz: 3200,
+  achooNoiseSeconds: 0.22,
+  achooToneHz: 620,
+  achooToneEndHz: 260,
+  achooToneSeconds: 0.14,
 } as const;
 
 /** 눈 위에 흘림체로 쓴 글씨 (위치는 world.ts의 SNOW_WRITING_AT) */
@@ -1729,7 +1863,7 @@ export const RINK_SOUND = {
 /** ?sprites=1 확인 화면 */
 export const SPRITE_SHEET = {
   scale: 4,
-  columns: 14,
+  columns: 17,
   padding: 8,
   labelHeight: 14,
   titleHeight: 20,
@@ -1792,6 +1926,7 @@ export const CHARACTER_BASE_PALETTE: Readonly<Record<string, string>> = {
   F: '#7a4a33', // 앞 부츠
   f: '#5e3825', // 뒤 부츠
   K: '#c9d4ea', // 스케이트 날
+  G: '#ffffff', // 대머리 정수리 반짝임
 };
 
 /** 바꿔 끼우는 옷 색 (O/o = 코트, M/m = 목도리·장갑) */

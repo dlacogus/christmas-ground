@@ -23,11 +23,11 @@ const POSE_LABELS: Record<PoseName, string> = {
 };
 const FACING_LABELS: Record<Facing, string> = { right: '→', left: '←' };
 
-function poseCells(facing: Facing): Cell[] {
+function poseCells(facing: Facing, bald = false): Cell[] {
   return (Object.keys(POSES) as PoseName[]).flatMap((pose) =>
     POSES[pose].map((_, i) => ({
-      label: `${FACING_LABELS[facing]} ${POSE_LABELS[pose]} ${i + 1}`,
-      sprite: () => getSpriteCanvas(pose, i, facing, DEFAULT_OUTFIT),
+      label: `${bald ? '대머리 ' : FACING_LABELS[facing] + ' '}${POSE_LABELS[pose]} ${i + 1}`,
+      sprite: () => getSpriteCanvas(pose, i, facing, DEFAULT_OUTFIT, bald),
     })),
   );
 }
@@ -51,6 +51,7 @@ export function startSpriteSheet(canvas: HTMLCanvasElement): void {
   const rows: Cell[][] = [
     poseCells('right'),
     poseCells('left'),
+    poseCells('right', true),
     [
       ...outfitCells,
       animatedCell('idle', CHARACTER.idleFrameDuration, DEFAULT_OUTFIT),

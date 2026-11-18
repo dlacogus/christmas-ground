@@ -3,7 +3,8 @@
 // 글자 → 색은 constants.ts의 CHARACTER_BASE_PALETTE와 옷 색(OUTFITS)이 정한다.
 //   O/o = 코트(바꿔 끼움), M/m = 목도리·장갑(바꿔 끼움), u = 단추
 //   P/p = 방울, H/h = 털모자, b = 모자 띠, R = 머리, S/s = 피부, C = 볼, E = 눈
-//   L/l = 앞/뒷다리, F/f = 앞/뒤 부츠, K = 스케이트 날
+//   L/l = 앞/뒷다리, F/f = 앞/뒤 부츠, K = 스케이트 날, G = 대머리 정수리 반짝임
+// 모든 자세는 '모자 있음'(POSES)과 '대머리'(BALD_POSES) 두 벌이다.
 
 import { CHARACTER } from '../constants';
 
@@ -50,6 +51,27 @@ const UPPER: readonly string[] = [
   '...oOOOOOOOOOo..',
   '...ooooooooooo..',
 ];
+
+/** 모자가 벗겨진 머리 (0~12줄): 머리카락 없는 맨들맨들한 살색 대머리, 정수리에 흰 반짝임 */
+const BALD_HEAD: readonly string[] = [
+  '................',
+  '................',
+  '................',
+  '.....SSSSSS.....',
+  '...sSSSSSGGSS...',
+  '..sSSSSSSSSGSS..',
+  '..sSSSSSSSSSSS..',
+  '..sSSSSSSSSSSS..',
+  '..sSSSSSSSSSSS..',
+  '..sSSSSSSSSSSSS.',
+  '..sSSSSESSSESSS.',
+  '..sSSSSESSSESSS.',
+  '..sSSSCSSSSSCSS.',
+];
+const BALD_UPPER: readonly string[] = [...BALD_HEAD, ...UPPER.slice(BALD_HEAD.length)];
+
+/** 털모자만 (날아가거나 바닥에 떨어진 모자 그림): 방울 + 모자 + 띠 */
+export const HAT_ROWS: readonly string[] = UPPER.slice(0, 8).map((row) => row.slice(2, 14));
 
 /** 머리 부분 줄 수 (숨쉬기에서 이 부분만 1px 내려간다) */
 const HEAD_ROWS = 16;
@@ -213,18 +235,20 @@ function stamp(grid: string[][], part: readonly string[], top: number): void {
  * 다리 + 몸 + 머리를 합쳐 한 프레임을 만든다.
  * bodyShift: 몸 전체를 아래로 (걸음 반동), headShift: 머리만 더 아래로 (숨쉬기)
  */
-function compose(legs: readonly string[], bodyShift: number, headShift: number): string[] {
+function composeWith(upper: readonly string[], legs: readonly string[], bodyShift: number, headShift: number): string[] {
   const grid = Array.from({ length: CHARACTER.spriteHeight }, () =>
     Array<string>(CHARACTER.spriteWidth).fill(TRANSPARENT),
   );
   stamp(grid, legs, LEGS_TOP_ROW);
-  stamp(grid, UPPER.slice(HEAD_ROWS), HEAD_ROWS + bodyShift);
-  stamp(grid, UPPER.slice(0, HEAD_ROWS), bodyShift + headShift);
+  stamp(grid, upper.slice(HEAD_ROWS), HEAD_ROWS + bodyShift);
+  stamp(grid, upper.slice(0, HEAD_ROWS), bodyShift + headShift);
   return grid.map((row) => row.join(''));
 }
 
-/** 오른쪽을 보는 자세별 프레임 */
-export const POSES: Readonly<Record<PoseName, readonly string[][]>> = {
+/** 머리·몸 그림(모자 있음/대머리)으로 자세별 프레임을 만든다 */
+function buildPoses(upper: readonly string[]): Record<PoseName, string[][]> {
+  const compose = (legs: readonly string[], bodyShift: number, headShift: number) => composeWith(upper, legs, bodyShift, headShift);
+  return {
   // 서기: 숨쉬듯 머리가 1px 오르내린다
   idle: [compose(LEGS_STAND, 0, 0), compose(LEGS_STAND, 0, 1)],
   // 걷기 4프레임: 벌림 → 넘김 → 반대발 벌림 → 반대발 넘김 (벌릴 때 몸이 1px 내려감)
@@ -246,17 +270,24 @@ export const POSES: Readonly<Record<PoseName, readonly string[][]>> = {
   sit: [compose(LEGS_SIT, 0, 0)],
   sitWave: WAVE_ARMS.map((arm) => withWave(compose(LEGS_SIT, 0, 0), arm)),
 };
+}
+
+/** 오른쪽을 보는 자세별 프레임 (모자 있음) */
+export const POSES: Readonly<Record<PoseName, readonly string[][]>> = buildPoses(UPPER);
+/** 오른쪽을 보는 자세별 프레임 (대머리) */
+export const BALD_POSES: Readonly<Record<PoseName, readonly string[][]>> = buildPoses(BALD_UPPER);
 
 export function mirrorRows(rows: readonly string[]): string[] {
   return rows.map((row) => [...row].reverse().join(''));
 }
 
-const mirrored = Object.fromEntries(
-  (Object.keys(POSES) as PoseName[]).map((pose) => [pose, POSES[pose].map(mirrorRows)]),
-) as Record<PoseName, string[][]>;
+const mirrorAll = (poses: Readonly<Record<PoseName, readonly string[][]>>) =>
+  Object.fromEntries((Object.keys(poses) as PoseName[]).map((pose) => [pose, poses[pose].map(mirrorRows)])) as Record<PoseName, string[][]>;
+const mirrored = mirrorAll(POSES);
+const mirroredBald = mirrorAll(BALD_POSES);
 
-export function getFrame(pose: PoseName, index: number, facing: Facing): readonly string[] {
-  const frames = facing === 'right' ? POSES[pose] : mirrored[pose];
+export function getFrame(pose: PoseName, index: number, facing: Facing, bald = false): readonly string[] {
+  const frames = bald ? (facing === 'right' ? BALD_POSES[pose] : mirroredBald[pose]) : facing === 'right' ? POSES[pose] : mirrored[pose];
   const n = frames.length;
   return frames[((Math.floor(index) % n) + n) % n];
 }

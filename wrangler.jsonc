@@ -1,0 +1,14 @@
+// Cloudflare Workers 설정 (무료 플랜). 지금은 Worker 코드 없이 dist/ 의 정적 파일만 올린다.
+//
+// 나중에 실시간 서버를 붙일 때 (같은 Worker에 /ws 추가):
+//   1. src/worker/index.ts 를 만들고 아래에 "main": "src/worker/index.ts" 를 더한다.
+//   2. "assets"에 "binding": "ASSETS", "run_worker_first": ["/ws"] 를 더한다
+//      → /ws 요청만 Worker 코드로 가고, 나머지는 지금처럼 정적 파일이 바로 나간다.
+//   3. Worker의 fetch에서 /ws는 WebSocket으로 받고, 그 밖의 요청은 env.ASSETS.fetch(request)로 넘긴다.
+{
+  "name": "christmas-square",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}

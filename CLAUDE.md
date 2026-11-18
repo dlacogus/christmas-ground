@@ -105,7 +105,7 @@
 - `src/input.ts` — 방향키/WASD, 스페이스(짧게/꾹), Esc, 바닥 탭.
 - `src/debug.ts`, `src/spriteSheet.ts` — 개발용 화면.
 
-## 개발용 주소
+## 개발용 주소 (개발 서버 `npm run dev`에서만)
 - `?debug=1` — 바닥 띠, 장애물, 상호작용 지점, 구역 경계, 처마 밑 영역(EAVE, 쌓인 양)을 겹쳐 보여주고 fps·카메라·캐릭터 좌표·상태 표시. B 키로 가짜 친구.
 - `?sprites=1` — 캐릭터 모든 자세를 4배로 확대해 격자로 보여줌 (모자 있음 좌우 + 대머리).
 
@@ -113,4 +113,6 @@
 - `npm run dev` — 개발 서버
 - `npm run build` — 타입 검사 + 빌드
 - `npm test` — vitest
-- `npm run deploy` — 빌드 결과를 `gh-pages` 브랜치에 올려 GitHub Pages(https://dlacogus.github.io/christmas-ground/)에 배포. 자동 배포는 없으니 공유할 변경이 생기면 실행한다.
+- `npm run deploy` — 빌드한 뒤 `wrangler deploy`로 Cloudflare Workers(`christmas-square`, 무료 플랜)에 정적 사이트로 올린다 (`wrangler.jsonc`: dist를 assets로 연결, Worker 코드 없음 — 나중에 실시간 서버는 같은 Worker에 `/ws`로 붙인다). 처음 한 번 `npx wrangler login`. 자동 배포는 없으니 공유할 변경이 생기면 실행한다.
+- `npm run deploy:pages` — 예전 방식: `gh-pages` 브랜치에 올려 GitHub Pages(https://dlacogus.github.io/christmas-ground/)에 배포.
+- 배포 빌드에서는 개발용 주소(`?debug=1`, `?sprites=1`)가 꺼진다. 친구들끼리만 쓰는 동안 `robots.txt`(Disallow: /)와 noindex 메타 태그로 검색을 막는다.

@@ -10,7 +10,15 @@ interface Cell {
   sprite(time: number): HTMLCanvasElement;
 }
 
-const POSE_LABELS: Record<PoseName, string> = { idle: '서기', walk: '걷기', glide: '미끄럼' };
+const POSE_LABELS: Record<PoseName, string> = {
+  idle: '서기',
+  walk: '걷기',
+  glide: '미끄럼',
+  ride: '말 타기',
+  rideWave: '말·손',
+  sit: '마차',
+  sitWave: '마차·손',
+};
 const FACING_LABELS: Record<Facing, string> = { right: '→', left: '←' };
 
 function poseCells(facing: Facing): Cell[] {

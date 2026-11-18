@@ -4,6 +4,7 @@ import { CHARACTER, DEFAULT_OUTFIT, type OutfitName } from '../constants';
 import { OBSTACLES, WALK_AREA, rectsOverlap, type Point, type Rect } from '../world';
 import { nextBreathInterval, spawnPuff, updatePuffs, type BreathPuff } from './breath';
 import { POSES, type Facing, type PoseName } from './sprites';
+import { createCharacterState, type CharacterStateStore } from './state';
 
 export interface Character {
   /** 발밑 좌표 */
@@ -17,6 +18,8 @@ export interface Character {
   target: Point | null;
   breathTimer: number;
   puffs: BreathPuff[];
+  /** 지금 무엇을 하고 있나: 걷기 / 회전목마 타기 / 스케이트 (바뀌면 onChange로 알린다) */
+  state: CharacterStateStore;
 }
 
 /** 키 입력 방향 (-1~1) */
@@ -36,6 +39,7 @@ export function createCharacter(x: number, y: number, outfit: OutfitName = DEFAU
     target: null,
     breathTimer: nextBreathInterval(),
     puffs: [],
+    state: createCharacterState(),
   };
 }
 

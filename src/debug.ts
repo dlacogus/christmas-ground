@@ -12,6 +12,7 @@ export function drawDebugOverlay(
   character: Character,
   zones: readonly Zone[],
   fps: number,
+  extraLines: readonly string[] = [],
 ): void {
   const ox = layerOffsetX(camera, LAYER_FACTORS.main);
   const pad = DEBUG.labelOffset;
@@ -68,6 +69,7 @@ export function drawDebugOverlay(
     `fps ${fps.toFixed(0)}`,
     `camera x ${camera.x.toFixed(1)}`,
     `char x ${character.x.toFixed(1)} y ${character.y.toFixed(1)}`,
+    ...extraLines,
   ];
   const width = Math.max(...lines.map((l) => ctx.measureText(l).width)) + DEBUG.hudPadding * 2;
   const top = DEBUG.hudLineHeight + pad * 2;

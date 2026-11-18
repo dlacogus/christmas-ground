@@ -525,8 +525,23 @@ export const CAROUSEL = {
   horseOrbitRadius: 92,
   /** 말 발끝 = 판 가운데에서 위로 (탄 사람 머리가 지붕 장식에 닿지 않게) */
   horseBaseAbove: 26,
-  /** 탈 때 안장 위로 올라오는 캐릭터 높이 (엉덩이 ~ 털모자 방울) */
-  riderAboveSeat: 24,
+  /** 탈 때 자리 위로 올라오는 캐릭터 높이 = 앉은 자세 그림에서 엉덩이 줄까지 (엉덩이 ~ 털모자 방울) */
+  riderAboveSeat: 26,
+  /** 탈 것 8개 가운데 마차 자리 (서로 반대편). 나머지는 말 */
+  carriageIndices: [0, 4],
+  /** 마차는 오르내리지 않고 판에 붙어 돈다: 앞쪽일수록 이만큼 아래로, 아주 살짝 흔들림 */
+  carriageDepthDrop: 12,
+  carriageSway: 1,
+  carriageSwayPeriod: 1.4,
+  /** 타고 내릴 수 있는 '앞쪽': 탈 것이 입구 정면에서 이 각도(라디안) 안에 있을 때 */
+  boardWindow: 0.3,
+  /** 입구(CAROUSEL_ENTRY)에서 이 거리 안이면 탈 수 있다 */
+  entryRadius: 22,
+  /** 스페이스를 이만큼 누르고 있으면 '꾹' (마차만 기다림) */
+  holdSeconds: 0.5,
+  /** 손 흔들기: 길이, 팔 그림이 바뀌는 간격 */
+  waveSeconds: 1,
+  waveFrameDuration: 0.16,
   /** 앞쪽 말일수록 이만큼 아래로 (원근) */
   horseDepthDrop: 9,
   bobAmplitude: 4,
@@ -575,7 +590,121 @@ export const CAROUSEL = {
   floorGlowPeriod: 2.4,
 } as const;
 
+/** 바닥 판 둘레의 낮은 금색 난간. 앞쪽 가운데(입구)만 끊겨 있다 */
+export const CAROUSEL_RAIL = {
+  height: 10,
+  /** 기둥 간격, 가로대 2줄의 높이 (바닥에서 위로) */
+  postEvery: 12,
+  railsAbove: [9, 5],
+  /** 판 가장자리에서 안쪽으로 들인 거리 (가로, 세로) */
+  insetX: 3,
+  insetY: 2,
+  /** 입구로 끊긴 폭 */
+  gapWidth: 28,
+  /** 입구 양옆 기둥이 더 솟는 높이 */
+  gapPostRise: 3,
+  /** 뒤쪽 절반을 어둡게 하는 비율 */
+  backShade: 0.45,
+} as const;
+
+/** 회전목마 입구 아치·카펫·줄 기둥 (위치는 world.ts의 CAROUSEL_GATE) */
+export const ENTRANCE = {
+  /** 아치 = 기둥 높이 + 반원 (폭 36, 높이 46) */
+  pillarHeight: 28,
+  archThickness: 4,
+  /** 감은 금 띠 간격과 두께 */
+  bandEvery: 7,
+  bandWidth: 2,
+  /** 전구: 기둥에 달린 것(발밑에서 위로), 반원에 달린 것(수평에서 잰 각도). 양쪽 대칭이라 모두 10개 */
+  pillarBulbsAbove: [8, 20],
+  arcBulbAngles: [14, 46, 78],
+  /** 평소 밝기, 가까이 왔을 때 밝기 */
+  idleLevel: 0.45,
+  nearLevel: 0.8,
+  /** 불빛이 아래에서 위로 흐르는 주기와 한 번 흐르는 데 걸리는 시간 */
+  flowPeriod: 2,
+  flowDuration: 0.9,
+  bulbGlowAlpha: 0.45,
+  /** 가까이 가면 튀는 작은 반짝이 */
+  sparkleMax: 3,
+  sparkleEvery: 0.28,
+  sparkleLife: 0.5,
+  sparkleSpread: 5,
+  /** 기둥 아래 리스 */
+  wreathAbove: 12,
+  wreathRadius: 3,
+  /** 계단 한 칸 높이 */
+  stepRise: 4,
+  /** 카펫 금 줄무늬 위치, 끝자락 술 길이 */
+  carpetStripeInset: 2,
+  fringeLength: 2,
+  /** 줄 서는 금 기둥과 벨벳 줄 */
+  postHeight: 13,
+  ropeHookAbove: 11,
+  ropeSag: 3,
+  /** 올라탈 때 오른쪽 줄이 풀렸다 다시 걸리는 시간, 풀렸을 때 늘어지는 길이 */
+  ropeOpenSeconds: 0.3,
+  ropeLooseDrop: 9,
+} as const;
+
+export const ENTRANCE_COLORS = {
+  pillar: '#8a1f2a',
+  pillarShade: '#641620',
+  gold: '#e2b23e',
+  goldShade: '#b0862a',
+  star: '#ffd34d',
+  bulb: '#fff1c2',
+  bulbGlow: '#ffd98a',
+  sparkle: '#fff6d0',
+  wreath: '#2f7a52',
+  wreathDark: '#1f5a3c',
+  bow: '#d23a3a',
+  carpet: '#6e1420',
+  carpetLight: '#84202c',
+  carpetStripe: '#c79a3a',
+  stepTop: '#8a5a38',
+  stepFront: '#5a3a26',
+  stepEdge: '#a8744a',
+  rope: '#b3202e',
+  ropeShade: '#7a1420',
+} as const;
+
+/** 지붕 없이 위가 트인 2인용 마차 (오른쪽을 보는 그림 기준, 왼쪽 위가 0,0) */
+export const CARRIAGE = {
+  width: 46,
+  height: 30,
+  /** 자리: 엉덩이가 놓이는 곳. 0 = 뒷자리(왼쪽), 1 = 앞자리(오른쪽). 캐릭터 폭(16)만큼 떨어져 겹치지 않는다 */
+  seats: [
+    { x: 13, y: 17 },
+    { x: 30, y: 17 },
+  ],
+  /** 옆면 윗선: 뒤는 높고 가운데(타는 곳)는 낮고 앞은 말려 올라간다 */
+  rearTopY: 10,
+  dipTopY: 15,
+  frontTopY: 11,
+  bottomY: 24,
+  /** 등받이 (빨간 벨벳): 뒷자리·앞자리 */
+  backrests: [
+    { x: 4, w: 5, top: 2 },
+    { x: 21, w: 4, top: 6 },
+  ],
+  wheelRadius: 4,
+  wheelXs: [12, 34],
+  wheelY: 25,
+  /** 앞쪽 둥글게 말린 장식 가운데 */
+  scrollX: 43,
+  scrollY: 7,
+} as const;
+
 export const CAROUSEL_COLORS = {
+  carriage: {
+    body: '#f3e6c8',
+    bodyShade: '#d9c9a4',
+    inside: '#b9a67e',
+    velvet: '#c8343e',
+    velvetShade: '#9a2630',
+    under: '#4a3020',
+  },
   stripeA: '#f3e6c8',
   stripeB: '#c8343e',
   stripeAShade: '#c9bc9e',
@@ -836,6 +965,12 @@ export const LIGHTING = {
   carouselPoolAlpha: 0.12,
   rinkSpillRadiusY: 20,
   rinkSpillAlpha: 0.14,
+  /** 회전목마 입구: 아치 둘레 작은 빛, 카펫 위로 타원처럼 번지는 금빛 — 회전목마 둘레에서 가장 밝은 곳 */
+  gateHaloRadius: 30,
+  gateHaloAlpha: 0.2,
+  gatePoolRadiusX: 30,
+  gatePoolRadiusY: 14,
+  gatePoolAlpha: 0.36,
   lampHaloRadius: 22,
   lampHaloAlpha: 0.2,
   clockHaloRadius: 20,
@@ -941,6 +1076,35 @@ export const AMBIENCE = {
   ],
 } as const;
 
+/** 회전목마를 타고 앞쪽을 지날 때 스치는 아주 작은 바람 소리 */
+export const WIND = {
+  volume: 0.14,
+  noiseSeconds: 1,
+  length: 0.7,
+  attack: 0.25,
+  /** 걸러 내는 대역이 낮게 시작해 높아졌다 다시 내려온다 */
+  lowHz: 350,
+  highHz: 950,
+  filterQ: 0.8,
+} as const;
+
+/** 화면 위에 띄우는 조작 힌트 (글자는 또렷하게 보이도록 캔버스 위 DOM으로 띄운다) */
+export const HINT = {
+  /** 글자 크기 = 캔버스 확대 배율 × 이 값 (px), 최소 크기 */
+  fontPerScale: 5.2,
+  minFont: 11,
+  subFontRatio: 0.8,
+  /** 캐릭터 머리 위로 띄우는 높이 (내부 해상도 px) */
+  aboveHead: 38,
+  /** 입구 아치 꼭대기 장식 위로 띄우는 높이 */
+  aboveArch: 2,
+  /** 화면 아래쪽 안내의 y */
+  bottomY: 258,
+  background: 'rgba(10, 13, 32, 0.78)',
+  color: '#fff6dc',
+  subColor: '#c9d4ea',
+} as const;
+
 /** 눈 밟는 발자국 */
 export const FOOTSTEPS = {
   /** 발 디디는 간격 = 걷기 그림 두 장 */
@@ -972,6 +1136,8 @@ export const MUSIC_BOX = {
   panDistance: 260,
   /** 음량·좌우 변화를 부드럽게 (초) */
   smoothing: 0.15,
+  /** 회전목마를 타는 동안 조금 더 크게 */
+  ridingBoost: 1.35,
   /** 미리 예약하는 시간 */
   lookahead: 0.3,
   attack: 0.004,
@@ -1030,7 +1196,7 @@ export const RINK_SOUND = {
 /** ?sprites=1 확인 화면 */
 export const SPRITE_SHEET = {
   scale: 4,
-  columns: 8,
+  columns: 14,
   padding: 8,
   labelHeight: 14,
   titleHeight: 20,

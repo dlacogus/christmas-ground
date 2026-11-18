@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { parseSong, BEATS_PER_BAR, noteFrequency } from '../audio/melody';
 import { musicBoxPan, musicBoxVolume } from '../audio/musicBox';
-import { CAROUSEL, CHARACTER, MUSIC_BOX } from '../constants';
+import { CAROUSEL, CARRIAGE, CHARACTER, MUSIC_BOX } from '../constants';
 import { CAROUSEL_X, FIRS, FIR_LINE_X, INTERACTION_POINTS, LAMPS, getObstacle, inZone } from '../world';
 import {
   HORSE_HEIGHT,
   HORSE_WIDTH,
   bulbLevel,
   carouselGeometry,
-  horseSeat,
-  horseStates,
+  carriageTopAt,
+  mountAngle,
+  mountKind,
+  mountSeats,
+  mountSize,
+  mountState,
+  mountStates,
+  riderDepth,
   roofBottomAt,
+  seatPosition,
   shadeLevel,
 } from './carousel';
 
@@ -44,25 +51,93 @@ describe('회전목마 모양', () => {
     expect(HORSE_HEIGHT).toBeLessThan(CHARACTER.spriteHeight);
   });
 
-  it('언제 어느 말에 타도 머리가 지붕 장식에 닿지 않고, 안장은 말 위에 있다', () => {
+  it('언제 어느 탈 것 어느 자리에 타도 머리가 지붕 장식에 닿지 않고, 자리는 탈 것 위에 있다', () => {
     for (let t = 0; t < CAROUSEL.rotationPeriod; t += 0.37) {
-      for (const h of horseStates(t)) {
-        const seat = horseSeat(h);
-        const valanceBottom = roofBottomAt(seat.x - CAROUSEL_X) + CAROUSEL.goldBandHeight + CAROUSEL.valanceHeight;
-        expect(seat.y - CAROUSEL.riderAboveSeat * seat.scale).toBeGreaterThan(valanceBottom);
-        expect(seat.y).toBeLessThan(h.y);
-        expect(Math.abs(seat.x - h.x)).toBeLessThan(HORSE_WIDTH / 2);
+      for (const m of mountStates(t)) {
+        for (const seat of mountSeats(m)) {
+          const valanceBottom = roofBottomAt(seat.x - CAROUSEL_X) + CAROUSEL.goldBandHeight + CAROUSEL.valanceHeight;
+          expect(seat.y - CAROUSEL.riderAboveSeat * seat.scale).toBeGreaterThan(valanceBottom);
+          expect(seat.y).toBeLessThan(m.y);
+          expect(Math.abs(seat.x - m.x)).toBeLessThan(mountSize(m.kind, m.z).w / 2);
+        }
       }
     }
   });
 });
 
+describe('마차', () => {
+  const kinds = Array.from({ length: CAROUSEL.horseCount }, (_, i) => mountKind(i));
+
+  it('탈 것 8개 = 말 6마리 + 마차 2대, 마차는 서로 반대편(180°)', () => {
+    expect(kinds.filter((k) => k === 'horse')).toHaveLength(6);
+    expect(kinds.filter((k) => k === 'carriage')).toHaveLength(2);
+    const [a, b] = CAROUSEL.carriageIndices;
+    for (const t of [0, 1.7, 5.2]) {
+      const gap = Math.abs(mountAngle(a, t) - mountAngle(b, t));
+      expect(gap).toBeCloseTo(Math.PI, 6);
+    }
+  });
+
+  it('두 사람이 나란히 앉을 폭: 자리 2개가 캐릭터 폭만큼 떨어져 겹치지 않고, 마차 안에 들어간다', () => {
+    expect(CARRIAGE.width).toBeGreaterThanOrEqual(40);
+    const [rear, front] = CARRIAGE.seats;
+    expect(front.x - rear.x).toBeGreaterThanOrEqual(CHARACTER.spriteWidth);
+    expect(rear.x - CHARACTER.spriteWidth / 2).toBeGreaterThanOrEqual(0);
+    expect(front.x + CHARACTER.spriteWidth / 2).toBeLessThanOrEqual(CARRIAGE.width);
+    const carriage = mountState(CAROUSEL.carriageIndices[0], 0);
+    expect(mountSeats(carriage)).toHaveLength(2);
+    expect(mountSeats(mountState(1, 0))).toHaveLength(1);
+  });
+
+  it('지붕이 없고, 옆면이 앉은 사람의 다리를 가려 상반신만 보인다', () => {
+    for (const seat of CARRIAGE.seats) {
+      // 옆면 윗선이 엉덩이보다 위에 있어 다리를 가리고, 머리와 어깨는 그 위로 나온다
+      expect(carriageTopAt(seat.x)).toBeLessThan(seat.y);
+      expect(seat.y - carriageTopAt(seat.x)).toBeLessThan(8);
+      expect(seat.y - CAROUSEL.riderAboveSeat).toBeLessThan(0);
+    }
+  });
+
+  it('말처럼 오르내리지 않고 판에 붙어 돌며, 1px만 흔들린다', () => {
+    const index = CAROUSEL.carriageIndices[0];
+    const offsets = new Set<number>();
+    for (let t = 0; t < CAROUSEL.rotationPeriod; t += 0.05) {
+      const m = mountState(index, t);
+      offsets.add(m.y - carouselGeometry().platformY - Math.round(m.z * CAROUSEL.carriageDepthDrop));
+    }
+    expect([...offsets].sort()).toEqual([0, CAROUSEL.carriageSway]);
+    expect(CAROUSEL.carriageSway).toBe(1);
+  });
+
+  it('뒤쪽으로 돌면 말과 같이 작아지고, 자리도 좌우가 뒤집혀 따라간다', () => {
+    const index = CAROUSEL.carriageIndices[0];
+    const half = CAROUSEL.rotationPeriod / 2;
+    const frontTime = (CAROUSEL.rotationPeriod * (CAROUSEL.horseCount - index)) / CAROUSEL.horseCount;
+    const front = mountState(index, frontTime);
+    const back = mountState(index, frontTime + half);
+    expect(front.z).toBeCloseTo(1, 6);
+    expect(back.z).toBeCloseTo(-1, 6);
+    expect(mountSize('carriage', back.z).w).toBeLessThan(mountSize('carriage', front.z).w);
+    expect(mountSeats(back)[0].scale).toBeCloseTo(CAROUSEL.backScale, 1);
+    // 앞에서는 뒷자리가 왼쪽, 뒤로 돌면 오른쪽
+    expect(mountSeats(front)[0].x).toBeLessThan(mountSeats(front)[1].x);
+    expect(mountSeats(back)[0].x).toBeGreaterThan(mountSeats(back)[1].x);
+    expect(seatPosition(index, 1, frontTime)).toEqual(mountSeats(front)[1]);
+  });
+
+  it('두 사람이 앉으면 화면에서 앞에 있는 사람을 나중에 그린다', () => {
+    const approaching = { ...mountState(CAROUSEL.carriageIndices[0], 0), angle: -0.5 };
+    const leaving = { ...approaching, angle: 0.5 };
+    expect(riderDepth(approaching, 1)).toBeGreaterThan(riderDepth(approaching, 0));
+    expect(riderDepth(leaving, 0)).toBeGreaterThan(riderDepth(leaving, 1));
+  });
+});
+
 describe('목마 회전', () => {
-  it('6~8마리, 한 바퀴 약 12초', () => {
-    const now = horseStates(1.234);
-    expect(now.length).toBeGreaterThanOrEqual(6);
-    expect(now.length).toBeLessThanOrEqual(8);
-    const later = horseStates(1.234 + CAROUSEL.rotationPeriod);
+  it('탈 것 8개, 한 바퀴 약 12초', () => {
+    const now = mountStates(1.234);
+    expect(now).toHaveLength(8);
+    const later = mountStates(1.234 + CAROUSEL.rotationPeriod);
     for (const h of now) {
       const same = later.find((l) => l.index === h.index)!;
       expect(same.x).toBeCloseTo(h.x, 6);
@@ -71,7 +146,7 @@ describe('목마 회전', () => {
   });
 
   it('뒤 → 앞 순서로 그리고, 앞쪽 말은 밝고 아래(가까이)에 있다', () => {
-    const horses = horseStates(0.5);
+    const horses = mountStates(0.5);
     for (let i = 1; i < horses.length; i++) expect(horses[i].z).toBeGreaterThanOrEqual(horses[i - 1].z);
     expect(shadeLevel(1)).toBe(0);
     expect(shadeLevel(-1)).toBe(CAROUSEL.shadeLevels - 1);
@@ -80,7 +155,10 @@ describe('목마 회전', () => {
   });
 
   it('말마다 위상이 달라 오르내림이 다르다', () => {
-    const at = (t: number) => horseStates(t).map((h) => ({ i: h.index, y: h.y, z: h.z }));
+    const at = (t: number) =>
+      mountStates(t)
+        .filter((h) => h.kind === 'horse')
+        .map((h) => ({ i: h.index, y: h.y, z: h.z }));
     // 같은 앞뒤 위치에서 비교하려고 회전 효과를 빼고 오르내림만 본다
     const bob = (t: number) =>
       at(t).map((h) => h.y - (carouselGeometry().platformY - CAROUSEL.horseBaseAbove + h.z * CAROUSEL.horseDepthDrop));

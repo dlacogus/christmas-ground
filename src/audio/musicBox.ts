@@ -16,7 +16,12 @@ export function musicBoxPan(listenerX: number, sourceX: number): number {
   return Math.max(-1, Math.min(1, (sourceX - listenerX) / M.panDistance));
 }
 
-export function createMusicBox(source: Point): SoundPart {
+export interface MusicBox extends SoundPart {
+  /** 회전목마를 타는 동안에는 조금 더 크게 들린다 */
+  setRiding(riding: boolean): void;
+}
+
+export function createMusicBox(source: Point): MusicBox {
   const song = parseSong();
   const secondsPerBeat = 60 / M.tempo;
   let audio: AudioContext | null = null;
@@ -26,6 +31,7 @@ export function createMusicBox(source: Point): SoundPart {
   let nextIndex = 0;
   let loop = 0;
   let target = { volume: 0, pan: 0 };
+  let boost = 1;
 
   const playNote = (ctx: AudioContext, out: AudioNode, note: NoteEvent, when: number) => {
     const velocity = note.bass ? M.bassVelocity : M.melodyVelocity;
@@ -69,9 +75,12 @@ export function createMusicBox(source: Point): SoundPart {
         }
       }
     },
+    setRiding(riding: boolean) {
+      boost = riding ? M.ridingBoost : 1;
+    },
     setListener(x: number, y: number) {
       target = {
-        volume: musicBoxVolume(Math.hypot(x - source.x, y - source.y)),
+        volume: musicBoxVolume(Math.hypot(x - source.x, y - source.y)) * boost,
         pan: musicBoxPan(x, source.x),
       };
       if (!audio || !gain || !panner) return;

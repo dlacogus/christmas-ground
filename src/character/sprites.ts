@@ -8,7 +8,7 @@
 import { CHARACTER } from '../constants';
 
 export type Facing = 'left' | 'right';
-export type PoseName = 'idle' | 'walk' | 'glide';
+export type PoseName = 'idle' | 'walk' | 'glide' | 'ride' | 'rideWave' | 'sit' | 'sitWave';
 
 const TRANSPARENT = '.';
 
@@ -95,6 +95,66 @@ const LEGS_GLIDE_TUCK: readonly string[] = [
   '....KKKKKKKKKK..',
 ];
 
+/** 말 위에 앉은 자세: 허벅지는 앞으로, 종아리는 말 옆구리로 내려온다 */
+const LEGS_RIDE: readonly string[] = [
+  '.....LLLLLL.....',
+  '.....LLLLLLL....',
+  '.........LLL....',
+  '.........LLL....',
+  '.........FFFF...',
+  '.........FFFF...',
+];
+
+/** 마차 의자에 앉은 자세: 무릎을 굽혀 앉는다 (아래쪽은 마차 옆면에 가려 상반신만 보인다) */
+const LEGS_SIT: readonly string[] = [
+  '.....LLLLLLL....',
+  '.....LLLLLLL....',
+  '..........LL....',
+  '..........LL....',
+  '..........FFF...',
+  '..........FFF...',
+];
+
+/** 한 손을 들어 흔드는 팔 (머리·몸 그림 8번째 줄부터 겹쳐 찍는다). 두 장이 번갈아 나온다 */
+const WAVE_ARM_TOP_ROW = 7;
+const WAVE_ARMS: readonly (readonly string[])[] = [
+  [
+    '................',
+    '..............MM',
+    '..............MM',
+    '...............O',
+    '...............O',
+    '...............O',
+    '..............OO',
+    '..............Oo',
+    '..............Oo',
+    '.............OOo',
+  ],
+  [
+    '.............MM.',
+    '.............MM.',
+    '..............O.',
+    '..............OO',
+    '...............O',
+    '...............O',
+    '..............OO',
+    '..............Oo',
+    '..............Oo',
+    '.............OOo',
+  ],
+];
+/** 흔드는 동안에는 옆에 늘어뜨린 손(장갑)을 코트로 덮는다 */
+const HANGING_HAND_ROWS = [21, 22];
+const HANGING_HAND_COLUMN = 14;
+
+/** 앉은 자세에 손 흔드는 팔을 얹는다 */
+function withWave(frame: readonly string[], arm: readonly string[]): string[] {
+  const grid = frame.map((row) => [...row]);
+  for (const r of HANGING_HAND_ROWS) if (grid[r][HANGING_HAND_COLUMN] === 'M') grid[r][HANGING_HAND_COLUMN] = 'O';
+  stamp(grid, arm, WAVE_ARM_TOP_ROW);
+  return grid.map((row) => row.join(''));
+}
+
 const LEGS_TOP_ROW = CHARACTER.spriteHeight - LEGS_STAND.length;
 
 /** 앞다리·뒷다리 색을 맞바꾼다 (반대쪽 발이 앞에 나온 프레임) */
@@ -141,17 +201,20 @@ export const POSES: Readonly<Record<PoseName, readonly string[][]>> = {
   ],
   // 스케이트 미끄럼 2프레임: 뒷발 뻗기 → 모으며 살짝 웅크림
   glide: [compose(LEGS_GLIDE_REACH, 0, 0), compose(LEGS_GLIDE_TUCK, 1, 0)],
+  // 회전목마: 말 위에 앉기 / 마차 의자에 앉기, 각각 손 흔드는 두 장
+  ride: [compose(LEGS_RIDE, 0, 0)],
+  rideWave: WAVE_ARMS.map((arm) => withWave(compose(LEGS_RIDE, 0, 0), arm)),
+  sit: [compose(LEGS_SIT, 0, 0)],
+  sitWave: WAVE_ARMS.map((arm) => withWave(compose(LEGS_SIT, 0, 0), arm)),
 };
 
 export function mirrorRows(rows: readonly string[]): string[] {
   return rows.map((row) => [...row].reverse().join(''));
 }
 
-const mirrored: Record<PoseName, string[][]> = {
-  idle: POSES.idle.map(mirrorRows),
-  walk: POSES.walk.map(mirrorRows),
-  glide: POSES.glide.map(mirrorRows),
-};
+const mirrored = Object.fromEntries(
+  (Object.keys(POSES) as PoseName[]).map((pose) => [pose, POSES[pose].map(mirrorRows)]),
+) as Record<PoseName, string[][]>;
 
 export function getFrame(pose: PoseName, index: number, facing: Facing): readonly string[] {
   const frames = facing === 'right' ? POSES[pose] : mirrored[pose];

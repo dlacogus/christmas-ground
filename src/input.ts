@@ -1,16 +1,69 @@
-// 키보드(방향키/WASD)와 탭 입력.
+// 키보드(방향키/WASD, 스페이스, Esc)와 탭 입력.
 
 import type { MoveInput } from './character/character';
+import { CAROUSEL } from './constants';
 
 const LEFT_KEYS = ['ArrowLeft', 'KeyA'];
 const RIGHT_KEYS = ['ArrowRight', 'KeyD'];
 const UP_KEYS = ['ArrowUp', 'KeyW'];
 const DOWN_KEYS = ['ArrowDown', 'KeyS'];
-const HANDLED_KEYS = new Set([...LEFT_KEYS, ...RIGHT_KEYS, ...UP_KEYS, ...DOWN_KEYS]);
+const ACTION_KEY = 'Space';
+const CANCEL_KEY = 'Escape';
+const DEBUG_FRIEND_KEY = 'KeyB';
+const HANDLED_KEYS = new Set([...LEFT_KEYS, ...RIGHT_KEYS, ...UP_KEYS, ...DOWN_KEYS, ACTION_KEY]);
+
+/** 한 프레임 동안 일어난 '한 번짜리' 입력 (읽으면 지워진다) */
+export interface InputActions {
+  /** 스페이스를 짧게 눌렀다 뗐다 */
+  tap: boolean;
+  /** 스페이스를 꾹 눌렀다 (holdSeconds를 넘긴 순간 한 번) */
+  hold: boolean;
+  /** Esc */
+  cancel: boolean;
+  /** 위쪽 키를 새로 눌렀다 (타는 동안 손 흔들기) */
+  up: boolean;
+  /** B 키 (?debug=1에서 가짜 친구) */
+  debugFriend: boolean;
+}
 
 export interface Input {
   direction(): MoveInput;
+  /** 지난번 읽은 뒤로 일어난 한 번짜리 입력 */
+  takeActions(): InputActions;
 }
+
+/** 짧게 누름과 꾹 누름을 가려낸다. 시간은 초 단위로 넘긴다 */
+export interface HoldKey {
+  down(now: number): void;
+  /** 뗐을 때: 꾹 누름이 이미 나갔으면 null, 아니면 'tap' */
+  up(): 'tap' | null;
+  /** 매 프레임: 누른 채로 threshold를 넘긴 순간 한 번 'hold' */
+  poll(now: number): 'hold' | null;
+}
+
+export function createHoldKey(threshold: number): HoldKey {
+  let downAt: number | null = null;
+  let fired = false;
+  return {
+    down(now: number) {
+      if (downAt !== null) return; // 누르고 있는 동안 반복되는 keydown은 무시
+      downAt = now;
+      fired = false;
+    },
+    up() {
+      const wasDown = downAt !== null;
+      downAt = null;
+      return wasDown && !fired ? 'tap' : null;
+    },
+    poll(now: number) {
+      if (downAt === null || fired || now - downAt < threshold) return null;
+      fired = true;
+      return 'hold';
+    },
+  };
+}
+
+const noActions = (): InputActions => ({ tap: false, hold: false, cancel: false, up: false, debugFriend: false });
 
 /**
  * onTap은 내부 해상도 기준 화면 좌표(sx, sy)로 불린다.
@@ -23,14 +76,30 @@ export function createInput(
   onTap: (sx: number, sy: number) => void,
 ): Input {
   const held = new Set<string>();
+  const space = createHoldKey(CAROUSEL.holdSeconds);
+  let actions = noActions();
+  const seconds = () => performance.now() / 1000;
 
   window.addEventListener('keydown', (e) => {
+    if (e.code === CANCEL_KEY) actions.cancel = true;
+    if (e.code === DEBUG_FRIEND_KEY && !e.repeat) actions.debugFriend = true;
     if (!HANDLED_KEYS.has(e.code)) return;
     e.preventDefault();
+    if (e.code === ACTION_KEY) {
+      space.down(seconds());
+      return;
+    }
+    if (UP_KEYS.includes(e.code) && !held.has(e.code)) actions.up = true;
     held.add(e.code);
   });
-  window.addEventListener('keyup', (e) => held.delete(e.code));
-  window.addEventListener('blur', () => held.clear());
+  window.addEventListener('keyup', (e) => {
+    if (e.code === ACTION_KEY && space.up() === 'tap') actions.tap = true;
+    held.delete(e.code);
+  });
+  window.addEventListener('blur', () => {
+    held.clear();
+    space.up();
+  });
 
   canvas.addEventListener('pointerdown', (e) => {
     const rect = canvas.getBoundingClientRect();
@@ -46,6 +115,12 @@ export function createInput(
         x: (any(RIGHT_KEYS) ? 1 : 0) - (any(LEFT_KEYS) ? 1 : 0),
         y: (any(DOWN_KEYS) ? 1 : 0) - (any(UP_KEYS) ? 1 : 0),
       };
+    },
+    takeActions() {
+      if (space.poll(seconds()) === 'hold') actions.hold = true;
+      const taken = actions;
+      actions = noActions();
+      return taken;
     },
   };
 }

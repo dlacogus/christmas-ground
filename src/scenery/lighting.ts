@@ -4,6 +4,7 @@
 
 import { CLOCK_TOWER, LIGHTING as L, LIGHTING_COLORS as C, SCREEN_HEIGHT, SCREEN_WIDTH, TREE } from '../constants';
 import { carouselGeometry } from '../props/carousel';
+import { gateGeometry } from '../props/carouselEntrance';
 import { hutRoofHeight } from '../props/marketHut';
 import { dither, fillPixelCircle, fillPixelEllipse } from '../props/pixel';
 import { lanternCenters } from '../props/streetLamp';
@@ -144,6 +145,9 @@ export function createGroundLight(rng: Rng) {
     for (const lamp of LAMPS) softEllipse(ctx, lamp.x, lamp.y, L.lampPoolRadiusX, L.lampPoolRadiusY, L.lampPoolAlpha, C.warm);
     softEllipse(ctx, TREE_X, bed.y + bed.h / 2, L.treePoolRadiusX, L.treePoolRadiusY, L.treePoolAlpha, C.gold);
     softEllipse(ctx, CAROUSEL_X, carouselGeometry().rimBottom, L.carouselPoolRadiusX, L.carouselPoolRadiusY, L.carouselPoolAlpha, C.gold);
+    // 회전목마 입구: 아치 아래에서 카펫 위로 타원처럼 번지는 금빛 (회전목마 둘레에서 가장 밝은 곳)
+    const gate = gateGeometry();
+    softEllipse(ctx, gate.cx, (gate.footY + gate.carpetEndY) / 2, L.gatePoolRadiusX, L.gatePoolRadiusY, L.gatePoolAlpha, C.gold);
     // 링크 전구 줄 빛이 앞쪽 바닥에 번진다
     softEllipse(ctx, rink.x + rink.w / 2, rink.y + rink.h + 4, rink.w / 2, L.rinkSpillRadiusY, L.rinkSpillAlpha, C.rinkHaze);
     ctx.restore();
@@ -161,6 +165,8 @@ export function createGroundLight(rng: Rng) {
     }
     softEllipse(ctx, rink.x + rink.w / 2, rink.y - 40, rink.w / 2, 46, L.rinkHazeAlpha, C.rinkHaze);
     const carousel = carouselGeometry();
+    const gate = gateGeometry();
+    softEllipse(ctx, gate.cx, gate.springY, L.gateHaloRadius, L.gateHaloRadius, L.gateHaloAlpha, C.gold);
     softEllipse(ctx, CAROUSEL_X, (carousel.apexY + carousel.platformY) / 2, L.carouselHaloRadiusX, L.carouselHaloRadiusY, L.carouselHaloAlpha, C.gold);
   });
 

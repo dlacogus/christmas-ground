@@ -39,6 +39,23 @@ export const CAROUSEL_DEPTH = 40;
 /** 바닥 띠 윗선에서 판 뒤쪽 끝까지 — 뒤로도 지나갈 수 있다 */
 export const CAROUSEL_SETBACK = 62;
 
+/**
+ * 회전목마 입구 (가운데 x = CAROUSEL_X, 바닥 판 앞 테두리 바로 앞).
+ * 판 테두리 → 계단(stepsDepth) → 아치 기둥 발밑 → 카펫(carpetLength) → 줄 기둥 순서로 앞으로 나온다.
+ * 판 둘레(난간)는 장애물이고, 아치 기둥 사이 계단과 카펫은 걸어 들어갈 수 있다.
+ */
+export const CAROUSEL_GATE = {
+  /** 아치 기둥 가운데가 입구 가운데에서 떨어진 거리, 기둥 폭 */
+  pillarOffset: 16,
+  pillarWidth: 4,
+  /** 판 테두리에서 아치 기둥 발밑까지 (계단 2칸이 놓인다) */
+  stepsDepth: 4,
+  carpetHalfWidth: 12,
+  carpetLength: 20,
+  /** 줄 서는 금 기둥이 입구 가운데에서 떨어진 거리. 가늘어서 장애물로 두지 않는다 (앞을 지나는 길을 막지 않게) */
+  ropePostOffset: 20,
+} as const;
+
 /** 구역 왼쪽 끝을 막는 작은 전나무 줄 (이 x까지 못 들어간다) */
 export const FIR_LINE_X = 40;
 /** 전나무 한 그루씩: 발밑 위치와 키 */
@@ -151,6 +168,14 @@ export const OBSTACLES: readonly Obstacle[] = [
     w: CAROUSEL_HALF_WIDTH * 2,
     h: CAROUSEL_DEPTH,
   },
+  // 입구 아치 기둥 두 개 (발밑) — 그 사이로만 계단까지 들어갈 수 있다
+  ...[-1, 1].map((side, i) => ({
+    id: `gate-pillar-${i + 1}`,
+    x: CAROUSEL_X + side * CAROUSEL_GATE.pillarOffset - CAROUSEL_GATE.pillarWidth / 2 - 1,
+    y: WALK_AREA.y + CAROUSEL_SETBACK + CAROUSEL_DEPTH,
+    w: CAROUSEL_GATE.pillarWidth + 2,
+    h: CAROUSEL_GATE.stepsDepth,
+  })),
   { id: 'firs', x: WALK_AREA.x, y: WALK_AREA.y, w: FIR_LINE_X - WALK_AREA.x, h: WALK_AREA.h },
   ...BENCHES.map((b, i) => ({
     id: `bench-${i + 1}`,

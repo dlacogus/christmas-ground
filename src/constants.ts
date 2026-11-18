@@ -565,6 +565,8 @@ export const CAROUSEL = {
   /** 지붕 줄무늬가 도는 모습을 미리 그려 두는 장 수 */
   roofFrames: 8,
   roofEdgeShade: 0.8,
+  /** 지붕에 쌓인 눈: 꼭대기를 덮는 눈 모자(지붕 높이 대비 비율·들쭉날쭉한 정도), 윗선을 따라 얹힌 두께, 처마 위 눈 둔덕 높이, 사이사이 눈 얼룩 */
+  roofSnow: { capRatio: 0.34, capWobble: 0.09, rimThickness: 3, eaveMax: 3, fleckChance: 0.05 },
   goldBandHeight: 3,
   valanceHeight: 8,
   scallopWidth: 14,
@@ -705,6 +707,8 @@ export const CAROUSEL_COLORS = {
     velvetShade: '#9a2630',
     under: '#4a3020',
   },
+  roofSnow: '#e8eef8',
+  roofSnowShade: '#b9c4dc',
   stripeA: '#f3e6c8',
   stripeB: '#c8343e',
   stripeAShade: '#c9bc9e',

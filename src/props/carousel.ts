@@ -484,6 +484,28 @@ function paintRail(ctx: CanvasRenderingContext2D, front: boolean): void {
   }
 }
 
+const S = K.roofSnow;
+
+/** 0~1 고정 무작위 (같은 자리는 늘 같은 값) */
+function snowHash(x: number, y: number): number {
+  const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return n - Math.floor(n);
+}
+
+/** 지붕 버퍼에서 dx 열의 눈이 끝나는 y (꼭대기 눈 모자와 윗선에 얹힌 눈 중 더 아래쪽). colTop = 그 열의 지붕 윗선 */
+export function roofSnowEnd(dx: number, colTop: number): number {
+  const wobble = Math.sin(dx * 0.11) * 0.6 + Math.sin(dx * 0.37 + 1.3) * 0.4;
+  const cap = Math.round(K.roofHeight * (S.capRatio + S.capWobble * wobble));
+  const rim = colTop + S.rimThickness - (snowHash(dx, 7) < 0.3 ? 1 : 0);
+  return Math.max(cap, rim);
+}
+
+/** 처마 바로 위에 쌓인 눈 둔덕 높이 (0이면 없음) */
+export function roofSnowEave(dx: number): number {
+  const lump = Math.sin(dx * 0.19 + 0.7) * 0.6 + Math.sin(dx * 0.53) * 0.4;
+  return Math.max(0, Math.round(lump * S.eaveMax));
+}
+
 /** 지붕 한 장 (phaseIndex번째 회전 모습). 버퍼 y 0 = 꼭대기 */
 function paintRoof(ctx: CanvasRenderingContext2D, phaseIndex: number): void {
   const R = K.roofHalfWidth;
@@ -503,6 +525,23 @@ function paintRoof(ctx: CanvasRenderingContext2D, phaseIndex: number): void {
       const even = ((stripe % 2) + 2) % 2 === 0;
       ctx.fillStyle = even ? (edge ? C.stripeAShade : C.stripeA) : edge ? C.stripeBShade : C.stripeB;
       ctx.fillRect(ox + dx, y, 1, 1);
+    }
+    // 쌓인 눈: 꼭대기를 덮는 눈 모자 + 윗선을 따라 얹힌 눈 (줄무늬와 달리 돌아도 모양이 같다)
+    const snowEnd = Math.min(colBottom, roofSnowEnd(dx, colTop));
+    ctx.fillStyle = C.roofSnow;
+    ctx.fillRect(ox + dx, colTop, 1, snowEnd - colTop);
+    ctx.fillStyle = C.roofSnowShade;
+    ctx.fillRect(ox + dx, snowEnd - 1, 1, 1);
+    // 처마 위에 군데군데 쌓인 눈 둔덕
+    const eave = roofSnowEave(dx);
+    if (eave > 0 && colBottom - eave >= snowEnd) {
+      ctx.fillStyle = C.roofSnow;
+      ctx.fillRect(ox + dx, colBottom - eave, 1, eave);
+    }
+    // 사이사이 눈 얼룩
+    ctx.fillStyle = C.roofSnow;
+    for (let y = snowEnd + 1; y < colBottom - eave; y++) {
+      if (snowHash(dx, y) < S.fleckChance) ctx.fillRect(ox + dx, y, 1, 1);
     }
     // 금색 장식 띠
     ctx.fillStyle = C.gold;

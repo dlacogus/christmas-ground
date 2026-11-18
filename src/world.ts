@@ -37,7 +37,7 @@ export const CAROUSEL_X = 340;
 export const CAROUSEL_HALF_WIDTH = 120;
 export const CAROUSEL_DEPTH = 40;
 /** 바닥 띠 윗선에서 판 뒤쪽 끝까지 — 뒤로도 지나갈 수 있다 */
-export const CAROUSEL_SETBACK = 62;
+export const CAROUSEL_SETBACK = 40;
 
 /**
  * 회전목마 입구 (가운데 x = CAROUSEL_X, 바닥 판 앞 테두리 바로 앞).

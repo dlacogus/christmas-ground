@@ -294,6 +294,177 @@ export const GROUND_COLORS = {
   snowCoverEdge: '#a3afcc',
 } as const;
 
+/** 지붕에 쌓인 눈이 떨어진다 (지붕 목록·처마 밑 영역은 world.ts의 SNOW_ROOF_HUTS, eaveZone) */
+export const ROOF_SNOW = {
+  // ── 쌓이기
+  /** 가득 차기까지 걸리는 시간 (지붕마다 이 사이에서 다르게), 처음 쌓인 양 범위 */
+  fillMinSeconds: 180,
+  fillMaxSeconds: 300,
+  startMinLevel: 0.15,
+  startMaxLevel: 0.85,
+  seedOffset: 700,
+  /** 칸마다 가득 찼을 때 눈 두께 (px)와 칸별로 달라지는 정도 (0.25 = ±25%), 양 끝으로 얇아지는 칸 수 */
+  maxDepth: 4,
+  depthVariation: 0.25,
+  taperColumns: 3,
+  /** 처마 끝 칸이 이 비율보다 쌓이면 지붕 밖으로 둥글게 나온다 (처마 눈 차양), 가득 찼을 때 반지름 */
+  corniceFrom: 0.7,
+  corniceMaxRadius: 4,
+
+  // ── 미끄러지기
+  /** 한 번에 떨어지는 구간 = 지붕 폭의 이 비율 */
+  slideMinRatio: 0.3,
+  slideMaxRatio: 0.7,
+  /** 처음에는 아주 느리게 들썩인다 (px/초, 초), 들썩이는 간격 */
+  creepSpeed: 3,
+  creepSeconds: 0.6,
+  creepJitterEvery: 0.09,
+  /** 그 뒤 가속 = gravity × sin(지붕 각도) × slideFactor */
+  slideFactor: 0.6,
+  /** 평평한 지붕도 미끄러지게 하는 최소 sin */
+  minSlope: 0.2,
+  /** 눈 판이 지나간 자리에 남는 얕은 눈 (px) */
+  residue: 1,
+  /** 미끄러지는 동안 처마 끝에서 흘러내리는 눈가루 간격 */
+  slideDustEvery: 0.07,
+
+  // ── 처마에서 휘어져 끊어지기
+  /** 처마 밖으로 나온 길이 d(px)만큼 아래로 처진다: sag × d² */
+  sag: 0.1,
+  /** 한 번의 미끄러짐이 몇 덩어리로 끊어지나, 덩어리 하나의 길이 범위 (px) */
+  breakMinCount: 3,
+  breakMaxCount: 6,
+  breakMinLength: 5,
+  breakMaxLength: 10,
+
+  // ── 떨어지는 덩어리
+  gravity: 350,
+  /** 공기 저항 (1/초) */
+  drag: 0.9,
+  /** 처마에서 미끄러지던 속도를 이만큼 이어받는다 (바깥쪽으로 살짝 날아간다) */
+  inherit: 0.4,
+  /** 덩어리 크기 (px): 눈의 양(px²)의 제곱근 × sizePerRootMass */
+  chunkMinSize: 3,
+  chunkMaxSize: 10,
+  sizePerRootMass: 1.3,
+  /** 기울어지는 각도 단계 수, 초당 넘어가는 단계 (최대) */
+  angles: 8,
+  maxSpin: 5,
+  /** 이 크기 이상이면 splitChance 확률로 떨어지는 도중 갈라진다 */
+  splitMinSize: 7,
+  splitChance: 0.3,
+  splitMinDelay: 0.08,
+  splitMaxDelay: 0.22,
+  splitSpread: 14,
+  /** 덩어리 뒤로 남는 눈가루 꼬리: 간격, 내려오는 속도, 흐려지는 시간, 바람에 흔들리는 폭과 빠르기 */
+  trailEvery: 0.06,
+  dustFallSpeed: 11,
+  dustLife: 1,
+  windSway: 2.5,
+  windHz: 0.35,
+
+  // ── 바닥에 닿을 때
+  /** 덩어리가 떨어지는 깊이 (처마 밑 영역 윗선에서 앞으로) */
+  landMinDepth: 5,
+  landMaxDepth: 11,
+  /** 튀는 알갱이 개수와 속도, 사는 시간 */
+  grainMin: 6,
+  grainMax: 12,
+  grainSpeed: 42,
+  grainLift: 26,
+  grainLife: 0.5,
+  /** 눈가루 구름: 부푸는 시간, 엷어지는 시간, 반지름 (덩어리 크기 대비), 진하기 단계 */
+  cloudGrowSeconds: 0.25,
+  cloudLife: 1.5,
+  cloudRadiusPerSize: 0.9,
+  cloudAlphas: [0.5, 0.36, 0.22, 0.1],
+  /** 이 크기 이하 덩어리는 한 번 낮게 튀었다 멈춘다 */
+  bounceMaxSize: 4,
+  bounce: 0.28,
+  /** 바닥 더미: 처마 양옆으로 더 쌓일 수 있는 폭, 덩어리가 퍼지는 폭 (크기 대비), 녹는 시간, 앞뒤 깊이로 보이는 두께 */
+  pileSide: 24,
+  moundWidthPerSize: 1.6,
+  pileMeltSeconds: 20,
+  pileSkirt: 2,
+
+  // ── 서 있으면 '툭'
+  standSeconds: 6,
+  dripLevelDrop: 0.15,
+  dripCooldown: 20,
+  /** 머리 위 눈이 흔들리는 시간, 떨어지는 폭 (좌우 칸 수), 덩어리 눈의 양 범위 */
+  dripWobbleSeconds: 0.3,
+  dripHalfWidth: 3,
+  dripMinMass: 5,
+  dripMaxMass: 12,
+
+  // ── 맞기
+  /** 캐릭터 몸 사각형 반폭, 덩어리가 떨어지는 깊이와 발밑 y가 이만큼 안이어야 닿는다 */
+  hitHalfWidth: 6,
+  hitDepth: 8,
+  /** 닿은 눈의 양이 이 이상이면 눈사람, 아니면 눈 모자. 이 시간 동안 안 맞으면 다시 0부터 */
+  snowmanMass: 20,
+  hitWindow: 3,
+  /** 눈 모자 얹고 있는 시간, 몸을 터는 시간, 눈사람으로 못 움직이는 시간, 방향키 한 번에 줄어드는 시간 */
+  hatSeconds: 3.5,
+  shakeSeconds: 0.45,
+  shakeEvery: 0.05,
+  snowmanSeconds: 2,
+  struggleCut: 0.25,
+  blinkEvery: 2.2,
+  blinkSeconds: 0.15,
+  /** 털어낼 때 튀는 눈가루 */
+  burstHat: 8,
+  burstSnowman: 18,
+  burstSpeed: 45,
+  burstLife: 0.6,
+  /** 맞으면 오르는 추위 (추위 기능이 생기면 이 값을 쓴다) */
+  cold: { drip: 20, fall: 40 },
+
+  /** 덩어리·알갱이·가루를 합쳐 동시에 떠 있는 수 상한 (내리는 눈과 따로 센다) */
+  poolSize: 200,
+  /** ?debug=1: 가장 가까운 지붕 떨어뜨리기, 0.25배속 */
+  debugDropKey: 'KeyR',
+  debugSlowKey: 'KeyT',
+  debugSlowFactor: 0.25,
+} as const;
+
+export const ROOF_SNOW_COLORS = {
+  /** 윗면 (밤이라 너무 새하얗지 않게), 아래쪽·그늘 (연한 하늘색) */
+  top: '#e3eaf6',
+  shade: '#aebfdd',
+  dust: '#f2f6fc',
+  cloud: '#ffffff',
+  eye: '#2a1e2a',
+  /** 바닥 눈 더미 테두리와 그림자 (눈밭 위에서도 도드라지게) */
+  pileEdge: '#8e9cc0',
+  pileShadow: '#6f7da3',
+  debug: '#7fd6ff',
+} as const;
+
+/** 지붕 눈 소리 */
+export const ROOF_SNOW_SOUND = {
+  noiseSeconds: 1.5,
+  nearDistance: 40,
+  farDistance: 420,
+  panDistance: 260,
+  /** 미끄러지는 '스르르': 낮게 걸러 낸 잡음, 속도에 따라 커지고 조금 높아진다 */
+  slideVolume: 0.5,
+  slideFullSpeed: 90,
+  slideMinHz: 260,
+  slideHzPerSpeed: 5,
+  slideSmoothing: 0.06,
+  /** 덩어리가 닿을 때 둔한 '퍽': 큰 덩어리일수록 크고 낮다 */
+  thudVolume: 0.8,
+  thudBaseHz: 330,
+  thudHzPerSize: 22,
+  thudSeconds: 0.13,
+  thudFullSize: 9,
+  /** '툭' 떨어지기 전 머리 위에서 사락 */
+  rustleVolume: 0.3,
+  rustleHz: 5200,
+  rustleSeconds: 0.3,
+} as const;
+
 /** 눈 위에 흘림체로 쓴 글씨 (위치는 world.ts의 SNOW_WRITING_AT) */
 export const SNOW_WRITING = {
   lines: ['Merry', 'Christmas'],
@@ -1097,6 +1268,10 @@ export const SKATE = {
   fallSeconds: 1.2,
   getUpSeconds: 0.35,
   fallBrake: 220,
+  /** 벌러덩: 뒤로 젖혀지며 눕는 시간, 누운 몸을 발 쪽으로 당기는 px, 누운 몸 그림자 폭 */
+  fallTipSeconds: 0.22,
+  lyingShiftX: 12,
+  lyingShadowWidth: 28,
   /** 머리 위를 도는 작은 별 */
   starCount: 3,
   starRadiusX: 6,
@@ -1127,10 +1302,13 @@ export const SKATE = {
   jumpMinSpeed: 40,
   jumpHeight: 6,
   jumpSeconds: 0.5,
-  /** 스핀: 이보다 느릴 때, 도는 동안 멈추는 감속, 좌우가 바뀌는 간격 */
-  spinMaxSpeed: 40,
-  spinBrake: 200,
+  /** 스핀: 미끄러지면서도 돈다 (도는 동안은 방향키를 받지 않고 미끄럼 감속만), 좌우가 바뀌는 간격 */
   spinFlipSeconds: 0.07,
+  /** 공중 스핀: 점프한 뒤 이 사이에 스페이스를 다시 누르면 공중에서 돈다 (너무 이르거나 늦으면 안 됨) */
+  airSpinFrom: 0.06,
+  airSpinUntil: 0.32,
+  /** 공중 스핀 뒤 착지할 때 반짝이 개수 */
+  airSpinSparkles: 8,
   /** 이보다 오래 돌면 어지러워 비틀거린다 */
   dizzyAfter: 4,
   dizzySeconds: 1.6,
@@ -1142,8 +1320,6 @@ export const SKATE = {
   /** 이보다 빠르면 몸을 앞으로 숙인다 */
   fastSpeed: 80,
   leanFast: 2,
-  /** 엉덩방아: 윗몸이 뒤로 젖혀지는 px */
-  leanFallen: 2,
 
   // 얼음 자국
   trailSeconds: 3,

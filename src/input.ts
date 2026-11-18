@@ -24,6 +24,10 @@ export interface InputActions {
   up: boolean;
   /** B 키 (?debug=1에서 가짜 친구) */
   debugFriend: boolean;
+  /** 방향키를 새로 누른 횟수 (눈사람에서 빠져나오려고 연타) */
+  moveTaps?: number;
+  /** 스페이스를 막 누른 순간 (뗄 때 나오는 tap과 달리 바로 — 공중 스핀 타이밍) */
+  spaceDown?: boolean;
 }
 
 export interface Input {
@@ -95,10 +99,12 @@ export function createInput(
     if (!HANDLED_KEYS.has(e.code)) return;
     e.preventDefault();
     if (e.code === ACTION_KEY) {
+      if (!space.isDown()) actions.spaceDown = true;
       space.down(seconds());
       return;
     }
     if (UP_KEYS.includes(e.code) && !held.has(e.code)) actions.up = true;
+    if (!held.has(e.code)) actions.moveTaps = (actions.moveTaps ?? 0) + 1;
     held.add(e.code);
   });
   window.addEventListener('keyup', (e) => {

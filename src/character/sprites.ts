@@ -14,7 +14,6 @@ export type PoseName =
   | 'glide'
   | 'skateGlide'
   | 'crouch'
-  | 'fallen'
   | 'ride'
   | 'rideWave'
   | 'sit'
@@ -115,17 +114,6 @@ const LEGS_CROUCH: readonly string[] = [
   '...ffff..FFFFF..',
 ];
 const CROUCH_DROP = 3;
-
-/** 엉덩방아: 몸을 낮추고 두 다리를 앞으로 뻗었다 (날이 위로 들림) */
-const LEGS_FALLEN: readonly string[] = [
-  '................',
-  '................',
-  '................',
-  '............LLF.',
-  '...........LLLFK',
-  '..........llllFK',
-];
-const FALLEN_DROP = 5;
 
 /** 말 위에 앉은 자세: 허벅지는 앞으로, 종아리는 말 옆구리로 내려온다 */
 const LEGS_RIDE: readonly string[] = [
@@ -252,8 +240,6 @@ export const POSES: Readonly<Record<PoseName, readonly string[][]>> = {
   skateGlide: [armsOut(compose(LEGS_GLIDE_TUCK, 1, 0), 1)],
   // 쪼그려 앉기 2프레임 (신는 동안 머리가 까딱)
   crouch: [compose(LEGS_CROUCH, CROUCH_DROP, 0), compose(LEGS_CROUCH, CROUCH_DROP, 1)],
-  // 엉덩방아
-  fallen: [armsOut(compose(LEGS_FALLEN, FALLEN_DROP, 0), FALLEN_DROP)],
   // 회전목마: 말 위에 앉기 / 마차 의자에 앉기, 각각 손 흔드는 두 장
   ride: [compose(LEGS_RIDE, 0, 0)],
   rideWave: WAVE_ARMS.map((arm) => withWave(compose(LEGS_RIDE, 0, 0), arm)),

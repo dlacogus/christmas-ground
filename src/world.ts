@@ -1,7 +1,7 @@
 // 월드 좌표 데이터. 좌표는 모두 맵 기준 (x 0~1440, y 0~270).
 // 장애물은 '발밑 기준' 사각형이다: 캐릭터의 발 상자가 겹치면 못 지나간다.
 
-import { GROUND } from './constants';
+import { GROUND, MARKET_HUT } from './constants';
 
 export interface Rect {
   x: number;
@@ -146,6 +146,19 @@ export const HUTS: readonly { x: number; w: number; kind: HutKind; wall: number 
   { x: 880, w: 32, kind: 'kiosk', wall: 32 },
   { x: 921, w: 42, kind: 'pavilion', wall: 27 },
 ];
+
+/** 지붕 눈이 떨어지는 오두막 (HUTS 번호): 회전목마 구역 2곳(삼각 지붕·원뿔 정자), 광장 2곳(삼각 지붕) */
+export const SNOW_ROOF_HUTS: readonly number[] = [1, 2, 7, 11];
+/** 처마 밑 영역: 깊이(바닥 띠 윗선에서 앞으로)와 처마 양 끝 바깥으로 더 넓힌 폭 (경사를 타고 내려온 눈이 처마 끝 바깥에 떨어진다) */
+export const EAVE_DEPTH = 14;
+export const EAVE_SIDE = 14;
+
+/** 오두막 처마 밑 영역 (발밑 기준 사각형): 처마 폭 + 양옆, 연석 바로 앞 바닥 */
+export function eaveZone(hutIndex: number): Rect {
+  const hut = HUTS[hutIndex];
+  const half = Math.round(hut.w / 2 + MARKET_HUT.roofOverhang) + EAVE_SIDE;
+  return { x: hut.x - half, y: WALK_AREA.y, w: half * 2, h: EAVE_DEPTH };
+}
 
 /** 가로등: 구역마다 뒤쪽(등 하나)·앞쪽(등 둘). y는 발밑 */
 export const LAMPS = [

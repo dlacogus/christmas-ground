@@ -7,7 +7,7 @@ import { rinkBounds } from '../props/iceRink';
 import { INTERACTION_POINTS } from '../world';
 
 export type SkatePhase = 'gliding' | 'spinning' | 'dizzy' | 'fallen';
-export type SkateEvent = 'brake' | 'land' | 'bounce' | 'fall' | 'dizzy';
+export type SkateEvent = 'brake' | 'land' | 'spinLand' | 'bounce' | 'fall' | 'dizzy';
 
 export interface Skate {
   x: number;
@@ -25,6 +25,8 @@ export interface Skate {
   braking: boolean;
   /** 밀어내는 동작 시계 */
   pushTime: number;
+  /** 이번 점프에서 공중 스핀을 했나 */
+  airSpin: boolean;
 }
 
 export interface MoveDir {
@@ -33,7 +35,7 @@ export interface MoveDir {
 }
 
 export function createSkate(x: number, y: number, facing: Facing = 'right'): Skate {
-  return { x, y, vx: 0, vy: 0, facing, phase: 'gliding', timer: 0, jump: null, pushing: false, braking: false, pushTime: 0 };
+  return { x, y, vx: 0, vy: 0, facing, phase: 'gliding', timer: 0, jump: null, pushing: false, braking: false, pushTime: 0, airSpin: false };
 }
 
 export function speedOf(s: { vx: number; vy: number }): number {
@@ -152,6 +154,14 @@ export function canTakeOff(s: Skate): boolean {
 export function tryJump(s: Skate): boolean {
   if (s.phase !== 'gliding' || s.jump !== null || speedOf(s) < S.jumpMinSpeed) return false;
   s.jump = 0;
+  s.airSpin = false;
+  return true;
+}
+
+/** 공중 스핀: 점프한 뒤 알맞은 때(airSpinFrom~airSpinUntil초)에 다시 누르면 성공 */
+export function tryAirSpin(s: Skate): boolean {
+  if (s.jump === null || s.airSpin || s.jump < S.airSpinFrom || s.jump > S.airSpinUntil) return false;
+  s.airSpin = true;
   return true;
 }
 
@@ -161,9 +171,9 @@ export function jumpLift(s: Skate): number {
   return S.jumpHeight * Math.sin((Math.PI * s.jump) / S.jumpSeconds);
 }
 
-/** 스핀: 느릴 때만 제자리에서 */
+/** 스핀: 서 있을 때든 미끄러질 때든 (땅 위에서) */
 export function tryStartSpin(s: Skate): boolean {
-  if (s.phase !== 'gliding' || s.jump !== null || speedOf(s) >= S.spinMaxSpeed) return false;
+  if (s.phase !== 'gliding' || s.jump !== null) return false;
   s.phase = 'spinning';
   s.timer = 0;
   return true;
@@ -209,7 +219,8 @@ export function stepSkate(s: Skate, dt: number, dir: MoveDir, events: SkateEvent
     s.jump += dt;
     if (s.jump >= S.jumpSeconds) {
       s.jump = null;
-      events.push('land');
+      events.push(s.airSpin ? 'spinLand' : 'land');
+      s.airSpin = false;
     }
   }
 
@@ -220,7 +231,8 @@ export function stepSkate(s: Skate, dt: number, dir: MoveDir, events: SkateEvent
     s.timer -= dt;
     if (s.timer <= 0) s.phase = 'gliding';
   } else if (s.phase === 'spinning') {
-    slowBy(s, S.spinBrake * dt);
+    // 돌면서도 미끄러진다 (방향키는 받지 않는다)
+    slowBy(s, S.friction * dt);
     s.timer += dt;
     if (s.timer >= S.dizzyAfter) {
       s.phase = 'dizzy';

@@ -6,7 +6,7 @@ import { layerOffsetX, type Camera } from '../camera';
 import { setWalkTarget, type Character, type MoveInput } from '../character/character';
 import { drawCharacter, getSpriteCanvas, type DrawOptions } from '../character/render';
 import type { PoseName } from '../character/sprites';
-import { CHARACTER, LAYER_FACTORS, SKATE as S, SKATE_COLORS as C } from '../constants';
+import { CHARACTER, COLORS, LAYER_FACTORS, SKATE as S, SKATE_COLORS as C } from '../constants';
 import type { InputActions } from '../input';
 import { drawSpriteReflection, type Skater } from '../props/skater';
 import type { PlayHint } from './carouselPlay';
@@ -26,6 +26,7 @@ import {
   stepSkate,
   stopSpin,
   touching,
+  tryAirSpin,
   tryJump,
   tryStartSpin,
   type Skate,
@@ -54,6 +55,8 @@ interface Spray {
   vx: number;
   vy: number;
   age: number;
+  /** 공중 스핀 착지 반짝이 (금색) */
+  star?: boolean;
 }
 
 export type SkatePhaseOuter = 'off' | 'puttingOn' | 'on';
@@ -89,6 +92,7 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
   let tipsLeft = 0;
   let bumpCooldown = 0;
   let spinHeld = false;
+  let pressedInAir = false;
   let startOnArrive = false;
   let sprayTimer = 0;
   let lastMark: { x: number; y: number } | null = null;
@@ -200,7 +204,13 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
         return;
       }
       if (!nearInside(skate)) {
-        if (actions.tap && tryJump(skate)) lastMark = null;
+        // 점프 중 알맞은 때 다시 누르면 공중 스핀 (그 누름이 떼질 때 또 점프하지 않게)
+        if (actions.spaceDown && skate.jump !== null) {
+          tryAirSpin(skate);
+          pressedInAir = true;
+        }
+        if (actions.tap && pressedInAir) pressedInAir = false;
+        else if (actions.tap && tryJump(skate)) lastMark = null;
         if (actions.hold && spaceHeld && tryStartSpin(skate)) {
           spinHeld = true;
           ring(skate.x, skate.y);
@@ -273,7 +283,14 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
 
       for (const e of events) {
         if (e === 'brake' && speedOf(skate) > S.sprayMinSpeed) sounds.brake();
-        if (e === 'land') sounds.land();
+        if (e === 'land' || e === 'spinLand') sounds.land();
+        // 공중 스핀 뒤 착지: 발밑에 반짝이
+        if (e === 'spinLand') {
+          for (let i = 0; i < S.airSpinSparkles; i++) {
+            const a = (Math.PI * 2 * i) / S.airSpinSparkles;
+            spray.push({ x: skate.x, y: skate.y - 2, vx: Math.cos(a) * 28, vy: Math.sin(a) * 14 - 18, age: 0, star: true });
+          }
+        }
         if (e === 'fall') sounds.fall();
       }
 
@@ -346,13 +363,16 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
         return;
       }
       if (!skate) return;
-      const opts = skateDrawOptions(skate, time);
-      drawCharacter(ctx, character, ox, opts);
-      // 넘어진 동안 머리 위를 도는 별
-      if (skate.phase === 'fallen' && skate.timer > S.getUpSeconds) drawStars(ctx, Math.round(skate.x) - ox, Math.round(skate.y), time);
+      if (skate.phase === 'fallen' && skate.timer > S.getUpSeconds) {
+        // 벌러덩: 뒤로 젖혀지며 눕고, 머리 위로 별이 돈다
+        const tip = Math.min(1, (S.fallSeconds - skate.timer) / S.fallTipSeconds);
+        drawLying(ctx, getSpriteCanvas('skateGlide', 0, skate.facing, character.outfit), Math.round(skate.x) - ox, Math.round(skate.y), skate.facing, tip, time);
+      } else {
+        drawCharacter(ctx, character, ox, skateDrawOptions(skate, time));
+      }
       if (spray.length > 0) {
-        ctx.fillStyle = C.spray;
         for (const p of spray) {
+          ctx.fillStyle = p.star ? C.star : C.spray;
           ctx.globalAlpha = 1 - p.age / S.sprayLife;
           ctx.fillRect(Math.round(p.x) - ox, Math.round(p.y), p.age < S.sprayLife / 2 ? 2 : 1, 1);
         }
@@ -369,7 +389,8 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
         }
         ctx.globalAlpha = 1;
       }
-      if (phase === 'on' && skate) {
+      // 누워 있을 때는 비친 모습을 그리지 않는다 (누운 몸은 얼음에 붙어 있다)
+      if (phase === 'on' && skate && !(skate.phase === 'fallen' && skate.timer > S.getUpSeconds)) {
         const opts = skateDrawOptions(skate, time);
         const sprite = getSpriteCanvas(opts.pose!, opts.index ?? 0, opts.facing ?? skate.facing, character.outfit);
         drawSpriteReflection(ctx, sprite, skate.x, skate.y + Math.round(opts.lift ?? 0), ox);
@@ -381,14 +402,12 @@ export function createSkatePlay(character: Character, skaters: readonly Skater[]
 /** 지금 상태에 맞는 자세 */
 export function skateDrawOptions(skate: Skate, time: number): DrawOptions & { pose: PoseName } {
   const speed = speedOf(skate);
-  if (skate.phase === 'fallen') {
-    const back = skate.facing === 'right' ? -S.leanFallen : S.leanFallen;
-    return skate.timer > S.getUpSeconds ? { pose: 'fallen', lean: back } : { pose: 'crouch' };
-  }
-  if (skate.phase === 'spinning') {
+  // 넘어진 끝에 일어나는 동작 (누워 있는 동안은 drawLying으로 따로 그린다)
+  if (skate.phase === 'fallen') return { pose: 'crouch' };
+  if (skate.phase === 'spinning' || (skate.jump !== null && skate.airSpin)) {
     // 좌우가 빠르게 바뀌며 빙글빙글
     const flip = Math.floor(time / S.spinFlipSeconds) % 2 === 0;
-    return { pose: 'glide', index: 1, facing: flip ? 'right' : 'left' };
+    return { pose: 'glide', index: 1, facing: flip ? 'right' : 'left', lift: jumpLift(skate) };
   }
   if (skate.phase === 'dizzy') {
     const progress = 1 - skate.timer / S.dizzySeconds;
@@ -401,6 +420,42 @@ export function skateDrawOptions(skate: Skate, time: number): DrawOptions & { po
   // 미는 동안은 발로 밀어내는 2프레임, 아니면 팔을 벌린 글라이드
   if (skate.pushing) return { pose: 'glide', index: Math.floor(skate.pushTime / S.pushFrameSeconds), lean };
   return { pose: 'skateGlide', lean };
+}
+
+/**
+ * 벌러덩 누운 모습: 서 있는 그림을 발 쪽을 축으로 뒤로 90° 젖혀 눕힌다 (얼굴이 하늘을 본다).
+ * tip = 0 → 서 있음, 1 → 다 누움. 오른쪽을 보다 넘어지면 머리가 왼쪽(뒤)으로 간다.
+ */
+function drawLying(
+  ctx: CanvasRenderingContext2D,
+  sprite: HTMLCanvasElement,
+  footX: number,
+  footY: number,
+  facing: 'left' | 'right',
+  tip: number,
+  time: number,
+): void {
+  const back = facing === 'right' ? -1 : 1;
+  const e = 1 - (1 - tip) * (1 - tip);
+  const W = CHARACTER.spriteWidth;
+  const H = CHARACTER.spriteHeight;
+  // 누운 몸 그림자
+  ctx.globalAlpha = CHARACTER.shadowAlpha;
+  ctx.fillStyle = COLORS.shadow;
+  const shadowW = Math.round(CHARACTER.shadowWidth + (S.lyingShadowWidth - CHARACTER.shadowWidth) * e);
+  ctx.fillRect(Math.round(footX + back * (shadowW / 2 - S.lyingShiftX) * e) - shadowW / 2, footY - 1, shadowW, CHARACTER.shadowHeight);
+  ctx.globalAlpha = 1;
+  ctx.save();
+  // 발을 축으로 젖히고, 누운 몸이 바닥 위에 오도록 옮긴다
+  ctx.translate(footX - back * S.lyingShiftX * e, footY - (W / 2) * e);
+  ctx.rotate((back * Math.PI * e) / 2);
+  ctx.drawImage(sprite, -W / 2, -H);
+  ctx.restore();
+  // 다 누우면 머리 위로 별
+  if (tip >= 1) {
+    const headX = footX + back * (H - S.lyingShiftX - 8);
+    drawStars(ctx, headX, footY - W / 2 + H - 14, time);
+  }
 }
 
 /** 머리 위를 도는 작은 별 (+ 모양) */

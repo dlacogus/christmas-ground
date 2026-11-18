@@ -2,7 +2,7 @@ import { createCamera, layerOffsetX, snapCamera, updateCamera, type Camera } fro
 import { createCharacter, setWalkTarget } from './character/character';
 import { drawCharacter } from './character/render';
 import type { CharacterState } from './character/state';
-import { BENCH_SIT, CAROUSEL, CHARACTER, FOOTPRINTS, HINT, LAYER_FACTORS, SANTA, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
+import { BENCH_SIT, CAROUSEL, CHARACTER, FOOTPRINTS, HINT, LAYER_FACTORS, ROOF_SNOW, SANTA, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, WARM_BUFFERS } from './constants';
 import { createFpsMeter, drawDebugOverlay } from './debug';
 import { createInput } from './input';
 import { createLayers, drawLayers, updateLayers } from './layers';
@@ -16,7 +16,9 @@ import { advanceStepTimer, createFootsteps, createStepTimer } from './audio/foot
 import { createMusicBox } from './audio/musicBox';
 import { createRinkSounds } from './audio/rinkSounds';
 import { createSoundSystem } from './audio/soundSystem';
+import { createRoofSnowSounds } from './audio/roofSnowSounds';
 import { createSkateSounds } from './audio/skateSounds';
+import { createRoofSnow, createSnowHits } from './features/roofSnow';
 import { createWind } from './audio/wind';
 import { createHint } from './ui/hint';
 import { drawSoundButton, hitSoundButton } from './ui/soundButton';
@@ -25,7 +27,7 @@ import { gateGeometry } from './props/carouselEntrance';
 import { CAROUSEL_GATE, CAROUSEL_X, SPAWN, TREE_X, WALK_AREA, getObstacle } from './world';
 import { createWorldZones } from './zones';
 import { benchAt, createBenchPlay } from './zones/benchPlay';
-import { createCarouselPlay, nearEntry, onCarousel, type PlayHint } from './zones/carouselPlay';
+import { MY_ID, createCarouselPlay, nearEntry, onCarousel, type PlayHint } from './zones/carouselPlay';
 import { createSkatePlay } from './zones/skatePlay';
 import { rinkBounds } from './props/iceRink';
 import type { DepthDrawable } from './zones/zone';
@@ -62,7 +64,9 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   // 오르골은 회전목마 판 가운데에서 울린다
   const musicBox = createMusicBox({ x: CAROUSEL_X, y: carouselGeometry().platformY });
   const skateSounds = createSkateSounds();
+  const roofSnowSounds = createRoofSnowSounds();
   const sound = createSoundSystem([
+    roofSnowSounds,
     createAmbience(),
     musicBox,
     skateSounds,
@@ -128,6 +132,12 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     if (e.code === SOUND.toggleKey && !e.repeat) sound.toggleMuted();
   });
 
+  // 지붕에 쌓인 눈: 상태(쌓인 양·떨어짐 이벤트) → 화면(지붕 눈·덩어리·바닥 더미), 맞은 캐릭터(눈 모자·눈사람), 소리
+  const roofSnow = createRoofSnow();
+  const snowHits = createSnowHits();
+  /** ?debug=1의 T: 시간 0.25배속 (눈이 떨어지는 과정을 천천히 본다) */
+  let slowMotion = false;
+
   const characterDrawable: DepthDrawable = {
     get footY() {
       return character.y;
@@ -136,9 +146,14 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       // 타는 동안에는 회전목마가 탈 것과 함께 그린다
       const kind = character.state.get().kind;
       if (kind === 'riding') return;
+      const ox = layerOffsetX(cam, LAYER_FACTORS.main);
+      const footX = Math.round(character.x) - ox;
+      const footY = Math.round(character.y);
       if (skate.active) skate.drawCharacter(c, cam);
       else if (kind === 'sitting') bench.draw(c, cam);
-      else drawCharacter(c, character, layerOffsetX(cam, LAYER_FACTORS.main));
+      else if (snowHits.snowman) snowHits.drawSnowman(c, footX, footY);
+      else drawCharacter(c, character, ox, { lean: snowHits.shakeLean() });
+      snowHits.drawOver(c, footX, footY, ox);
     },
   };
   // 눈 위 발자국 (입구 카펫과 벽돌이 드러난 곳에는 남지 않는다)
@@ -154,23 +169,44 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   if (debug) {
     window.addEventListener('keydown', (e) => {
       if (e.code === SANTA.debugKey) santa.fly();
+      // R: 캐릭터에게서 가장 가까운 지붕 눈을 가득 채워 바로 떨어뜨린다
+      if (e.code === ROOF_SNOW.debugDropKey) {
+        let nearest = 0;
+        roofSnow.roofs.forEach((r, i) => {
+          if (Math.abs(r.hut.x - character.x) < Math.abs(roofSnow.roofs[nearest].hut.x - character.x)) nearest = i;
+        });
+        roofSnow.fillAndDrop(nearest);
+      }
+      // T: 0.25배속 켜고 끄기
+      if (e.code === ROOF_SNOW.debugSlowKey) slowMotion = !slowMotion;
     });
   }
-  const layers = createLayers(zones, [characterDrawable], SCENERY_SEED, [footprints], [santa]);
+  const layers = createLayers(
+    zones,
+    [characterDrawable, ...roofSnow.drawables],
+    SCENERY_SEED,
+    [footprints, { draw: (c, ox) => roofSnow.drawFloor(c, ox) }],
+    [santa],
+  );
 
   const fpsMeter = createFpsMeter();
   // 화면 밖 구역의 그림도 틈틈이 미리 그려 둔다 (처음 들어설 때 멈칫하지 않게)
   window.setTimeout(() => warmBuffers(WARM_BUFFERS.perStep, WARM_BUFFERS.stepMs), WARM_BUFFERS.delayMs);
   let lastTime = performance.now();
   const frame = (now: number) => {
-    const dt = frameDt(now, lastTime);
+    const dt = frameDt(now, lastTime) * (slowMotion ? ROOF_SNOW.debugSlowFactor : 1);
     const fps = fpsMeter.tick((now - lastTime) / 1000);
     lastTime = now;
 
     const actions = input.takeActions();
     const dir = input.direction();
     if (debug && actions.debugFriend) play.toggleFriend();
-    if (skate.active) {
+    if (snowHits.frozen) {
+      // 눈사람: 못 움직인다. 방향키를 연타하면 더 빨리 빠져나온다
+      snowHits.struggle(actions.moveTaps ?? 0);
+      character.moving = false;
+      character.target = null;
+    } else if (skate.active) {
       const p = input.pointer();
       const pointerWorld = p ? { x: p.sx + layerOffsetX(camera, LAYER_FACTORS.main), y: p.sy } : null;
       skate.handleInput(dir, actions, input.spaceHeld(), pointerWorld);
@@ -181,6 +217,26 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     }
     for (const zone of zones) zone.update(dt);
     skate.update(dt);
+    // 지붕 눈: 걸어 다닐 때만 맞는다 (회전목마·스케이트·벤치 중에는 안 맞는다)
+    const roofEvents = roofSnow.update(dt, [
+      {
+        id: MY_ID,
+        x: character.x,
+        y: character.y,
+        moving: character.moving,
+        canBeHit: character.state.get().kind === 'walk' && !skate.active && play.boarding.phase === 'none',
+      },
+    ]);
+    snowHits.handle(roofEvents, MY_ID);
+    snowHits.follow(character.x, character.y);
+    snowHits.update(dt);
+    // 소리: 미끄러지는 동안 스르르, 덩어리가 닿을 때마다 퍽
+    roofSnowSounds.setSlide(roofSnow.sliding());
+    for (const ev of roofEvents) {
+      if (ev.type === 'land') roofSnowSounds.thud(ev.x, ev.y, ev.size);
+      if (ev.type === 'hat' || ev.type === 'snowman') roofSnowSounds.thud(ev.x, ev.y, ev.type === 'hat' ? 4 : 8);
+      if (ev.type === 'drip') roofSnowSounds.rustle(ev.x, ev.y - CHARACTER.spriteHeight);
+    }
     for (const event of play.update()) {
       if (event === 'passedFront') wind.whoosh();
       // 올라타는 순간 입구 오른쪽 줄이 잠깐 풀린다
@@ -216,7 +272,10 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
 
     drawLayers(ctx, camera, layers);
     drawSoundButton(ctx, sound.started && !sound.muted);
-    if (debug) drawDebugOverlay(ctx, camera, character, zones, fps, [describeState(character.state.get()), 'B: friend  N: santa']);
+    if (debug) {
+      drawDebugOverlay(ctx, camera, character, zones, fps, [describeState(character.state.get()), `B: friend  N: santa  R: roof snow  T: slow${slowMotion ? ' ON' : ''}`]);
+      roofSnow.drawDebug(ctx, camera);
+    }
 
     const h: PlayHint | null = skate.hint(touch) ?? bench.hint(touch) ?? play.hint(touch);
     if (!h) hint.show(null);

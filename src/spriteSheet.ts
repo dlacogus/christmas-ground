@@ -16,7 +16,6 @@ const POSE_LABELS: Record<PoseName, string> = {
   glide: '미끄럼',
   skateGlide: '글라이드',
   crouch: '쪼그림',
-  fallen: '엉덩방아',
   ride: '말 타기',
   rideWave: '말·손',
   sit: '마차',

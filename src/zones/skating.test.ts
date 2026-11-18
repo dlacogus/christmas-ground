@@ -14,6 +14,7 @@ import {
   skateArea,
   speedOf,
   stepSkate,
+  tryAirSpin,
   tryJump,
   tryStartSpin,
   stopSpin,
@@ -157,21 +158,56 @@ describe('기술', () => {
     expect(fast.jump).toBeNull();
   });
 
-  it('스핀은 느릴 때만, 4초 넘게 돌면 어지러워 비틀거린다', () => {
+  it('스핀은 미끄러지면서도 돌고 (미끄럼 감속만), 4초 넘게 돌면 어지러워 비틀거린다', () => {
     const c = center();
-    const s = createSkate(c.x, c.y);
+    const s = createSkate(c.x - 150, c.y);
     s.vx = 60;
-    expect(tryStartSpin(s)).toBe(false);
-    s.vx = 10;
     expect(tryStartSpin(s)).toBe(true);
-    run(s, 1);
-    expect(speedOf(s)).toBe(0);
+    run(s, 1, { x: -1, y: 0 });
+    // 도는 동안 방향키는 받지 않고, 미끄럼 감속만큼만 느려진다
+    expect(s.vx).toBeCloseTo(60 - SKATE.friction, 0);
+    expect(s.x).toBeGreaterThan(c.x - 150 + 40);
     stopSpin(s);
     expect(s.phase).toBe('gliding');
+    // 서 있을 때도 돈다
+    s.vx = 0;
     tryStartSpin(s);
     const events = run(s, SKATE.dizzyAfter + 0.1);
     expect(events).toContain('dizzy');
     expect(s.phase).toBe('dizzy');
+    // 점프 중에는 땅 스핀이 시작되지 않는다
+    const air = createSkate(c.x - 100, c.y);
+    air.vx = 60;
+    tryJump(air);
+    expect(tryStartSpin(air)).toBe(false);
+  });
+
+  it('공중 스핀: 점프한 뒤 알맞은 때 다시 누르면 돌고, 너무 이르거나 늦으면 안 된다', () => {
+    const c = center();
+    const make = () => {
+      const s = createSkate(c.x - 120, c.y);
+      s.vx = 60;
+      tryJump(s);
+      return s;
+    };
+    // 알맞은 때
+    const good = make();
+    run(good, (SKATE.airSpinFrom + SKATE.airSpinUntil) / 2);
+    expect(tryAirSpin(good)).toBe(true);
+    expect(tryAirSpin(good)).toBe(false);
+    const events = run(good, SKATE.jumpSeconds);
+    expect(events).toContain('spinLand');
+    expect(good.airSpin).toBe(false);
+    // 너무 이르다
+    const early = make();
+    expect(tryAirSpin(early)).toBe(false);
+    // 너무 늦다
+    const late = make();
+    run(late, SKATE.airSpinUntil + 0.05);
+    expect(tryAirSpin(late)).toBe(false);
+    expect(run(late, SKATE.jumpSeconds)).toContain('land');
+    // 땅에서는 공중 스핀이 없다
+    expect(tryAirSpin(createSkate(c.x, c.y))).toBe(false);
   });
 });
 

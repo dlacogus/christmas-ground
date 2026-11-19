@@ -1,5 +1,5 @@
 // 게임과 실시간 서버를 잇는다: 입장(닉네임·목도리 색), 내 위치·상태·동작 보내기, 친구들 그리기,
-// 회전목마 자리(서버가 정한다)와 시계 맞추기, 지붕 눈 시각 맞추기, 눈덩이·눈사람 주고받기, 끊김·다시 붙기.
+// 회전목마 자리(서버가 정한다)와 시계 맞추기, 지붕 눈 시각 맞추기, 눈덩이·눈사람 주고받기, 선물 상자·트리 장식, 끊김·다시 붙기.
 // 무료 한도를 아끼게 꼭 필요할 때만 보낸다 — 위치는 움직이는 동안 초당 최대 8번, 상태는 바뀔 때만.
 
 import type { Character } from '../character/character';
@@ -7,6 +7,7 @@ import { COPUSH, HAT_GIFT, NET, SNOWMAN, THROW } from '../constants';
 import { hatOnEntry } from '../features/hatGift';
 import type { MoveInput } from '../character/character';
 import type { SnowmanPlay } from '../features/snowmanPlay';
+import type { TreeDecor } from '../features/treeDecorPlay';
 import type { RoofSnow, SnowHits } from '../features/roofSnow';
 import type { Ball, Snowman, SnowThing, SnowWorld } from '../features/snowman';
 import { emptySeats, type Act, type Maker, type ServerMessage, type SnowmanData, type WireHat, type WireSeats, type WireState } from '../shared/protocol';
@@ -44,6 +45,8 @@ export interface SessionDeps {
   decorated?: (snowman: Snowman, by: string) => void;
   /** 눈덩이 조작 (같이 밀기: 이어받기·놓치기·하이파이브) */
   snowPlay: () => SnowmanPlay;
+  /** 트리 꾸미기 (선물 상자 열기, 장식 달기·떼기) */
+  treeDecor?: () => TreeDecor;
   /** 예전에 이 브라우저에만 저장해 둔 내 눈사람 (처음 접속 때 서버로 옮기고 지운다) */
   legacy: SnowmanData[];
 }
@@ -67,6 +70,17 @@ export interface Session {
     hit(snowman: Snowman, n: number, dir: number): void;
     splat(to: string, head: boolean, dir: number): void;
   };
+  /** 선물 상자 열기, 트리 장식 달기·떼기를 서버에 보낸다 */
+  readonly decor: {
+    open(id: string): void;
+    hang(id: string, x: number, y: number): void;
+    unhang(id: string): void;
+    debugGift(x: number, y: number): void;
+  };
+  /** 서버에 붙어 있나, 서버가 준 내 접속 id, 서버 시각 (ms — 접속이 없으면 내 시계) */
+  online(): boolean;
+  myId(): string | null;
+  serverNow(): number;
   /** 눈덩이로 맞힐 수 있는 친구들 */
   targets(): { id: string; x: number; y: number; lift: number }[];
   /** 나 (닉네임과 목도리 색) — 만든 사람으로 적힌다 */
@@ -175,6 +189,13 @@ export function createSession(deps: SessionDeps): Session {
         for (const p of message.players) remotes.add(p, now, false);
         applySeats(message.seats);
         loadWorld(message);
+        // 트리 장식 전체와 이미 열린 선물 상자, 열어 놓고 아직 달지 않은 내 장식
+        if (deps.treeDecor) {
+          const decor = deps.treeDecor();
+          decor.setTree(message.tree);
+          decor.setOpened(message.opened);
+          decor.restoreMine(message.mine);
+        }
         // 옮긴 눈사람은 이 브라우저에서 지운다
         if (legacy.length > 0) {
           legacy = [];
@@ -302,6 +323,24 @@ export function createSession(deps: SessionDeps): Session {
         snowWorld.removeNet(message.id);
         break;
       }
+      case 'opened':
+        deps.treeDecor?.().onOpened(message.id, message.by, message.kind);
+        break;
+      case 'openDenied':
+        deps.treeDecor?.().onOpenDenied(message.id);
+        break;
+      case 'hung':
+        deps.treeDecor?.().onHung(message.o, message.milestone);
+        break;
+      case 'hangDenied':
+        deps.treeDecor?.().onHangDenied(message.id);
+        break;
+      case 'unhung':
+        deps.treeDecor?.().onUnhung(message.id, message.by);
+        break;
+      case 'gift':
+        deps.treeDecor?.().addDebugGift(message.gift);
+        break;
       case 'full':
         break;
     }
@@ -463,6 +502,23 @@ export function createSession(deps: SessionDeps): Session {
         net.send({ t: 'splat', to, head: head ? 1 : 0, dir });
       },
     },
+    decor: {
+      open(id) {
+        net.send({ t: 'open', id });
+      },
+      hang(id, x, y) {
+        net.send({ t: 'hang', id, x, y });
+      },
+      unhang(id) {
+        net.send({ t: 'unhang', id });
+      },
+      debugGift(x, y) {
+        net.send({ t: 'debugGift', x, y });
+      },
+    },
+    online: () => net.status === 'online',
+    myId: () => net.id,
+    serverNow: () => net.serverNow(),
     targets() {
       const out: { id: string; x: number; y: number; lift: number }[] = [];
       for (const r of remotes.all()) out.push({ id: r.info.id, x: r.ch.x, y: r.ch.y, lift: r.info.state.kind === 'sitting' ? 6 : 0 });

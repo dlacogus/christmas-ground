@@ -6,9 +6,10 @@
 // - 눈사람 하나에 자리마다 하나, 모두 5개까지. 같은 자리에 이미 있으면 바꿔 달고 떼어낸 것이 손에 온다
 // - 눈사람 종류(미니·중간·엄청 큼)에 맞춰 1·2·3배 크기로 그린다
 
-import { PROPS, PROP_COLORS, type PropId } from '../constants';
+import { ORNAMENT_COLORS, PROPS, PROP_COLORS, type Held, type OrnamentKind, type PropId } from '../constants';
 import type { AttachedProp } from '../shared/protocol';
 import type { SnowmanKind } from './snowman';
+import { ORNAMENT_SPRITES, isOrnamentKind } from './treeDecor';
 
 export type PropSlot = 'head' | 'face' | 'neck' | 'body' | 'arm';
 
@@ -138,6 +139,49 @@ export function drawPropIcon(ctx: CanvasRenderingContext2D, prop: PropId, cx: nu
 export function drawHeldProp(ctx: CanvasRenderingContext2D, prop: PropId, footX: number, footY: number, facing: 'left' | 'right', lift = 0): void {
   const f = facing === 'right' ? 1 : -1;
   drawPropIcon(ctx, prop, footX + f * PROPS.handX, footY - PROPS.handY - lift, 1, f);
+}
+
+// ───────────── 트리 장식 (손에 들거나 바닥에 내려놓을 수 있다 — 노점 소품과 같은 손을 쓴다) ─────────────
+
+const ornamentCanvases = new Map<OrnamentKind, HTMLCanvasElement>();
+
+/** 장식 그림을 작은 캔버스에 한 번 그려 둔다 (트리에 150개까지 달리므로 매번 픽셀을 찍지 않는다) */
+export function ornamentCanvas(kind: OrnamentKind): HTMLCanvasElement {
+  let canvas = ornamentCanvases.get(kind);
+  if (canvas) return canvas;
+  const rows = ORNAMENT_SPRITES[kind];
+  canvas = document.createElement('canvas');
+  canvas.width = rows[0].length;
+  canvas.height = rows.length;
+  const g = canvas.getContext('2d')!;
+  for (let r = 0; r < rows.length; r++) {
+    for (let c = 0; c < rows[r].length; c++) {
+      const ch = rows[r][c];
+      if (ch === '.') continue;
+      g.fillStyle = ORNAMENT_COLORS[ch as keyof typeof ORNAMENT_COLORS];
+      g.fillRect(c, r, 1, 1);
+    }
+  }
+  ornamentCanvases.set(kind, canvas);
+  return canvas;
+}
+
+/** 장식을 가운데가 (cx, cy)에 오게 그린다 */
+export function drawOrnament(ctx: CanvasRenderingContext2D, kind: OrnamentKind, cx: number, cy: number): void {
+  const canvas = ornamentCanvas(kind);
+  ctx.drawImage(canvas, Math.round(cx) - (canvas.width >> 1), Math.round(cy) - (canvas.height >> 1));
+}
+
+/** 소품이든 장식이든 가운데가 (cx, cy)에 오게 그린다 (바닥에 놓인 것, 건네받는 것) */
+export function drawItemIcon(ctx: CanvasRenderingContext2D, item: Held, cx: number, cy: number, facing = 1): void {
+  if (isOrnamentKind(item)) drawOrnament(ctx, item, cx, cy);
+  else drawPropIcon(ctx, item, cx, cy, 1, facing);
+}
+
+/** 손에 든 것 (소품 또는 장식)을 앞쪽 손에 그린다 */
+export function drawHeldItem(ctx: CanvasRenderingContext2D, item: Held, footX: number, footY: number, facing: 'left' | 'right', lift = 0): void {
+  if (isOrnamentKind(item)) drawOrnament(ctx, item, footX + (facing === 'right' ? 1 : -1) * PROPS.handX, footY - PROPS.handY - lift);
+  else drawHeldProp(ctx, item, footX, footY, facing, lift);
 }
 
 /** 눈사람에서 소품이 붙는 자리들 (화면 좌표) */

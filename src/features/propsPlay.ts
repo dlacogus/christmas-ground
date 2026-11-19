@@ -9,15 +9,19 @@
 import { layerOffsetX, type Camera } from '../camera';
 import { canStandAt, setWalkTarget, type Character, type MoveInput } from '../character/character';
 import type { DrawOptions } from '../character/render';
-import { LAYER_FACTORS, MARKET_HUT, PROPS, PROP_COLORS, SCREEN_WIDTH, type PropId } from '../constants';
+import { LAYER_FACTORS, MARKET_HUT, PROPS, PROP_COLORS, SCREEN_WIDTH, type Held, type PropId } from '../constants';
 import type { InputActions } from '../input';
 import type { DepthDrawable } from '../zones/zone';
 import { HUTS, STALLS, STREET_LINE_Y, WALK_AREA } from '../world';
-import { attachProp, attachStyle, canAttach, drawHeldProp, drawPropIcon, PROP_NAMES, PROP_SLOT, takeFromStall } from './props';
+import { attachProp, attachStyle, canAttach, drawHeldItem, drawItemIcon, drawPropIcon, PROP_NAMES, PROP_SLOT, takeFromStall } from './props';
+import { isOrnamentKind } from './treeDecor';
 import { snowmanHeight, type Snowman, type SnowWorld } from './snowman';
 
 export interface GroundProp {
-  prop: PropId;
+  /** 노점 소품 또는 트리 장식 */
+  prop: Held;
+  /** 트리 장식이면 그 장식의 id */
+  tag: string | null;
   x: number;
   y: number;
   drawable: DepthDrawable;
@@ -40,7 +44,7 @@ export interface PropsPlay {
   readonly phase: Phase;
   /** 캐릭터를 맡고 있나 (구경·건네받기·달아주기 중) */
   readonly busy: boolean;
-  readonly holding: PropId | null;
+  readonly holding: Held | null;
   /** 가까운 노점 (구경할 수 있는 거리 안이 아니어도 가장 가까운 것) */
   nearestStall(): { index: number; distance: number; x: number; y: number };
   nearestGround(): { item: GroundProp; distance: number } | null;
@@ -51,6 +55,8 @@ export interface PropsPlay {
   decorate(snowman: Snowman): boolean;
   /** 들고 있던 소품을 발밑에 내려놓는다 (눈 굴리기·스케이트 시작) / 앞으로 떨어뜨린다 (재채기) */
   putDown(thrown?: boolean): void;
+  /** 이 자리 바닥에 놓는다 (던진 장식이 튕겨 떨어졌을 때) */
+  dropAt(item: Held, x: number, y: number, tag?: string | null): void;
   /** 화면을 탭했다 (맵 좌표): 처리했으면 true */
   tap(x: number, y: number): boolean;
   update(dt: number, dir: MoveInput, actions: InputActions): void;
@@ -93,6 +99,11 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
   const ground: GroundProp[] = [];
   const hearts: { snowman: Snowman; name: string; left: number }[] = [];
   const holding = () => character.holding.get();
+  /** 들고 있는 것이 노점 소품일 때만 (트리 장식은 눈사람에 달 수 없다) */
+  const heldProp = (): PropId | null => {
+    const h = character.holding.get();
+    return h && !isOrnamentKind(h) ? h : null;
+  };
 
   const shelfX = (s: number, i: number) => HUTS[STALLS[s].hut].x + Math.round((i - (STALLS[s].props.length - 1) / 2) * PROPS.shelfGap);
   const shelfY = STREET_LINE_Y - MARKET_HUT.counterHeight - PROPS.shelfAbove;
@@ -104,9 +115,10 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
     arrive = null;
   };
 
-  const addGround = (prop: PropId, x: number, y: number) => {
+  const addGround = (prop: Held, x: number, y: number, tag: string | null = null) => {
     const item: GroundProp = {
       prop,
+      tag,
       x,
       y,
       drawable: {
@@ -116,7 +128,7 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
         draw(ctx: CanvasRenderingContext2D, camera: Camera) {
           const sx = Math.round(item.x) - layerOffsetX(camera, LAYER_FACTORS.main);
           if (sx < -12 || sx > SCREEN_WIDTH + 12) return;
-          drawPropIcon(ctx, item.prop, sx, Math.round(item.y) - 3);
+          drawItemIcon(ctx, item.prop, sx, Math.round(item.y) - 3);
         },
       },
     };
@@ -132,7 +144,7 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
 
   const finishAttach = () => {
     const s = onto!;
-    const prop = holding();
+    const prop = heldProp();
     if (!prop || !world.snowmen.includes(s)) return;
     const result = attachProp(s.props, prop, deps.me());
     if (!result.ok) return;
@@ -254,7 +266,7 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
       return groundResult;
     },
     nearestSnowman() {
-      const prop = holding();
+      const prop = heldProp();
       if (!prop) return null;
       const slot = PROP_SLOT[prop];
       let best: Snowman | null = null;
@@ -288,12 +300,16 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
       if (i < 0) return;
       // 들고 있던 것이 있으면 그 자리에 내려놓고 바꿔 든다
       const old = holding();
+      const oldTag = character.heldTag;
+      character.heldTag = item.tag;
       character.holding.set(item.prop);
-      if (old) item.prop = old;
-      else ground.splice(i, 1);
+      if (old) {
+        item.prop = old;
+        item.tag = oldTag;
+      } else ground.splice(i, 1);
     },
     decorate(snowman) {
-      const prop = holding();
+      const prop = heldProp();
       if (phase !== 'idle' || !prop || !canAttach(snowman.props, prop) || (snowman.hat && PROP_SLOT[prop] === 'head')) return false;
       onto = snowman;
       attached = false;
@@ -308,12 +324,17 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
     putDown(thrown = false) {
       const prop = holding();
       if (!prop) return;
+      const tag = character.heldTag;
+      character.heldTag = null;
       character.holding.set(null);
       const f = character.facing === 'right' ? 1 : -1;
       const x = character.x + (thrown ? f * PROPS.sneezeThrow : 0);
       const y = Math.min(WALK_AREA.y + WALK_AREA.h - 2, Math.max(WALK_AREA.y + 2, character.y + 1));
       // 떨어질 수 없는 자리(장애물 안)면 발밑에
-      addGround(prop, canStandAt(x, y) ? x : character.x, y);
+      addGround(prop, canStandAt(x, y) ? x : character.x, y, tag);
+    },
+    dropAt(item, x, y, tag = null) {
+      addGround(item, x, Math.min(WALK_AREA.y + WALK_AREA.h - 2, Math.max(WALK_AREA.y + 2, y)), tag);
     },
     tap(x, y) {
       if (phase === 'browse') {
@@ -353,7 +374,7 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
         }
       }
       // 소품을 들고 눈사람을 누르면 걸어가 달아준다
-      const prop = holding();
+      const prop = heldProp();
       if (prop) {
         for (const s of world.snowmen) {
           if (Math.abs(x - s.x) > s.tiers[0] / 2 + 3 || y > s.y + 3 || y < s.y - snowmanHeight(s.tiers) - 4 || !canAttach(s.props, prop)) continue;
@@ -402,8 +423,9 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
       timer -= dt;
       if (phase === 'take') {
         if (timer <= 0) {
-          // 들고 있던 것은 노점으로 돌아간다
-          character.holding.set(takeFromStall(holding(), taking).holding);
+          // 들고 있던 소품은 노점으로 돌아간다 (트리 장식은 발밑에 내려놓는다)
+          if (!heldProp()) self.putDown();
+          character.holding.set(takeFromStall(heldProp(), taking).holding);
           phase = 'idle';
         }
         return;
@@ -438,7 +460,7 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
     drawHeld(ctx, footX, footY, lift) {
       const prop = holding();
       if (!prop) return;
-      if (phase === 'attach' && onto) {
+      if (phase === 'attach' && onto && !isOrnamentKind(prop)) {
         // 달아주는 동안은 손에서 눈사람 쪽으로 들어 올린다
         if (attached) return;
         const f = character.facing === 'right' ? 1 : -1;
@@ -447,7 +469,7 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
         drawPropIcon(ctx, prop, footX + f * (PROPS.handX + 1), footY - up, 1, f);
         return;
       }
-      drawHeldProp(ctx, prop, footX, footY, character.facing, lift);
+      drawHeldItem(ctx, prop, footX, footY, character.facing, lift);
     },
     showHeart(snowman, name) {
       hearts.push({ snowman, name, left: PROPS.heartSeconds });

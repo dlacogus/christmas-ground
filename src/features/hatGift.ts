@@ -9,7 +9,7 @@
 import type { Character } from '../character/character';
 import { hatColors, type DrawOptions } from '../character/render';
 import type { HatState } from '../character/state';
-import { CHARACTER, CHARACTER_BASE_PALETTE, HAT_GIFT as G, LAYER_FACTORS, PROPS, SCREEN_WIDTH, type PropId } from '../constants';
+import { CHARACTER, CHARACTER_BASE_PALETTE, HAT_GIFT as G, LAYER_FACTORS, PROPS, SCREEN_WIDTH, type Held, type PropId } from '../constants';
 import { layerOffsetX } from '../camera';
 import type { AttachedProp, SnowmanHat } from '../shared/protocol';
 import type { DepthDrawable } from '../zones/zone';
@@ -20,7 +20,7 @@ import { snowmanHeight, type Snowman, type SnowWorld } from './snowman';
 // ───────────── 규칙 ─────────────
 
 /** 씌워줄 수 있나: 모자를 쓰고 있고 손이 비어 있을 때만 (소품을 들고 있으면 달아주기가 먼저다) */
-export function canGiveHat(hat: HatState, holding: PropId | null): boolean {
+export function canGiveHat(hat: HatState, holding: Held | null): boolean {
   return hat === 'on' && holding === null;
 }
 

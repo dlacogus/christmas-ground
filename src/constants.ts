@@ -85,9 +85,13 @@ export const SKY = {
 
 /** 5분에 한 번 하늘을 가로질러 트리 위를 지나가는 산타 썰매 */
 export const SANTA = {
-  /** 들어와서 처음 나타날 때까지, 그 뒤로는 이 간격마다 (초) — 5분에 한 번 */
-  firstDelay: 60,
+  /** 이 간격마다 (초) — 5분에 한 번. 서버 시각이 이 간격의 배수가 되는 때마다 날기 시작해 모든 화면에서 같은 때 지나간다 */
   interval: 300,
+  /** 썰매 전체 폭 (루돌프 두 마리 + 썰매). 서버도 선물이 떨어지는 때를 계산하게 숫자로 둔다 — santa.ts의 그림 폭과 같다 (테스트가 지킨다) */
+  width: 45,
+  /** 선물 자루 자리: 썰매 그림 왼쪽 끝에서 오른쪽으로, 위에서 아래로 */
+  sackX: 42,
+  sackY: 2,
   /** 나는 빠르기 (px/초). 맵 오른쪽 끝에서 왼쪽 끝까지 */
   speed: 60,
   /** 평소 나는 높이(썰매 위쪽 y)와 트리 꼭대기 별 위를 지날 때 높이, 트리 앞뒤로 솟아오르는 구간 폭 */
@@ -707,6 +711,246 @@ export const PROP_COLORS = {
   hand: '#f1c9a5',
 } as const;
 
+// ───────────── 트리 꾸미기 (산타 선물 → 장식 → 트리에 달기) ─────────────
+
+/** 트리 장식 14가지 (장식볼은 색마다 하나로 센다). 앞의 commonCount개는 보통, 나머지는 특별 */
+export const ORNAMENT_KINDS = ['ballRed', 'ballGold', 'ballSilver', 'ballBlue', 'cane', 'bell', 'snowflake', 'pinecone', 'cookie', 'bow', 'icicle', 'glowBall', 'star', 'musicBox'] as const;
+export type OrnamentKind = (typeof ORNAMENT_KINDS)[number];
+/** 손에 들 수 있는 것: 노점 소품 또는 트리 장식 */
+export type Held = PropId | OrnamentKind;
+
+/** 산타가 떨어뜨리는 선물 상자 */
+export const GIFT = {
+  /** 떨어질 자리·색을 정하는 고정 시드 (산타 번호와 더해 쓴다 — 모든 화면에서 같은 자리) */
+  seed: 2412,
+  /** 상자 크기 (리본 매듭 빼고) */
+  width: 10,
+  height: 8,
+  /** 썰매에서 톡 튀어나오는 시간·높이, 낙하산을 펴고 내려오는 시간 */
+  popSeconds: 0.35,
+  popHeight: 6,
+  fallSeconds: 4,
+  /** 내려오며 좌우로 흔들리는 폭·빠르기 (바닥에 가까워질수록 잦아든다) */
+  swayAmp: 8,
+  swayHz: 0.45,
+  /** 낙하산: 천 반폭·높이, 줄 길이 */
+  chuteHalfWidth: 7,
+  chuteHeight: 5,
+  chuteLines: 6,
+  /** 뒤로 남는 반짝이 꼬리 */
+  trailEvery: 0.07,
+  trailLife: 0.9,
+  /** 떨어질 자리의 그림자: 반폭, 가장 진할 때 */
+  shadowHalfWidth: 6,
+  shadowAlpha: 0.5,
+  /** 떨어질 자리: 바닥 띠 가장자리·구역 경계·장애물에서 띄우는 거리 */
+  edgeMargin: 8,
+  zoneMargin: 28,
+  obstacleMargin: 8,
+  /** 바닥에 놓여 있을 수 있는 상자 수 — 더 떨어지면 가장 오래된 것이 사라진다 */
+  maxOnGround: 3,
+  /** 닿았을 때: 낙하산이 접히는 시간, 한 번 튀는 시간·높이, 눈가루 수 */
+  foldSeconds: 0.45,
+  bounceSeconds: 0.35,
+  bounceHeight: 5,
+  puffCount: 12,
+  /** 오래된 상자가 반짝이며 사라지는 시간, 빈 상자가 접혀 사라지는 시간 */
+  vanishSeconds: 1.2,
+  emptySeconds: 0.6,
+  /** 이 거리 안에서 열 수 있다 */
+  openRadius: 16,
+  /** 열기 연출 (초)과 그 안의 때 (진행 비율): 덜컹덜컹 → 리본 풀림 → 뚜껑이 튀고 반짝이 → 장식이 떠올라 손으로 */
+  openSeconds: 1.5,
+  shakeUntil: 0.4,
+  popAt: 0.6,
+  floatUntil: 0.82,
+  floatHeight: 22,
+  sparkleCount: 12,
+  specialSparkleCount: 30,
+  sparkleLife: 0.7,
+  /** 장식 이름을 머리 위에 띄우는 시간, 놓쳤을 때 '…' 말풍선 시간 */
+  nameSeconds: 2,
+  deniedSeconds: 1.5,
+  /** 화면 밖에 있을 때 가장자리 화살표: 떨어지는 동안과 닿은 뒤 이만큼 (초), 화면 가장자리에서 안쪽으로 */
+  pointerSeconds: 45,
+  pointerInset: 9,
+  /** 은은한 빛: 바닥 빛 반지름·세기, 가끔 반짝이는 간격·시간 */
+  glowRadius: 13,
+  glowAlpha: 0.2,
+  twinkleEvery: 2.6,
+  twinkleSeconds: 0.35,
+  /** 서버 검사: 상자에서 이 거리 안에 있어야 열 수 있다 (위치는 초당 8번만 보내므로 넉넉히) */
+  serverReach: 60,
+  /** 개발용(?debug=1): 이 키를 누르면 내 앞 이만큼에 바로 떨어뜨린다 (떨어지는 시간) */
+  debugKey: 'KeyP',
+  debugAhead: 26,
+  debugFallSeconds: 1.5,
+} as const;
+
+export const GIFT_COLORS = {
+  /** 상자 색 4가지: 빨강·초록·파랑·금 (상자, 그늘, 리본) */
+  boxes: [
+    { base: '#d23f3f', shade: '#9c2a2a', ribbon: '#f2c94a' },
+    { base: '#2f9a58', shade: '#226f40', ribbon: '#f2c94a' },
+    { base: '#3f78d8', shade: '#2c57a6', ribbon: '#f6f3ea' },
+    { base: '#e8b83a', shade: '#b8862a', ribbon: '#d23f3f' },
+  ],
+  chute: '#d9343f',
+  chuteShade: '#a8252f',
+  chuteStripe: '#f6f3ea',
+  string: '#e8dcc0',
+  sparkle: '#fff2b0',
+  shadow: '#070a1e',
+  glow: '#ffd98a',
+  puff: '#f4f8ff',
+  pointer: '#fff6dc',
+} as const;
+
+/** 트리 장식 규칙 */
+export const ORNAMENT = {
+  /** ORNAMENT_KINDS의 앞 이만큼이 보통, 나머지가 특별 (상자에서 특별이 나올 확률) */
+  commonCount: 11,
+  specialChance: 0.15,
+  /** 달 수 있는 영역: 잎 실루엣에서 안쪽으로, 잎 꼭대기에서 아래로 (별과 겹치지 않게) */
+  inset: 2,
+  topMargin: 6,
+  /** 다른 장식과 가운데끼리 이보다 가까우면 달 수 없다 (그림이 3px 넘게 겹치지 않게) */
+  minGap: 6,
+  /** 최대 개수, 축하하는 개수, 이 개수부터 별이 더 밝다 */
+  max: 150,
+  milestones: [25, 50, 100],
+  brightFrom: 100,
+  /** 내가 단 장식을 다시 뗄 수 있는 시간 (초) */
+  undoSeconds: 60,
+  /** 열어 놓고 달지 않은 장식을 서버가 기억하는 시간 (초) */
+  unhungKeepSeconds: 3600,
+  /** 다는 방식: 바닥에서 이 높이까지는 까치발, 잎 꼭대기에서 이만큼 아래까지는 던져서, 그 사이는 사다리 */
+  reachHeight: 40,
+  tossBelowTip: 30,
+  /** 걸리는 시간 (초): 까치발, 사다리(가장 낮을 때~가장 높을 때), 던지기. 던지면 이 확률로 튕겨 떨어진다 */
+  tiptoeSeconds: 0.6,
+  ladderMinSeconds: 1.3,
+  ladderMaxSeconds: 3,
+  tossSeconds: 0.8,
+  tossMissChance: 0.3,
+} as const;
+
+/** 트리 꾸미기 조작과 그림 */
+export const TREE_DECOR = {
+  /** 화단 앞 이 거리 안에서 달 수 있다 (화단 상자 가장자리에서) */
+  hangRadius: 18,
+  /** 달 자리 고르기: 미리보기가 움직이는 빠르기 (px/초), 흐릴 때·밝을 때 진하기, 깜빡이는 빠르기 */
+  cursorSpeed: 70,
+  dimAlpha: 0.35,
+  brightAlpha: 0.9,
+  blinkHz: 2.2,
+  /** 내 장식에 미리보기를 이 거리 안으로 대면 뗄 수 있다 / 모바일: 미리보기를 이 거리 안에서 한 번 더 누르면 단다 */
+  undoRadius: 4,
+  tapRadius: 9,
+  /** 달러 갈 때 걷는 빠르기, 서는 자리 (화단 앞선에서 앞으로), 화단 가운데에서 옆으로 가장 멀리 */
+  approachSpeed: 90,
+  standFront: 5,
+  standMaxSide: 84,
+  /** 손이 닿는 높이 (발밑에서 위로): 두 손을 든 자세의 손끝 */
+  handUp: 27,
+  tiptoeLift: 2,
+  /** 사다리: 칸 간격, 반폭, 톡 나타나는 시간, 이 높이부터 흔들흔들 (흔들리는 빠르기) */
+  rungGap: 5,
+  ladderHalfWidth: 4,
+  ladderPopSeconds: 0.15,
+  wobbleFromHeight: 110,
+  wobbleHz: 3,
+  /** 다는 순간 (진행 비율): 올라가기 끝 = 걸기 시작, 걸기 끝 = 내려오기 시작 */
+  climbUntil: 0.42,
+  hangUntil: 0.58,
+  /** 던지기: 포물선이 자리보다 더 솟는 높이, 튕겨 떨어지는 시간 */
+  tossArc: 14,
+  missFallSeconds: 0.7,
+  /** 달린 뒤: 장식이 흔들리며 자리 잡는 시간·폭, 한 발 물러서는 거리, 뿌듯해하는 시간 */
+  settleSeconds: 0.7,
+  settleSwing: 2,
+  stepBack: 5,
+  proudSeconds: 0.7,
+  /** 달린 장식이 바람에 흔들리는 빠르기 범위 (장식마다 다르다) — 내리는 눈과 같은 느린 바람 */
+  swayMinHz: 0.18,
+  swayMaxHz: 0.4,
+  /** 트리 전구가 이 거리 안에서 이만큼 밝으면 장식볼에 1px 하이라이트 */
+  shineRadius: 6,
+  shineLevel: 0.8,
+  /** 빛나는 장식의 빛: 반지름, 세기 */
+  glowRadius: 7,
+  glowAlpha: 0.3,
+  /** 화단 앞에 이만큼 가만히 서 있으면 가까운 장식 몇 개에 단 사람 닉네임이 뜬다 */
+  nameAfter: 1,
+  nameCount: 4,
+  /** 꽉 찼을 때 고개를 갸우뚱: 걸리는 시간, 기우는 px */
+  puzzledSeconds: 0.9,
+  puzzledLean: 2,
+  /** 오르골 장식: 가까이 가면 아주 작게 들린다 (가장 클 때 거리, 안 들리는 거리, 가장 클 때 음량, 한 박 길이) */
+  musicNear: 16,
+  musicFar: 70,
+  musicVolume: 0.05,
+  musicBeat: 0.3,
+} as const;
+
+/** 장식 그림의 글자 → 색 */
+export const ORNAMENT_COLORS = {
+  R: '#d9434f',
+  r: '#a52f3b',
+  G: '#e8b83a',
+  g: '#b8862a',
+  S: '#d6dbe8',
+  s: '#9aa2b8',
+  B: '#4f7fd9',
+  b: '#385fa8',
+  W: '#ffffff',
+  K: '#4a3020',
+  N: '#b0703a',
+  n: '#7e4a22',
+  C: '#bfe3f2',
+  c: '#8fc4e0',
+  Y: '#fff0a0',
+  y: '#f2c14e',
+  P: '#e86a8a',
+  E: '#2f8a4c',
+  /** 사다리, 미리보기 테두리, 달 수 있는 영역(?debug=1) */
+  ladder: '#a8743a',
+  ladderShade: '#6e4a22',
+  cursorOk: '#fff6dc',
+  cursorBad: '#ff8a8a',
+  cursorUndo: '#8fe0ff',
+  debugArea: 'rgba(120, 255, 160, 0.28)',
+  shine: '#ffffff',
+  glow: '#ffe9a8',
+} as const;
+
+/** 트리 꾸미기 소리 */
+export const TREE_DECOR_SOUND = {
+  /** 산타의 작은 '호호': 낮은 음 두 번 */
+  hohoHz: [196, 165],
+  hohoVolume: 0.12,
+  /** 상자가 톡 튀어나옴, 바닥에 통, 덜컹덜컹 */
+  popHz: 620,
+  popVolume: 0.12,
+  landVolume: 0.2,
+  rattleVolume: 0.14,
+  /** 뚜껑이 폭: 반짝이 소리 (보통 / 특별은 더 높은 '링') */
+  openNotes: [1046.5, 1318.5, 1568],
+  specialNotes: [1568, 2093, 2637, 3136],
+  openVolume: 0.16,
+  /** 달렸을 때 '딩', 던진 장식이 튕길 때 */
+  hangHz: 1760,
+  hangVolume: 0.2,
+  missHz: 330,
+  /** 축하 화음 종소리 */
+  celebrateNotes: [523.25, 659.25, 783.99, 1046.5, 1318.5],
+  celebrateVolume: 0.2,
+  celebrateSeconds: 2.4,
+  /** 오르골 장식의 아주 작은 선율 (Hz, 0 = 쉼) */
+  musicNotes: [1318.5, 1568, 2093, 1568, 1760, 1396.9, 1568, 0],
+  noiseSeconds: 0.5,
+} as const;
+
 /** 눈사람 */
 export const SNOWMAN = {
   /** 최대 단 수, 위 단이 아래 단에 파묻히는 비율 (위 단 지름 대비) */
@@ -1062,17 +1306,6 @@ export const TREE = {
   starGlowRadius: 9,
   starGlowMinAlpha: 0.25,
   starGlowMaxAlpha: 0.6,
-  ornamentMinCount: 52,
-  ornamentMaxCount: 62,
-  ornamentMinGap: 9,
-  /** 장식을 잎 테두리 안쪽으로 들이는 거리 */
-  ornamentInset: 4,
-  ornamentTopMargin: 20,
-  ornamentBottomMargin: 6,
-  ornamentSizes: [3, 4, 4, 5],
-  /** 흰 눈꽃 장식 개수, 다른 장식과 띄우는 거리 */
-  snowflakeCount: 12,
-  snowflakeGap: 10,
   /** 꼬마전구를 빽빽하게 두른다 */
   lightMinCount: 230,
   lightMaxCount: 270,
@@ -1100,16 +1333,13 @@ export const TREE = {
   bedWallHeight: 3,
   bedRimWidth: 3,
   bedSnowChance: 0.08,
-  /** 선물 상자 (트리 중심 기준 x, 크기, 색 이름) */
-  gifts: [
-    { dx: -27, w: 9, h: 8, box: 'red', ribbon: 'gold' },
-    { dx: -16, w: 8, h: 11, box: 'green', ribbon: 'gold' },
-    { dx: -4, w: 9, h: 6, box: 'gold', ribbon: 'red' },
-    { dx: 11, w: 10, h: 9, box: 'red', ribbon: 'gold' },
-    { dx: 23, w: 7, h: 7, box: 'green', ribbon: 'red' },
-  ],
-  /** 선물 바닥 = 화단 중심에서 아래로 */
-  giftBaseBelowCenter: 3,
+  /** 축하(장식 25·50·100개): 빛 물결이 아래에서 위로 이만큼, 한 번에 이 시간씩 흐르고 별이 크게 반짝인다 */
+  celebrateWaves: 3,
+  celebrateWaveSeconds: 1.1,
+  celebrateStarGlow: 2,
+  /** 장식이 100개를 넘으면 별이 항상 조금 더 밝다: 가장 어두울 때 밝기, 빛 번짐 배율 */
+  brightStarMinAlpha: 0.92,
+  brightStarGlow: 1.35,
 } as const;
 
 export const TREE_COLORS = {
@@ -1121,7 +1351,6 @@ export const TREE_COLORS = {
   tipSnow: '#dfe8f4',
   snowClump: '#eef3fb',
   snowClumpShade: '#b4c2d8',
-  snowflake: '#f4f8ff',
   trunk: '#4a3020',
   trunkShade: '#36231a',
   star: '#ffd34d',
@@ -1129,21 +1358,10 @@ export const TREE_COLORS = {
   starGlow: '#ffe08a',
   light: '#fff1c2',
   lightHalo: '#ffd98a',
-  ornaments: [
-    { base: '#e8b83a', shade: '#b8862a' }, // 금
-    { base: '#d6dbe8', shade: '#9aa2b8' }, // 은
-    { base: '#d23a3a', shade: '#9e2626' }, // 빨강
-  ],
-  ornamentShine: '#ffffff',
   bedStone: '#6f7188',
   bedStoneDark: '#4f5068',
   bedSoil: '#2b2320',
   snow: '#e8eef8',
-  gift: {
-    red: { base: '#c73a3a', shade: '#962a2a' },
-    green: { base: '#2f8a52', shade: '#226540' },
-    gold: { base: '#e2b23e', shade: '#b0862a' },
-  },
 } as const;
 
 /** 마켓 오두막: 돌바닥 뒤쪽 끝(연석 바로 뒤)에 늘어선다. 크기도 종류도 제각각 (위치·폭·벽 높이는 world.ts의 HUTS) */
@@ -1966,6 +2184,9 @@ export const LIGHTING = {
   clockHaloRadius: 20,
   clockHaloAlpha: 0.22,
   rinkHazeAlpha: 0.1,
+  /** 그때그때 생기는 작은 빛 (선물 상자, 빛나는 트리 장식): 겹치는 단계, 바닥 빛의 납작한 정도 */
+  pointLightSteps: 3,
+  pointLightFlat: 0.45,
   /** 바닥: 앞쪽(아래)으로 갈수록 밤 그늘, 연석 위 쌓인 눈 */
   frontShadeFromY: 200,
   frontShadeAlpha: 0.3,

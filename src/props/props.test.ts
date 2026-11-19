@@ -4,10 +4,10 @@ import { createRng } from '../random';
 import { LAMPS, SPAWN, TREE_X, getObstacle, inZone } from '../world';
 import { createPlazaZone } from '../zones/plaza';
 import {
+  celebrationWave,
+  createTree,
   foliageHalfWidth,
   generateLights,
-  generateOrnaments,
-  generateSnowflakes,
   lightLevel,
   starBox,
   starLevel,
@@ -55,22 +55,32 @@ describe('큰 트리 모양', () => {
 });
 
 describe('트리 장식', () => {
-  it('장식볼 50~60여 개가 잎 안에 서로 떨어져 흩어진다 (시드 고정)', () => {
-    const a = generateOrnaments(createRng(5));
-    expect(a).toEqual(generateOrnaments(createRng(5)));
-    expect(a.length).toBeGreaterThanOrEqual(TREE.ornamentMinCount);
-    expect(a.length).toBeLessThanOrEqual(TREE.ornamentMaxCount);
-    for (const o of a) {
-      expect(Math.abs(o.x - TREE_X)).toBeLessThanOrEqual(foliageHalfWidth(o.y));
-      for (const other of a) {
-        if (other !== o) expect(Math.hypot(o.x - other.x, o.y - other.y)).toBeGreaterThanOrEqual(TREE.ornamentMinGap);
-      }
+  it('트리는 비어 있다: 전구와 별만 있고 미리 달린 장식볼·눈꽃·밑동 선물은 없다', () => {
+    const tree = createTree(createRng(5));
+    expect(tree.lights.length).toBeGreaterThan(200);
+    expect('ornaments' in tree).toBe(false);
+    expect('gifts' in TREE).toBe(false);
+    expect('ornamentMinCount' in TREE).toBe(false);
+    expect('snowflakeCount' in TREE).toBe(false);
+  });
+
+  it('축하: 빛 물결이 아래에서 위로 세 번 흐르고, 장식이 100개를 넘으면 별이 항상 더 밝다', () => {
+    expect(TREE.celebrateWaves).toBe(3);
+    const one = TREE.celebrateWaveSeconds;
+    expect(celebrationWave(-1)).toBeNull();
+    expect(celebrationWave(0)).toBe(0);
+    expect(celebrationWave(one * 0.5)).toBeCloseTo(0.5, 5);
+    // 두 번째, 세 번째 물결도 다시 아래에서 시작한다
+    expect(celebrationWave(one * 1.25)).toBeCloseTo(0.25, 5);
+    expect(celebrationWave(one * 2.75)).toBeCloseTo(0.75, 5);
+    expect(celebrationWave(one * 3)).toBeNull();
+    // 물결 앞머리의 전구는 최대로 밝다
+    const low = { x: TREE_X, y: TREE.foliageBottomY, period: 3, phase: 0 };
+    expect(lightLevel(low, 1, 0)).toBeCloseTo(1, 5);
+    for (let t = 0; t < TREE.starPeriod; t += 0.1) {
+      expect(starLevel(t, true)).toBeGreaterThanOrEqual(starLevel(t));
+      expect(starLevel(t, true)).toBeGreaterThanOrEqual(TREE.brightStarMinAlpha);
     }
-    // 위아래로 골고루: 위쪽 절반과 아래쪽 절반 모두에 있다
-    const mid = (TREE.tipY + TREE.foliageBottomY) / 2;
-    expect(a.some((o) => o.y < mid)).toBe(true);
-    expect(a.some((o) => o.y > mid)).toBe(true);
-    expect(new Set(a.map((o) => o.colorIndex)).size).toBe(3);
   });
 
   it('꼬마전구 200개 넘게 잎 안에 있고 각자 다른 박자로 반짝인다', () => {
@@ -85,16 +95,6 @@ describe('트리 장식', () => {
       const level = lightLevel(l, 1);
       expect(level).toBeGreaterThanOrEqual(TREE.lightMinAlpha);
       expect(level).toBeLessThanOrEqual(TREE.lightMaxAlpha);
-    }
-  });
-
-  it('눈꽃 장식은 잎 안에서 장식볼과 떨어져 있다', () => {
-    const balls = generateOrnaments(createRng(5));
-    const flakes = generateSnowflakes(createRng(6), balls);
-    expect(flakes.length).toBeGreaterThan(TREE.snowflakeCount / 2);
-    for (const f of flakes) {
-      expect(Math.abs(f.x - TREE_X)).toBeLessThanOrEqual(foliageHalfWidth(f.y));
-      for (const o of balls) expect(Math.hypot(o.x - f.x, o.y - f.y)).toBeGreaterThanOrEqual(TREE.snowflakeGap);
     }
   });
 

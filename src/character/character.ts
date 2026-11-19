@@ -25,8 +25,10 @@ export interface Character {
   /** 쓰고 있는 털모자 색 (목도리 색 번호 0~5, null = 기본 빨강)과 그 모자의 주인 닉네임 (내 모자면 null) */
   hatColor: number | null;
   hatOwner: string | null;
-  /** 손에 든 노점 소품 */
+  /** 손에 든 노점 소품 또는 트리 장식 */
   holding: HoldStore;
+  /** 손에 든 것이 트리 장식이면 그 장식의 id (선물 상자에서 받은 것 — 서버가 이 id로 확인한다) */
+  heldTag: string | null;
   /** 윗몸을 옆으로 기울이는 px (재채기·떨림). 어떤 자세로 그리든 더해진다 */
   lean: number;
   /** 걷는 빠르기 배율 (재채기 준비 중에는 느려진다) */
@@ -57,6 +59,7 @@ export function createCharacter(x: number, y: number, outfit: OutfitName = DEFAU
     hatColor: null,
     hatOwner: null,
     holding: createHoldState(),
+    heldTag: null,
     lean: 0,
     speedFactor: 1,
     eyesClosed: false,

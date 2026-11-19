@@ -18,21 +18,42 @@ describe('산타 썰매', () => {
     expect(santaAltitude(TREE_X - 500)).toBeCloseTo(SANTA.cruiseY, 0);
   });
 
-  it('5분에 한 번 지나간다', () => {
+  it('서버도 쓰는 썰매 폭 숫자가 그림 폭과 같다 (선물이 떨어지는 때를 같이 계산한다)', () => {
+    expect(SANTA.width).toBe(SANTA_WIDTH);
+    expect(SANTA.sackX).toBeLessThan(SANTA_WIDTH);
+  });
+
+  it('5분에 한 번, 서버 시각이 5분의 배수가 될 때마다 지나간다', () => {
     expect(SANTA.interval).toBe(300);
-    const santa = createSanta(() => 0.5);
+    let now = 1_000_000 * SANTA.interval + 40;
+    const santa = createSanta(
+      () => now,
+      () => 0.5,
+    );
     const step = 0.1;
     const starts: number[] = [];
-    let was = false;
-    for (let t = 0; t < 700; t += step) {
+    let was = santa.flying;
+    expect(was).toBe(false);
+    for (let i = 0; i < 9000; i++) {
+      now += step;
       santa.update(step);
-      if (santa.flying && !was) starts.push(t);
+      if (santa.flying && !was) starts.push(now);
       was = santa.flying;
     }
     expect(starts).toHaveLength(3);
-    expect(starts[0]).toBeCloseTo(SANTA.firstDelay, 0);
+    for (const start of starts) expect(start % SANTA.interval).toBeLessThan(0.2);
     expect(starts[1] - starts[0]).toBeCloseTo(300, 0);
-    expect(starts[2] - starts[1]).toBeCloseTo(300, 0);
     expect(flightSeconds()).toBeLessThan(60);
+  });
+
+  it('같은 서버 시각이면 어느 화면에서나 같은 자리를 난다', () => {
+    const at = 777 * SANTA.interval + 9.5;
+    const a = createSanta(() => at);
+    const b = createSanta(() => at);
+    expect(a.flying).toBe(true);
+    expect(a.position()).toEqual(b.position());
+    // 시계를 바꿔 끼우면 (서버에 붙으면) 그 시각을 따른다
+    b.setClock(() => at + 100);
+    expect(b.flying).toBe(false);
   });
 });

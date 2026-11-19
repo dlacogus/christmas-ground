@@ -2,8 +2,9 @@
 
 import { getSpriteCanvas } from './character/render';
 import { POSES, type Facing, type PoseName } from './character/sprites';
-import { CHARACTER, COLORS, DEFAULT_OUTFIT, OUTFITS, PROP_IDS, SKATERS, SPRITE_SHEET, type OutfitName, type PropId } from './constants';
-import { drawPropIcon, PROP_NAMES, propSize } from './features/props';
+import { CHARACTER, COLORS, DEFAULT_OUTFIT, ORNAMENT_KINDS, OUTFITS, PROP_IDS, SKATERS, SPRITE_SHEET, type OrnamentKind, type OutfitName, type PropId } from './constants';
+import { drawOrnament, drawPropIcon, PROP_NAMES, propSize } from './features/props';
+import { ORNAMENT_NAMES, isSpecial } from './features/treeDecor';
 import { fitCanvasToWindow, frameDt } from './screen';
 
 interface Cell {
@@ -58,6 +59,15 @@ function propCell(prop: PropId): Cell {
   return { label: PROP_NAMES[prop], sprite: () => canvas };
 }
 
+/** 트리 장식: 칸 가운데에 실제 크기로 (특별한 장식은 이름 앞에 ★) */
+function ornamentCell(kind: OrnamentKind): Cell {
+  const canvas = document.createElement('canvas');
+  canvas.width = CHARACTER.spriteWidth;
+  canvas.height = CHARACTER.spriteHeight;
+  drawOrnament(canvas.getContext('2d')!, kind, canvas.width / 2, canvas.height / 2);
+  return { label: (isSpecial(kind) ? '★' : '') + ORNAMENT_NAMES[kind], sprite: () => canvas };
+}
+
 export function startSpriteSheet(canvas: HTMLCanvasElement): void {
   const { scale, columns, padding, labelHeight, titleHeight } = SPRITE_SHEET;
   const cellW = CHARACTER.spriteWidth * scale;
@@ -78,6 +88,7 @@ export function startSpriteSheet(canvas: HTMLCanvasElement): void {
       animatedCell('glide', SKATERS.glideFrameDuration, SKATERS.list[0].outfit),
     ],
     PROP_IDS.map(propCell),
+    ORNAMENT_KINDS.map(ornamentCell),
   ];
 
   const rowHeight = labelHeight + cellH + padding;

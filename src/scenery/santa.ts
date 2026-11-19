@@ -1,9 +1,12 @@
 // 5분에 한 번 하늘을 가로지르는 산타 썰매. 루돌프 두 마리가 끄는 썰매가 맵 오른쪽 끝에서 왼쪽 끝까지 날며,
 // 큰 트리 위를 지날 때 꼭대기 별 바로 위로 솟아오른다. 뒤로 금빛 가루가 흩날린다.
 // 월드 좌표로 움직이고 (본 레이어와 함께 흐른다) 시설보다 앞에 그린다.
+// 지나가는 때는 서버 시각으로 정한다 (서버 시각이 5분의 배수가 될 때마다) — 메시지 없이도 모든 화면에서 같은 때 같은 자리를 난다.
+// 지날 때마다 선물 상자 하나를 떨어뜨린다 (features/treeDecor.ts).
 
-import { MAP_WIDTH, TREE_X } from '../world';
+import { MAP_WIDTH } from '../world';
 import { SANTA as S, SANTA_COLORS as C, SCREEN_WIDTH } from '../constants';
+import { santaAltitude, santaFlightSeconds, santaPass } from '../features/treeDecor';
 import { stampPixels } from '../props/pixel';
 import { lazyBuffer } from './buffer';
 
@@ -67,11 +70,7 @@ function paintSanta(ctx: CanvasRenderingContext2D, frame: number): void {
   stampPixels(ctx, SLEIGH, PALETTE, SANTA_WIDTH - SLEIGH[0].length, 0);
 }
 
-/** 썰매 가운데가 월드 x에 있을 때의 높이 (썰매 위쪽 y): 평소 높이로 날다가 트리 위에서 별 위로 솟는다 */
-export function santaAltitude(centerX: number): number {
-  const d = (centerX - TREE_X) / S.treeRiseWidth;
-  return S.cruiseY - (S.cruiseY - S.overTreeY) * Math.exp(-d * d);
-}
+export { santaAltitude };
 
 /** 가로지른 정도(0 = 맵 오른쪽 밖, 1 = 맵 왼쪽 밖)에 따른 썰매 왼쪽 위 월드 좌표 */
 export function santaPosition(progress: number, time: number): { x: number; y: number } {
@@ -82,7 +81,7 @@ export function santaPosition(progress: number, time: number): { x: number; y: n
 
 /** 한 번 가로지르는 데 걸리는 시간 (초) */
 export function flightSeconds(): number {
-  return (MAP_WIDTH + SANTA_WIDTH) / S.speed;
+  return santaFlightSeconds();
 }
 
 interface Sparkle {
@@ -91,39 +90,44 @@ interface Sparkle {
   age: number;
 }
 
-export function createSanta(random: () => number = Math.random) {
+/** clock = 서버 시각 (초). 접속이 없으면 내 시계 — 혼자서도 5분마다 지나간다 */
+export function createSanta(clock: () => number = () => Date.now() / 1000, random: () => number = Math.random) {
   const frames = [0, 1].map((f) => lazyBuffer(SANTA_WIDTH, SANTA_HEIGHT, (ctx) => paintSanta(ctx, f)));
   const sparkles: Sparkle[] = [];
-  let wait: number = S.firstDelay;
-  /** 날고 있으면 0~1, 아니면 -1 */
-  let progress = -1;
+  /** 개발용으로 바로 날린 비행의 진행 (아니면 -1) */
+  let manual = -1;
   let time = 0;
   let sparkleTimer = 0;
+  /** 날고 있으면 0~1, 아니면 -1 */
+  const progressNow = (): number => (manual >= 0 ? manual : (santaPass(clock())?.progress ?? -1));
 
   return {
     get flying() {
-      return progress >= 0;
+      return progressNow() >= 0;
     },
-    /** 지금 바로 날아오른다 (개발용) */
+    /** 시각을 재는 곳을 바꾼다 (서버에 붙으면 서버 시각으로) */
+    setClock(next: () => number): void {
+      clock = next;
+    },
+    /** 지금 바로 날아오른다 (개발용 — 내 화면에서만, 선물은 떨어뜨리지 않는다) */
     fly(): void {
-      if (progress < 0) progress = 0;
+      if (progressNow() < 0) manual = 0;
+    },
+    /** 지금 썰매 왼쪽 위 자리 (날고 있지 않으면 null) */
+    position(): { x: number; y: number } | null {
+      const progress = progressNow();
+      return progress < 0 ? null : santaPosition(progress, time);
     },
     update(dt: number): void {
       time += dt;
       for (const s of sparkles) s.age += dt;
       while (sparkles.length > 0 && sparkles[0].age >= S.sparkleLife) sparkles.shift();
-      if (progress < 0) {
-        wait -= dt;
-        if (wait <= 0) progress = 0;
-        return;
+      if (manual >= 0) {
+        manual += dt / flightSeconds();
+        if (manual >= 1) manual = -1;
       }
-      progress += dt / flightSeconds();
-      if (progress >= 1) {
-        progress = -1;
-        // 날기 시작한 때부터 5분마다
-        wait = S.interval - flightSeconds();
-        return;
-      }
+      const progress = progressNow();
+      if (progress < 0) return;
       // 썰매 뒤로 금빛 가루
       sparkleTimer -= dt;
       if (sparkleTimer <= 0) {
@@ -145,6 +149,7 @@ export function createSanta(random: () => number = Math.random) {
         }
         ctx.globalAlpha = 1;
       }
+      const progress = progressNow();
       if (progress < 0) return;
       const p = santaPosition(progress, time);
       const sx = p.x - offsetX;

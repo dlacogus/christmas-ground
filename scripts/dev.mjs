@@ -10,7 +10,7 @@ if (!existsSync('dist')) {
 }
 
 const run = (command) => spawn(command, { stdio: 'inherit', shell: true });
-const children = [run('npx wrangler dev --port 8787'), run('npx vite')];
+const children = [run('npx wrangler dev --port 8787 --var DEBUG_GIFTS:1'), run('npx vite')];
 const stop = () => {
   for (const child of children) child.kill();
   process.exit(0);

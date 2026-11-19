@@ -5,7 +5,7 @@
 //   sitting — 벤치에 앉아 있다 (어느 벤치 bench의 어느 자리 slot인지)
 // 상태가 바뀌면 onChange로 알린다. 나중에 네트워크로 보낼 때 이 알림에 붙이면 된다.
 
-import type { PropId } from '../constants';
+import type { Held } from '../constants';
 
 export type CharacterState =
   | { kind: 'walk' }
@@ -42,16 +42,16 @@ export function createHatState(): HatStore {
   };
 }
 
-/** 손에 든 노점 소품 (한 번에 하나, 없으면 null). 바뀌면 알린다 — 친구들 화면에도 보이게 네트워크로 보낸다 */
+/** 손에 든 노점 소품 또는 트리 장식 (한 번에 하나, 없으면 null). 바뀌면 알린다 — 친구들 화면에도 보이게 네트워크로 보낸다 */
 export interface HoldStore {
-  get(): PropId | null;
-  set(next: PropId | null): void;
-  onChange(listener: (next: PropId | null, previous: PropId | null) => void): () => void;
+  get(): Held | null;
+  set(next: Held | null): void;
+  onChange(listener: (next: Held | null, previous: Held | null) => void): () => void;
 }
 
 export function createHoldState(): HoldStore {
-  let current: PropId | null = null;
-  const listeners = new Set<(next: PropId | null, previous: PropId | null) => void>();
+  let current: Held | null = null;
+  const listeners = new Set<(next: Held | null, previous: Held | null) => void>();
   return {
     get: () => current,
     set(next) {

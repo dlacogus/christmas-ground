@@ -2,7 +2,7 @@
 // 서버(Durable Object 'Plaza')는 받은 메시지를 parseClientMessage로 확인하고, 다른 사람들에게 전달만 한다.
 // 브라우저·Worker 어느 쪽에서도 돌아가게 DOM도 Cloudflare API도 쓰지 않는다.
 
-import { CAROUSEL, CARRIAGE, COPUSH, NET, PROP_IDS, PROPS, SNOWBALL, SNOWMAN, THROW, type PropId } from '../constants';
+import { CAROUSEL, CARRIAGE, COPUSH, NET, ORNAMENT_KINDS, PROP_IDS, PROPS, SNOWBALL, SNOWMAN, THROW, type Held, type OrnamentKind, type PropId } from '../constants';
 import { MAP_HEIGHT, MAP_WIDTH } from '../world';
 
 // ───────────── 공통 ─────────────
@@ -38,8 +38,8 @@ export interface WirePlayer {
   f: 0 | 1;
   state: WireState;
   hat: WireHat;
-  /** 손에 든 노점 소품 */
-  hold?: PropId | null;
+  /** 손에 든 노점 소품 또는 트리 장식 */
+  hold?: Held | null;
   /** 쓰고 있는 털모자 색 (없으면 자기 목도리 색)과, 남의 모자를 쓰고 있으면 그 주인 닉네임 */
   hc?: number | null;
   ho?: string | null;
@@ -102,6 +102,25 @@ export type WireObject =
   | { id: string; kind: 'ball'; data: BallData; updatedAt: number }
   | { id: string; kind: 'snowman'; data: SnowmanData; updatedAt: number };
 
+/** 트리에 달린 장식: 가운데 자리, 누가(by = 닉네임) 언제(at = 서버 시각 ms) 달았나 */
+export interface WireOrnament {
+  id: string;
+  kind: OrnamentKind;
+  x: number;
+  y: number;
+  by: string;
+  at: number;
+}
+
+/** 개발용으로 떨어뜨린 선물 상자 (산타 선물은 각자 계산하므로 보내지 않는다). at = 떨어뜨린 서버 시각 (ms) */
+export interface WireGift {
+  id: string;
+  x: number;
+  y: number;
+  color: number;
+  at: number;
+}
+
 /** 회전목마 자리: seats[탈 것][자리] = 앉은 사람 id 또는 null */
 export type WireSeats = (string | null)[][];
 
@@ -113,7 +132,7 @@ export type ClientMessage =
   /** 위치 (움직이는 동안 초당 최대 8번, 멈추면 한 번). 스케이트 중에는 속도도 */
   | { t: 'pos'; x: number; y: number; f: 0 | 1; m: 0 | 1; vx?: number; vy?: number }
   /** 상태가 바뀌었을 때만 */
-  | { t: 'state'; state: WireState; hat: WireHat; hold?: PropId | null; hc?: number | null; ho?: string | null }
+  | { t: 'state'; state: WireState; hat: WireHat; hold?: Held | null; hc?: number | null; ho?: string | null }
   | { t: 'act'; a: Act }
   /** 회전목마 자리에 앉겠다 / 내렸다 */
   | { t: 'sit'; mount: number; slot: number }
@@ -134,19 +153,38 @@ export type ClientMessage =
   /** 눈사람 머리를 맞혔다 (던진 사람 화면이 판정한다). n = 지금까지 맞힌 횟수, dir = 날아온 쪽 */
   | { t: 'hit'; id: string; n: number; dir: number }
   /** 친구를 맞혔다 (head = 머리에 맞았다) */
-  | { t: 'splat'; to: string; head: 0 | 1; dir: number };
+  | { t: 'splat'; to: string; head: 0 | 1; dir: number }
+  /** 선물 상자를 열겠다 (한 상자는 한 사람만 — 서버가 먼저 온 사람에게 준다) */
+  | { t: 'open'; id: string }
+  /** 상자에서 나온 장식(id = 상자 id)을 트리의 (x, y)에 달겠다 / 내가 방금 단 장식을 떼겠다 */
+  | { t: 'hang'; id: string; x: number; y: number }
+  | { t: 'unhang'; id: string }
+  /** 개발용: 이 자리에 선물 상자를 바로 떨어뜨린다 (개발 서버에서만 받아 준다) */
+  | { t: 'debugGift'; x: number; y: number };
 
 // ───────────── 서버 → 클라이언트 ─────────────
 
 export type ServerMessage =
   /** 입장 허락: 내 id, 서버 시각, 지금 있는 사람들·회전목마 자리·눈덩이·눈사람 전부 */
-  | { t: 'welcome'; id: string; now: number; players: WirePlayer[]; seats: WireSeats; objects: WireObject[]; rolling: { owner: string; id: string; x: number; y: number; d: number; roll: number; seed: number }[] }
+  | {
+      t: 'welcome';
+      id: string;
+      now: number;
+      players: WirePlayer[];
+      seats: WireSeats;
+      objects: WireObject[];
+      rolling: { owner: string; id: string; x: number; y: number; d: number; roll: number; seed: number }[];
+      /** 트리에 달린 장식 전부, 이미 열린 선물 상자 id들, 열어 놓고 아직 달지 않은 내 장식 */
+      tree: WireOrnament[];
+      opened: string[];
+      mine: { id: string; kind: OrnamentKind }[];
+    }
   /** 광장이 꽉 찼다 (8명) */
   | { t: 'full' }
   | { t: 'joined'; player: WirePlayer }
   | { t: 'left'; id: string }
   | { t: 'pos'; id: string; x: number; y: number; f: 0 | 1; m: 0 | 1; vx?: number; vy?: number }
-  | { t: 'state'; id: string; state: WireState; hat: WireHat; hold?: PropId | null; hc?: number | null; ho?: string | null }
+  | { t: 'state'; id: string; state: WireState; hat: WireHat; hold?: Held | null; hc?: number | null; ho?: string | null }
   | { t: 'act'; id: string; a: Act }
   | { t: 'seats'; seats: WireSeats }
   /** 그 자리는 이미 누가 앉았다 */
@@ -162,7 +200,17 @@ export type ServerMessage =
   | { t: 'throw'; id: string; x: number; y: number; dx: number; dy: number; p: number }
   /** 서버가 확인한 맞힘 (그 눈사람이 있을 때만) */
   | { t: 'hit'; id: string; by: string; n: number; dir: number }
-  | { t: 'splat'; from: string; to: string; head: 0 | 1; dir: number };
+  | { t: 'splat'; from: string; to: string; head: 0 | 1; dir: number }
+  /** 이 상자를 by가 열어 kind 장식을 받았다 (모두에게) / 늦었다 — 이미 다른 사람이 열었다 */
+  | { t: 'opened'; id: string; by: string; kind: OrnamentKind }
+  | { t: 'openDenied'; id: string }
+  /** 장식이 달렸다 (모두에게). count = 지금 트리의 장식 수, milestone = 이번에 닿은 축하 개수 (25·50·100) */
+  | { t: 'hung'; o: WireOrnament; by: string; count: number; milestone?: number }
+  /** 달 수 없다 (자리가 겹쳤거나 꽉 찼다) — 장식은 손에 남는다 */
+  | { t: 'hangDenied'; id: string }
+  /** 장식을 뗐다 (모두에게). by = 뗀 사람 id — 장식은 그 사람 손으로 돌아간다 */
+  | { t: 'unhung'; id: string; by: string }
+  | { t: 'gift'; gift: WireGift };
 
 // ───────────── 검사 ─────────────
 
@@ -224,6 +272,11 @@ export function validSnowmanHat(v: unknown): v is SnowmanHat | null | undefined 
 
 export function validProp(v: unknown): v is PropId {
   return (PROP_IDS as readonly unknown[]).includes(v);
+}
+
+/** 손에 든 것: 노점 소품이나 트리 장식 */
+export function validHeld(v: unknown): v is Held {
+  return validProp(v) || (ORNAMENT_KINDS as readonly unknown[]).includes(v);
 }
 
 export function validProps(v: unknown): v is AttachedProp[] | undefined {
@@ -298,7 +351,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return out;
     }
     case 'state':
-      return validState(m.state) && validHat(m.hat) ? { t: 'state', state: m.state, hat: m.hat, hold: validProp(m.hold) ? m.hold : null, hc: isInt(m.hc, 0, NET.scarves - 1) ? m.hc : null, ho: cleanName(m.ho) } : null;
+      return validState(m.state) && validHat(m.hat) ? { t: 'state', state: m.state, hat: m.hat, hold: validHeld(m.hold) ? m.hold : null, hc: isInt(m.hc, 0, NET.scarves - 1) ? m.hc : null, ho: cleanName(m.ho) } : null;
     case 'act':
       return (ACTS as readonly unknown[]).includes(m.a) ? { t: 'act', a: m.a as Act } : null;
     case 'sit':
@@ -327,6 +380,13 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return isId(m.id) && isInt(m.n, 1, 5) && (m.dir === 1 || m.dir === -1) ? { t: 'hit', id: m.id, n: m.n, dir: m.dir } : null;
     case 'splat':
       return isId(m.to) && isBit(m.head) && (m.dir === 1 || m.dir === -1) ? { t: 'splat', to: m.to, head: m.head, dir: m.dir } : null;
+    case 'open':
+    case 'unhang':
+      return isId(m.id) ? { t: m.t, id: m.id } : null;
+    case 'hang':
+      return isId(m.id) && inMap(m.x, m.y) && Number.isInteger(m.x) && Number.isInteger(m.y) ? { t: 'hang', id: m.id, x: m.x as number, y: m.y as number } : null;
+    case 'debugGift':
+      return inMap(m.x, m.y) ? { t: 'debugGift', x: Math.round(m.x as number), y: Math.round(m.y as number) } : null;
     default:
       return null;
   }

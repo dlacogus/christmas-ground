@@ -107,8 +107,40 @@ export function drawClockHalo(ctx: CanvasRenderingContext2D, offsetX: number): v
 
 // ───────────── 바닥 ─────────────
 
-/** 바닥 위에 얹는 것: 앞쪽 밤 그늘, 연석 위 쌓인 눈, 그리고 번지는 불빛(더하기) */
-export function createGroundLight(rng: Rng) {
+/**
+ * 그때그때 생기는 작은 빛 (선물 상자, 스스로 빛나는 트리 장식). 미리 그려 둔 불빛 위에 매 프레임 더한다.
+ * floor = 바닥에 납작하게 깔리는 빛 (시설보다 먼저), 아니면 시설 위로 번지는 빛.
+ */
+export interface PointLight {
+  x: number;
+  y: number;
+  radius: number;
+  alpha: number;
+  color: string;
+  floor: boolean;
+}
+
+const NO_POINT_LIGHTS: readonly PointLight[] = [];
+
+/** 작은 빛들을 더한다 ('lighter'로 바꿔 둔 상태에서 부른다). 화면 밖은 건너뛴다 */
+function drawPointLights(ctx: CanvasRenderingContext2D, lights: readonly PointLight[], offsetX: number, floor: boolean): void {
+  for (const p of lights) {
+    if (p.floor !== floor) continue;
+    const sx = Math.round(p.x) - offsetX;
+    if (sx < -p.radius || sx > SCREEN_WIDTH + p.radius) continue;
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.alpha / L.pointLightSteps;
+    for (let i = 0; i < L.pointLightSteps; i++) {
+      const r = Math.max(1, Math.round((p.radius * (L.pointLightSteps - i)) / L.pointLightSteps));
+      if (floor) fillPixelEllipse(ctx, sx, Math.round(p.y), r, Math.max(1, Math.round(r * L.pointLightFlat)));
+      else fillPixelCircle(ctx, sx, Math.round(p.y), r);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** 바닥 위에 얹는 것: 앞쪽 밤 그늘, 연석 위 쌓인 눈, 그리고 번지는 불빛(더하기). pointLights = 그때그때 생기는 작은 빛 */
+export function createGroundLight(rng: Rng, pointLights: () => readonly PointLight[] = () => NO_POINT_LIGHTS) {
   const bed = getObstacle('tree-bed');
   const rink = getObstacle('rink');
 
@@ -186,6 +218,7 @@ export function createGroundLight(rng: Rng) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       drawSlice(ctx, getLight().canvas, offsetX);
+      drawPointLights(ctx, pointLights(), offsetX, true);
       ctx.restore();
     },
     /** 시설을 다 그린 뒤 */
@@ -193,6 +226,7 @@ export function createGroundLight(rng: Rng) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       drawSlice(ctx, getBloom().canvas, offsetX);
+      drawPointLights(ctx, pointLights(), offsetX, false);
       ctx.restore();
     },
   };

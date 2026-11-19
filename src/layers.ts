@@ -9,7 +9,7 @@ import { createRng } from './random';
 import { createFarCity } from './scenery/farCity';
 import { createForeground } from './scenery/foreground';
 import { createGround } from './scenery/ground';
-import { createFog, createGroundLight, createSkyGlow, createVignette, drawClockHalo } from './scenery/lighting';
+import { createFog, createGroundLight, createSkyGlow, createVignette, drawClockHalo, type PointLight } from './scenery/lighting';
 import { createTreeLine } from './scenery/treeLine';
 import { createSky } from './scenery/sky';
 import { createSnowfall, drawSnowLayer, updateSnowfall } from './scenery/snowfall';
@@ -56,6 +56,8 @@ export function createLayers(
   seed = SCENERY_SEED,
   floorMarks: readonly FloorMarks[] = [],
   skyFlyers: readonly SkyFlyer[] = [],
+  /** 그때그때 생기는 작은 빛 (선물 상자, 빛나는 트리 장식) */
+  pointLights?: () => readonly PointLight[],
 ): Layer[] {
   const f = LAYER_FACTORS;
   const sky = createSky(createRng(seed));
@@ -68,7 +70,7 @@ export function createLayers(
   // 기존 그림 위에 덧입히는 조명·분위기 층
   const skyGlow = createSkyGlow(createRng(seed + 7));
   const fog = createFog();
-  const light = createGroundLight(createRng(seed + 8));
+  const light = createGroundLight(createRng(seed + 8), pointLights);
   const vignette = createVignette();
 
   return [

@@ -4,8 +4,8 @@
 import { layerOffsetX } from '../camera';
 import { createCharacter, type Character } from '../character/character';
 import { drawCharacter } from '../character/render';
-import { BENCH_SIT, CAROUSEL, COPUSH, FOOTPRINTS, LAYER_FACTORS, NET, ROOF_SNOW_COLORS, SCREEN_WIDTH, SKATE, type OutfitName, type PropId } from '../constants';
-import { drawHeldProp } from '../features/props';
+import { BENCH_SIT, CAROUSEL, COPUSH, FOOTPRINTS, LAYER_FACTORS, NET, ROOF_SNOW_COLORS, SCREEN_WIDTH, SKATE, type Held, type OutfitName } from '../constants';
+import { drawHeldItem } from '../features/props';
 import { drawFaceSnow } from '../features/snowmanDraw';
 import { createSnowHits, type SnowHits } from '../features/roofSnow';
 import { createHat, createSneeze, type Hat, type Sneeze } from '../features/sneeze';
@@ -106,7 +106,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
     }
   };
 
-  const applyState = (r: Remote, state: WireState, hat: WireHat, animate: boolean, hold: PropId | null = null, hc: number | null = null, ho: string | null = null) => {
+  const applyState = (r: Remote, state: WireState, hat: WireHat, animate: boolean, hold: Held | null = null, hc: number | null = null, ho: string | null = null) => {
     r.info.state = state;
     r.info.hat = hat;
     r.info.hold = hold;
@@ -156,7 +156,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
         else drawCharacter(ctx, r.ch, ox);
         if (r.faceSnow > 0 && !r.hits.snowman) drawFaceSnow(ctx, footX, footY, r.ch.facing, kind === 'sitting' ? BENCH_SIT.lift : 0);
         // 손에 든 노점 소품
-        if (r.info.hold && kind !== 'skating' && !r.hits.snowman) drawHeldProp(ctx, r.info.hold, footX, footY, r.ch.facing, kind === 'sitting' ? BENCH_SIT.lift : 0);
+        if (r.info.hold && kind !== 'skating' && !r.hits.snowman) drawHeldItem(ctx, r.info.hold, footX, footY, r.ch.facing, kind === 'sitting' ? BENCH_SIT.lift : 0);
         r.hits.drawOver(ctx, footX, footY, ox);
       }
       r.sneeze.draw(ctx, ox);

@@ -2,8 +2,9 @@
 // 서버는 잠들었다 깨어나므로 기억을 따로 두지 않는다: 접속자 정보는 접속(WebSocket)마다 붙여 둔 Seat에서,
 // 눈덩이·눈사람은 저장소(SQLite)에서 그때그때 읽어 와 이 함수들에 넘긴다.
 
-import { COPUSH, NET, SNOWBALL, SNOWMAN } from '../constants';
-import { emptySeats, seatCount, type BallData, type WireObject, type WirePlayer, type WireSeats } from './protocol';
+import { COPUSH, GIFT, NET, SNOWBALL, SNOWMAN, type OrnamentKind } from '../constants';
+import { canUnhang, checkHang, giftIndexOf, giftOfPass, giftOpenable } from '../features/treeDecor';
+import { emptySeats, seatCount, type BallData, type WireGift, type WireObject, type WirePlayer, type WireSeats } from './protocol';
 
 /** 접속 하나에 붙여 두는 정보 (serializeAttachment) */
 export interface Session {
@@ -133,4 +134,66 @@ export function expiredObjects(objects: readonly WireObject[], now: number): str
   snowmen.sort((a, b) => bornAt(a) - bornAt(b));
   for (let i = 0; i < snowmen.length - SNOWMAN.maxCount; i++) gone.push(snowmen[i].id);
   return gone;
+}
+
+// ───────────── 선물 상자와 트리 장식 ─────────────
+
+/**
+ * 저장된 장식 한 줄 (SQLite 테이블 tree_ornaments). 장식의 id는 그 장식이 나온 선물 상자의 id와 같다 —
+ * 그래서 줄이 있으면 그 상자는 이미 열린 것이고, 상자 하나에서 장식은 하나만 나온다.
+ * x, y가 null이면 열기만 하고 아직 달지 않았다 (연 사람 손에 있다).
+ */
+export interface OrnamentRow {
+  id: string;
+  kind: OrnamentKind;
+  x: number | null;
+  y: number | null;
+  /** 연 사람(= 다는 사람) 닉네임, 연 때 또는 단 때 (서버 시각 ms) */
+  by: string;
+  at: number;
+}
+
+/** 개발용 선물 상자의 id: 떨어뜨린 때·자리·색을 id에 적어 둔다 (서버가 따로 기억하지 않아도 되게) */
+export function debugGiftId(gift: { at: number; x: number; y: number; color: number }): string {
+  return `d${Math.round(gift.at)}x${Math.round(gift.x)}y${Math.round(gift.y)}c${gift.color}`;
+}
+
+export function parseDebugGift(id: string): WireGift | null {
+  const m = /^d(\d{1,15})x(\d{1,4})y(\d{1,3})c([0-3])$/.exec(id);
+  return m ? { id, at: Number(m[1]), x: Number(m[2]), y: Number(m[3]), color: Number(m[4]) } : null;
+}
+
+/** 개발용 상자를 열 수 있는 시간 (떨어뜨린 뒤, ms) */
+const DEBUG_GIFT_LIFE_MS = 30 * 60 * 1000;
+
+/**
+ * 선물 상자를 열겠다는 요청: 한 상자는 한 사람만 연다. 동시에 눌러도 먼저 처리된 한 명만 받는다 (row = 이미 누가 열었으면 그 줄).
+ * 상자는 바닥에 닿아 있어야 하고 (산타 선물은 최근 3개까지), 여는 사람(at)이 상자 곁에 있어야 한다.
+ * allowDebug = 개발 서버 (개발용 상자도 받아 준다).
+ */
+export function canOpenGift(id: string, nowMs: number, at: { x: number; y: number }, row: OrnamentRow | null, allowDebug = false): boolean {
+  if (row) return false;
+  let spot: { x: number; y: number } | null = null;
+  const index = giftIndexOf(id);
+  if (index !== null) {
+    if (giftOpenable(id, nowMs / 1000)) spot = giftOfPass(index);
+  } else if (allowDebug) {
+    const debug = parseDebugGift(id);
+    if (debug && nowMs >= debug.at && nowMs - debug.at < DEBUG_GIFT_LIFE_MS) spot = debug;
+  }
+  return spot !== null && Math.hypot(spot.x - at.x, spot.y - at.y) <= GIFT.serverReach;
+}
+
+/**
+ * 장식을 달겠다는 요청: 상자에서 나온 장식만 (row가 있고 아직 달지 않았다), 연 사람만,
+ * 자리는 잎 영역 안이고 달려 있는 것들(hung)과 겹치지 않으며 150개 미만일 때.
+ */
+export function canHangOrnament(row: OrnamentRow | null, nick: string, x: number, y: number, hung: readonly { x: number; y: number }[]): boolean {
+  if (!row || row.x !== null || row.by !== nick) return false;
+  return checkHang(x, y, hung) === 'ok';
+}
+
+/** 장식을 떼겠다는 요청: 내가 단 것이고 단 지 1분이 안 됐을 때만 */
+export function canUnhangOrnament(row: OrnamentRow | null, nick: string, nowMs: number): boolean {
+  return row !== null && row.x !== null && canUnhang(row, nick, nowMs);
 }

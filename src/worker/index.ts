@@ -5,14 +5,38 @@
 // - 서버는 받은 것을 확인(shared/protocol.ts)하고 다른 사람들에게 전달만 한다. 규칙(자리 배정·정리)은 shared/plazaCore.ts.
 // - 접속자 정보는 접속마다 serializeAttachment로 붙여 둔다 (잠들었다 깨어나도 남는다).
 // - 눈덩이·눈사람은 SQLite 테이블 objects(id, kind, data JSON, updated_at)에, 결과가 바뀔 때만 쓴다.
+// - 트리 장식은 tree_ornaments(id, kind, x, y, by_nick, created_at)에: 상자를 열 때 한 줄(x, y = NULL), 달 때·뗄 때 그 줄을 고친다.
+//   선물 상자 자체는 어디에도 두지 않는다 — 떨어지는 때와 자리는 서버 시각 + 고정 시드로 계산하고 (features/treeDecor.ts),
+//   장식 id = 상자 id라서 줄이 있으면 '이미 열린 상자'다 (서버가 잠들었다 깨어나도 한 상자는 한 번만 열린다).
 
 import { DurableObject } from 'cloudflare:workers';
-import { allowMessage, expiredObjects, holdersOf, isFull, leavePlaza, newSession, releaseHold, seatsOf, trySit, tryGrab, type Session } from '../shared/plazaCore';
-import { parseClientMessage, type ServerMessage, type WireObject } from '../shared/protocol';
+import { ORNAMENT, type OrnamentKind } from '../constants';
+import { milestoneAt, openableGiftIds, rollOrnament } from '../features/treeDecor';
+import {
+  allowMessage,
+  canHangOrnament,
+  canOpenGift,
+  canUnhangOrnament,
+  debugGiftId,
+  expiredObjects,
+  holdersOf,
+  isFull,
+  leavePlaza,
+  newSession,
+  releaseHold,
+  seatsOf,
+  trySit,
+  tryGrab,
+  type OrnamentRow,
+  type Session,
+} from '../shared/plazaCore';
+import { parseClientMessage, type ServerMessage, type WireObject, type WireOrnament } from '../shared/protocol';
 
 interface Env {
   ASSETS: Fetcher;
   PLAZA: DurableObjectNamespace<Plaza>;
+  /** 개발 서버(npm run dev)에서만 '1': 개발용 선물 상자(?debug=1의 P)를 받아 준다 */
+  DEBUG_GIFTS?: string;
 }
 
 export default {
@@ -30,6 +54,9 @@ export class Plaza extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS objects (id TEXT PRIMARY KEY, kind TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL)');
+    ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS tree_ornaments (id TEXT PRIMARY KEY, kind TEXT NOT NULL, x INTEGER, y INTEGER, by_nick TEXT NOT NULL, created_at INTEGER NOT NULL)');
+    // 지금까지 축하한 가장 큰 장식 수 (25·50·100) 한 줄 — 뗐다 다시 달아도 같은 축하는 한 번뿐이게
+    ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)');
   }
 
   async fetch(): Promise<Response> {
@@ -111,6 +138,28 @@ export class Plaza extends DurableObject<Env> {
     return all.filter((o) => !gone.has(o.id));
   }
 
+  // ── 트리 장식 저장소
+
+  private ornamentRow(id: string): OrnamentRow | null {
+    const rows = this.ctx.storage.sql.exec('SELECT id, kind, x, y, by_nick, created_at FROM tree_ornaments WHERE id = ? LIMIT 1', id).toArray();
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return { id: String(r.id), kind: r.kind as OrnamentKind, x: r.x === null ? null : Number(r.x), y: r.y === null ? null : Number(r.y), by: String(r.by_nick), at: Number(r.created_at) };
+  }
+
+  /** 트리에 달려 있는 장식 전부 */
+  private hungOrnaments(): WireOrnament[] {
+    const rows = this.ctx.storage.sql.exec('SELECT id, kind, x, y, by_nick, created_at FROM tree_ornaments WHERE x IS NOT NULL').toArray();
+    return rows.map((r) => ({ id: String(r.id), kind: r.kind as OrnamentKind, x: Number(r.x), y: Number(r.y), by: String(r.by_nick), at: Number(r.created_at) }));
+  }
+
+  /** 지금 바닥에 있을 수 있는 산타 선물 가운데 이미 열린 것 */
+  private openedGifts(now: number): string[] {
+    const ids = openableGiftIds(now / 1000);
+    const rows = this.ctx.storage.sql.exec(`SELECT id FROM tree_ornaments WHERE id IN (${ids.map(() => '?').join(', ')})`, ...ids).toArray();
+    return rows.map((r) => String(r.id));
+  }
+
   // ── 메시지
 
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
@@ -137,6 +186,9 @@ export class Plaza extends DurableObject<Env> {
       // 예전에 브라우저에만 저장해 둔 내 눈사람을 서버로 옮긴다
       (message.legacy ?? []).forEach((data, i) => this.put({ id: `${id}-old${i}`, kind: 'snowman', data: { ...data, owner: id, born: now }, updatedAt: now - 1000 + i }));
       const objects = this.cleanup(now);
+      // 열어 놓고 오래 달지 않은 장식은 잊는다 (타이머 없이, 누가 들어올 때만)
+      this.ctx.storage.sql.exec('DELETE FROM tree_ornaments WHERE x IS NULL AND created_at < ?', now - ORNAMENT.unhungKeepSeconds * 1000);
+      const mine = this.ctx.storage.sql.exec('SELECT id, kind FROM tree_ornaments WHERE x IS NULL AND by_nick = ?', message.name).toArray();
       this.send(ws, {
         t: 'welcome',
         id,
@@ -145,6 +197,9 @@ export class Plaza extends DurableObject<Env> {
         seats: seatsOf(others.map((s) => s.session)),
         objects,
         rolling: others.flatMap((s) => (s.session.player && s.session.rolling ? [{ owner: s.session.player.id, ...s.session.rolling }] : [])),
+        tree: this.hungOrnaments(),
+        opened: this.openedGifts(now),
+        mine: mine.map((r) => ({ id: String(r.id), kind: r.kind as OrnamentKind })),
       });
       this.broadcast({ t: 'joined', player: session.player }, ws);
       // 옮겨 온 눈사람은 다른 사람에게도 알린다
@@ -244,6 +299,49 @@ export class Plaza extends DurableObject<Env> {
       case 'splat':
         this.broadcast({ t: 'splat', from: me.id, to: message.to, head: message.head, dir: message.dir });
         break;
+      case 'open': {
+        // 한 상자는 한 사람만: 줄이 이미 있으면(누가 먼저 열었다) 거절한다. 어떤 장식이 나올지는 서버가 고른다
+        if (!canOpenGift(message.id, now, me, this.ornamentRow(message.id), this.env.DEBUG_GIFTS === '1')) {
+          this.send(ws, { t: 'openDenied', id: message.id });
+          break;
+        }
+        const kind = rollOrnament(Math.random(), Math.random());
+        this.ctx.storage.sql.exec('INSERT INTO tree_ornaments (id, kind, x, y, by_nick, created_at) VALUES (?, ?, NULL, NULL, ?, ?)', message.id, kind, me.name, now);
+        this.broadcast({ t: 'opened', id: message.id, by: me.id, kind });
+        break;
+      }
+      case 'hang': {
+        // 상자에서 나온 장식만, 잎 영역 안에, 다른 장식과 겹치지 않게
+        const row = this.ornamentRow(message.id);
+        const hung = this.hungOrnaments();
+        if (!row || !canHangOrnament(row, me.name, message.x, message.y, hung)) {
+          this.send(ws, { t: 'hangDenied', id: message.id });
+          break;
+        }
+        this.ctx.storage.sql.exec('UPDATE tree_ornaments SET x = ?, y = ?, created_at = ? WHERE id = ?', message.x, message.y, now, message.id);
+        const count = hung.length + 1;
+        // 25·50·100개에 처음 닿았을 때만 축하한다
+        const celebrated = this.ctx.storage.sql.exec("SELECT value FROM meta WHERE key = 'milestone'").toArray();
+        const milestone = milestoneAt(count, celebrated.length > 0 ? Number(celebrated[0].value) : 0);
+        if (milestone !== null) this.ctx.storage.sql.exec("INSERT INTO meta (key, value) VALUES ('milestone', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", milestone);
+        const o: WireOrnament = { id: row.id, kind: row.kind, x: message.x, y: message.y, by: me.name, at: now };
+        this.broadcast(milestone !== null ? { t: 'hung', o, by: me.id, count, milestone } : { t: 'hung', o, by: me.id, count });
+        break;
+      }
+      case 'unhang':
+        // 내가 단 장식만, 단 지 1분 안에만 뗄 수 있다 (장식은 내 손으로 돌아온다)
+        if (canUnhangOrnament(this.ornamentRow(message.id), me.name, now)) {
+          this.ctx.storage.sql.exec('UPDATE tree_ornaments SET x = NULL, y = NULL WHERE id = ?', message.id);
+          this.broadcast({ t: 'unhung', id: message.id, by: me.id });
+        }
+        break;
+      case 'debugGift': {
+        // 개발 서버에서만: 그 자리에 선물 상자를 바로 떨어뜨린다 (저장하지 않는다 — 자리와 때는 id에 적혀 있다)
+        if (this.env.DEBUG_GIFTS !== '1') break;
+        const gift = { at: now, x: message.x, y: message.y, color: Math.floor(Math.random() * 4) };
+        this.broadcast({ t: 'gift', gift: { ...gift, id: debugGiftId(gift) } });
+        break;
+      }
       case 'del':
         this.remove(message.id);
         if (session.rolling?.id === message.id) session.rolling = null;

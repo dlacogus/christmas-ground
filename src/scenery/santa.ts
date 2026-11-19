@@ -1,7 +1,7 @@
-// 5분에 한 번 하늘을 가로지르는 산타 썰매. 루돌프 두 마리가 끄는 썰매가 맵 오른쪽 끝에서 왼쪽 끝까지 날며,
+// 3분에 한 번 하늘을 가로지르는 산타 썰매. 루돌프 두 마리가 끄는 썰매가 맵 오른쪽 끝에서 왼쪽 끝까지 날며,
 // 큰 트리 위를 지날 때 꼭대기 별 바로 위로 솟아오른다. 뒤로 금빛 가루가 흩날린다.
 // 월드 좌표로 움직이고 (본 레이어와 함께 흐른다) 시설보다 앞에 그린다.
-// 지나가는 때는 서버 시각으로 정한다 (서버 시각이 5분의 배수가 될 때마다) — 메시지 없이도 모든 화면에서 같은 때 같은 자리를 난다.
+// 지나가는 때는 서버 시각으로 정한다 (서버 시각이 3분의 배수가 될 때마다) — 메시지 없이도 모든 화면에서 같은 때 같은 자리를 난다.
 // 지날 때마다 선물 상자 하나를 떨어뜨린다 (features/treeDecor.ts).
 
 import { MAP_WIDTH } from '../world';
@@ -90,7 +90,7 @@ interface Sparkle {
   age: number;
 }
 
-/** clock = 서버 시각 (초). 접속이 없으면 내 시계 — 혼자서도 5분마다 지나간다 */
+/** clock = 서버 시각 (초). 접속이 없으면 내 시계 — 혼자서도 3분마다 지나간다 */
 export function createSanta(clock: () => number = () => Date.now() / 1000, random: () => number = Math.random) {
   const frames = [0, 1].map((f) => lazyBuffer(SANTA_WIDTH, SANTA_HEIGHT, (ctx) => paintSanta(ctx, f)));
   const sparkles: Sparkle[] = [];

@@ -23,8 +23,8 @@ describe('산타 썰매', () => {
     expect(SANTA.sackX).toBeLessThan(SANTA_WIDTH);
   });
 
-  it('5분에 한 번, 서버 시각이 5분의 배수가 될 때마다 지나간다', () => {
-    expect(SANTA.interval).toBe(300);
+  it('3분에 한 번, 서버 시각이 3분의 배수가 될 때마다 지나간다', () => {
+    expect(SANTA.interval).toBe(180);
     let now = 1_000_000 * SANTA.interval + 40;
     const santa = createSanta(
       () => now,
@@ -34,7 +34,7 @@ describe('산타 썰매', () => {
     const starts: number[] = [];
     let was = santa.flying;
     expect(was).toBe(false);
-    for (let i = 0; i < 9000; i++) {
+    for (let i = 0; i < 5400; i++) {
       now += step;
       santa.update(step);
       if (santa.flying && !was) starts.push(now);
@@ -42,7 +42,7 @@ describe('산타 썰매', () => {
     }
     expect(starts).toHaveLength(3);
     for (const start of starts) expect(start % SANTA.interval).toBeLessThan(0.2);
-    expect(starts[1] - starts[0]).toBeCloseTo(300, 0);
+    expect(starts[1] - starts[0]).toBeCloseTo(180, 0);
     expect(flightSeconds()).toBeLessThan(60);
   });
 

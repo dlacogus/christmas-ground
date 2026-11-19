@@ -41,7 +41,7 @@ const send = (m: unknown) => parseClientMessage(JSON.stringify(m));
 const BASE = 5_900_000;
 
 describe('산타가 지나가는 때 (서버 시각)', () => {
-  it('서버 시각이 5분의 배수가 될 때마다 날기 시작한다', () => {
+  it('서버 시각이 3분의 배수가 될 때마다 날기 시작한다', () => {
     const start = BASE * SANTA.interval;
     expect(santaPass(start)).toEqual({ index: BASE, progress: 0 });
     expect(santaPass(start + santaFlightSeconds() / 2)?.progress).toBeCloseTo(0.5, 5);

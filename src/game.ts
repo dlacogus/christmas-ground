@@ -395,7 +395,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   let lastX = character.x;
   let lastY = character.y;
   let walked = 0;
-  // 5분에 한 번 트리 위를 지나가는 산타 썰매 — 서버 시각에 맞춰 모든 화면에서 같은 때 지나가고, 지날 때마다 선물을 떨어뜨린다
+  // 3분에 한 번 트리 위를 지나가는 산타 썰매 — 서버 시각에 맞춰 모든 화면에서 같은 때 지나가고, 지날 때마다 선물을 떨어뜨린다
   const santa = createSanta(() => session.serverNow() / 1000);
   if (debug) {
     window.addEventListener('keydown', (e) => {

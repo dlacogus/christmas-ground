@@ -8,6 +8,7 @@ import { hatOnEntry } from '../features/hatGift';
 import type { MoveInput } from '../character/character';
 import type { SnowmanPlay } from '../features/snowmanPlay';
 import type { TreeDecor } from '../features/treeDecorPlay';
+import type { HatChase } from '../features/hatChase';
 import type { RoofSnow, SnowHits } from '../features/roofSnow';
 import type { Ball, Snowman, SnowThing, SnowWorld } from '../features/snowman';
 import { emptySeats, type Act, type Maker, type ServerMessage, type SnowmanData, type WireHat, type WireSeats, type WireState } from '../shared/protocol';
@@ -18,7 +19,7 @@ import { findSeat } from '../zones/carouselRide';
 import type { SkatePlay } from '../zones/skatePlay';
 import type { DepthDrawable } from '../zones/zone';
 import { createNet, loadProfile, saveProfile, type NetStatus, type Profile } from './client';
-import { createRemotePlayers, outfitOf } from './remotePlayers';
+import { createRemotePlayers, outfitOf, type Remote } from './remotePlayers';
 
 export interface SessionDeps {
   canvas: HTMLCanvasElement;
@@ -47,6 +48,8 @@ export interface SessionDeps {
   snowPlay: () => SnowmanPlay;
   /** 트리 꾸미기 (선물 상자 열기, 장식 달기·떼기) */
   treeDecor?: () => TreeDecor;
+  /** 남의 모자 주워 쓰기·조르기·돌려주기·잡기 (모자 자리는 서버가 정한다) */
+  hatChase?: () => HatChase;
   /** 예전에 이 브라우저에만 저장해 둔 내 눈사람 (처음 접속 때 서버로 옮기고 지운다) */
   legacy: SnowmanData[];
 }
@@ -79,6 +82,19 @@ export interface Session {
   };
   /** 서버에 붙어 있나, 서버가 준 내 접속 id, 서버 시각 (ms — 접속이 없으면 내 시계) */
   online(): boolean;
+  /** 털모자 주고받기를 서버에 보낸다 */
+  readonly hats: {
+    pick(owner: string, sm?: string): void;
+    beg(n: number): void;
+    give(to: string): void;
+    catch(from: string): void;
+    fall(owner: string, x: number, y: number): void;
+    snowman(owner: string): void;
+    home(): void;
+  };
+  /** 지금 광장에 있는 다른 사람들, 그 가운데 한 사람 */
+  others(): Iterable<Remote>;
+  findOther(id: string): Remote | undefined;
   myId(): string | null;
   serverNow(): number;
   /** 눈덩이로 맞힐 수 있는 친구들 */
@@ -102,7 +118,13 @@ export interface Session {
 export function createSession(deps: SessionDeps): Session {
   const { character, carousel, snowWorld } = deps;
   const ui = createNetUi(deps.canvas);
-  const remotes = createRemotePlayers(carousel.seats, () => carousel.rideTime(), (x, y, dx, dy) => deps.step?.(x, y, dx, dy));
+  const remotes = createRemotePlayers(
+    carousel.seats,
+    () => carousel.rideTime(),
+    (x, y, dx, dy) => deps.step?.(x, y, dx, dy),
+    // 친구가 조르거나 엉덩방아를 찧는 자세
+    (id) => deps.hatChase?.().poseFor(id) ?? null,
+  );
   let profile: Profile | null = loadProfile();
   let legacy = deps.legacy;
   let lastSeats: WireSeats = emptySeats();
@@ -189,6 +211,8 @@ export function createSession(deps: SessionDeps): Session {
         for (const p of message.players) remotes.add(p, now, false);
         applySeats(message.seats);
         loadWorld(message);
+        // 모두의 털모자가 지금 어디 있는지 (서버가 정한다)
+        deps.hatChase?.().reset(message.players, message.id);
         // 트리 장식 전체와 이미 열린 선물 상자, 열어 놓고 아직 달지 않은 내 장식
         if (deps.treeDecor) {
           const decor = deps.treeDecor();
@@ -210,14 +234,25 @@ export function createSession(deps: SessionDeps): Session {
         break;
       case 'joined':
         remotes.add(message.player, now, true);
+        deps.hatChase?.().joined(message.player.id, message.player.hl);
         break;
       case 'left':
+        deps.hatChase?.().left(message.id);
         remotes.remove(message.id);
         for (const b of snowWorld.balls) if (b.heldBy === message.id) b.heldBy = null;
         break;
       case 'pos':
+        remotes.handle(message, now);
+        break;
       case 'state':
         remotes.handle(message, now);
+        deps.hatChase?.().onOwnerState(message.id, message.hat);
+        break;
+      case 'hat':
+        deps.hatChase?.().onHat(message.owner, message.spot, message.how, message.by);
+        break;
+      case 'hatBeg':
+        deps.hatChase?.().onBeg(message.id, message.n);
         break;
       case 'act': {
         remotes.handle(message, now);
@@ -371,7 +406,8 @@ export function createSession(deps: SessionDeps): Session {
     character.outfit = outfitOf(profile.scarf);
     // 들어올 때는 언제나 새 모자 (내 목도리 색). 눈사람에게 준 모자는 눈사람에 남아 있다
     const fresh = hatOnEntry(profile.scarf);
-    if (character.hat.get() === 'onSnowman') deps.newHat?.();
+    // 눈사람에게 줬거나 남이 쓰고 있던 모자는 거기 남거나 주인에게 돌아왔다
+    if (character.hat.get() === 'onSnowman' || character.hat.get() === 'taken') deps.newHat?.();
     if (character.hatOwner === null) character.hatColor = fresh.color;
     net.connect(profile, legacy);
   };
@@ -517,6 +553,31 @@ export function createSession(deps: SessionDeps): Session {
       },
     },
     online: () => net.status === 'online',
+    hats: {
+      pick(owner, sm) {
+        net.send(sm === undefined ? { t: 'hatPick', owner } : { t: 'hatPick', owner, sm });
+      },
+      beg(n) {
+        net.send({ t: 'hatBeg', n });
+      },
+      give(to) {
+        net.send({ t: 'hatGive', to });
+      },
+      catch(from) {
+        net.send({ t: 'hatCatch', from });
+      },
+      fall(owner, x, y) {
+        net.send({ t: 'hatFall', owner, x: Math.round(x), y: Math.round(y) });
+      },
+      snowman(owner) {
+        net.send({ t: 'hatSnowman', owner });
+      },
+      home() {
+        net.send({ t: 'hatHome' });
+      },
+    },
+    others: () => remotes.all(),
+    findOther: (id) => remotes.get(id),
     myId: () => net.id,
     serverNow: () => net.serverNow(),
     targets() {

@@ -13,24 +13,35 @@ import { DurableObject } from 'cloudflare:workers';
 import { ORNAMENT, type OrnamentKind } from '../constants';
 import { milestoneAt, openableGiftIds, rollOrnament } from '../features/treeDecor';
 import {
+  allowBeg,
   allowMessage,
+  applyOwnHat,
   canHangOrnament,
   canOpenGift,
   canUnhangOrnament,
   debugGiftId,
   expiredObjects,
+  hatOf,
+  hatsOnLeave,
   holdersOf,
   isFull,
   leavePlaza,
   newSession,
   releaseHold,
   seatsOf,
+  tryCatchHat,
+  tryFallHat,
+  tryGiveHat,
+  tryHomeHat,
+  tryPickHat,
   trySit,
+  trySnowmanHat,
   tryGrab,
+  wireHatOf,
   type OrnamentRow,
   type Session,
 } from '../shared/plazaCore';
-import { parseClientMessage, type ServerMessage, type WireObject, type WireOrnament } from '../shared/protocol';
+import { parseClientMessage, type HatHow, type ServerMessage, type WireObject, type WireOrnament } from '../shared/protocol';
 
 interface Env {
   ASSETS: Fetcher;
@@ -138,6 +149,35 @@ export class Plaza extends DurableObject<Env> {
     return all.filter((o) => !gone.has(o.id));
   }
 
+  // ── 털모자 (자리는 접속 정보에만 둔다 — 저장소에 쓰지 않는다)
+
+  /** 모든 접속과 그 정보 (지금 메시지를 보낸 접속은 바뀌고 있는 그 객체로) */
+  private pairs(ws: WebSocket, session: Session): { ws: WebSocket; session: Session }[] {
+    return this.sessions().map((s) => (s.ws === ws ? { ws, session } : s));
+  }
+
+  /** owner 모자가 옮겨졌다: 다른 접속의 정보를 저장하고 모두에게 알린다 (지금 접속은 메시지 처리 끝에 저장한다) */
+  private hatChanged(pairs: { ws: WebSocket; session: Session }[], current: WebSocket, owner: string, how: HatHow, by?: string): void {
+    for (const p of pairs) if (p.ws !== current) p.ws.serializeAttachment(p.session);
+    const target = pairs.find((p) => p.session.player?.id === owner);
+    if (!target) return;
+    this.broadcast(by === undefined ? { t: 'hat', owner, spot: hatOf(target.session), how } : { t: 'hat', owner, spot: hatOf(target.session), how, by });
+  }
+
+  /** 거절됐다: 보낸 사람에게 그 모자의 지금 자리를 알려 준다 */
+  private syncHat(pairs: { ws: WebSocket; session: Session }[], ws: WebSocket, owner: string): void {
+    const target = pairs.find((p) => p.session.player?.id === owner);
+    if (target) this.send(ws, { t: 'hat', owner, spot: hatOf(target.session), how: 'sync' });
+  }
+
+  /** 그 눈사람이 쓰고 있는 털모자의 주인 닉네임 (없으면 null) */
+  private snowmanHatName(id: string): string | null {
+    const rows = this.ctx.storage.sql.exec("SELECT data FROM objects WHERE id = ? AND kind = 'snowman' LIMIT 1", id).toArray();
+    if (rows.length === 0) return null;
+    const hat = (JSON.parse(String(rows[0].data)) as { hat?: { name?: unknown } | null }).hat;
+    return hat && typeof hat.name === 'string' ? hat.name : null;
+  }
+
   // ── 트리 장식 저장소
 
   private ornamentRow(id: string): OrnamentRow | null {
@@ -182,6 +222,8 @@ export class Plaza extends DurableObject<Env> {
       }
       const id = crypto.randomUUID().slice(0, 8);
       session.player = { id, name: message.name, scarf: message.scarf, x: 720, y: 244, f: 1, state: { kind: 'walk' }, hat: 'on' };
+      // 들어올 때는 언제나 내 모자를 쓰고 온다
+      session.hat = { k: 'me' };
       ws.serializeAttachment(session);
       // 예전에 브라우저에만 저장해 둔 내 눈사람을 서버로 옮긴다
       (message.legacy ?? []).forEach((data, i) => this.put({ id: `${id}-old${i}`, kind: 'snowman', data: { ...data, owner: id, born: now }, updatedAt: now - 1000 + i }));
@@ -193,7 +235,8 @@ export class Plaza extends DurableObject<Env> {
         t: 'welcome',
         id,
         now,
-        players: others.flatMap((s) => (s.session.player ? [s.session.player] : [])),
+        // 모자가 지금 어디 있는지(hl)도 함께
+        players: others.flatMap((s) => (s.session.player ? [{ ...s.session.player, hl: hatOf(s.session) }] : [])),
         seats: seatsOf(others.map((s) => s.session)),
         objects,
         rolling: others.flatMap((s) => (s.session.player && s.session.rolling ? [{ owner: s.session.player.id, ...s.session.rolling }] : [])),
@@ -201,7 +244,7 @@ export class Plaza extends DurableObject<Env> {
         opened: this.openedGifts(now),
         mine: mine.map((r) => ({ id: String(r.id), kind: r.kind as OrnamentKind })),
       });
-      this.broadcast({ t: 'joined', player: session.player }, ws);
+      this.broadcast({ t: 'joined', player: { ...session.player, hl: hatOf(session) } }, ws);
       // 옮겨 온 눈사람은 다른 사람에게도 알린다
       if (message.legacy?.length) for (const o of objects) if (o.id.startsWith(`${id}-old`)) this.broadcast({ t: 'put', object: o }, ws);
       return;
@@ -216,14 +259,61 @@ export class Plaza extends DurableObject<Env> {
         me.f = message.f;
         this.broadcast({ ...message, id: me.id }, ws);
         break;
-      case 'state':
+      case 'state': {
+        // 내 모자의 자리는 서버가 정한다: 남이 먼저 주웠으면 '썼다'는 말은 받지 않고, 지금 자리를 알려 준다
+        const accepted = applyOwnHat(this.pairs(ws, session).map((p) => p.session), session, message.hat);
         me.state = message.state;
-        me.hat = message.hat;
+        me.hat = wireHatOf(hatOf(session));
         me.hold = message.hold ?? null;
         me.hc = message.hc ?? null;
         me.ho = message.ho ?? null;
-        this.broadcast({ t: 'state', id: me.id, state: message.state, hat: message.hat, hold: me.hold, hc: me.hc, ho: me.ho }, ws);
+        if (!accepted) this.send(ws, { t: 'hat', owner: me.id, spot: hatOf(session), how: 'sync' });
+        this.broadcast({ t: 'state', id: me.id, state: message.state, hat: me.hat, hold: me.hold, hc: me.hc, ho: me.ho }, ws);
         break;
+      }
+      case 'hatPick': {
+        // 남의 모자 줍기 (눈사람에서 가져오기 포함): 동시에 주우면 먼저 온 사람만
+        const pairs = this.pairs(ws, session);
+        const fromSnowman = message.sm !== undefined && this.snowmanHatName(message.sm) === pairs.find((p) => p.session.player?.id === message.owner)?.session.player?.name;
+        if (tryPickHat(pairs.map((p) => p.session), session, message.owner, now, fromSnowman)) this.hatChanged(pairs, ws, message.owner, 'pick', me.id);
+        else this.syncHat(pairs, ws, message.owner);
+        break;
+      }
+      case 'hatGive': {
+        const pairs = this.pairs(ws, session);
+        if (tryGiveHat(pairs.map((p) => p.session), session, message.to)) this.hatChanged(pairs, ws, message.to, 'give', me.id);
+        else this.syncHat(pairs, ws, message.to);
+        break;
+      }
+      case 'hatCatch': {
+        const pairs = this.pairs(ws, session);
+        if (tryCatchHat(pairs.map((p) => p.session), session, message.from, now)) this.hatChanged(pairs, ws, me.id, 'catch', message.from);
+        else this.syncHat(pairs, ws, me.id);
+        break;
+      }
+      case 'hatFall': {
+        const pairs = this.pairs(ws, session);
+        if (tryFallHat(pairs.map((p) => p.session), session, message.owner, message.x, message.y)) this.hatChanged(pairs, ws, message.owner, 'fall', me.id);
+        else this.syncHat(pairs, ws, message.owner);
+        break;
+      }
+      case 'hatSnowman': {
+        const pairs = this.pairs(ws, session);
+        if (trySnowmanHat(pairs.map((p) => p.session), session, message.owner)) this.hatChanged(pairs, ws, message.owner, 'snowman', me.id);
+        else this.syncHat(pairs, ws, message.owner);
+        break;
+      }
+      case 'hatHome': {
+        const pairs = this.pairs(ws, session);
+        const wearer = hatOf(session);
+        if (tryHomeHat(session, now)) this.hatChanged(pairs, ws, me.id, 'home', wearer.k === 'worn' ? wearer.by : undefined);
+        break;
+      }
+      case 'hatBeg': {
+        // 조르기는 1초에 한 번만, 내 모자를 남이 쓰고 있을 때만
+        if (hatOf(session).k === 'worn' && allowBeg(session, now)) this.broadcast({ t: 'hatBeg', id: me.id, n: message.n });
+        break;
+      }
       case 'act':
         this.broadcast({ t: 'act', id: me.id, a: message.a }, ws);
         break;
@@ -366,7 +456,12 @@ export class Plaza extends DurableObject<Env> {
     const session = ws.deserializeAttachment() as Session | null;
     if (!session?.player) return;
     const id = session.player.id;
-    const others = this.sessions().filter((s) => s.ws !== ws).map((s) => s.session);
+    const otherPairs = this.sessions().filter((s) => s.ws !== ws);
+    const others = otherPairs.map((s) => s.session);
+    // 쓰고 있던 남의 모자들은 그 자리에 떨어진다 (내 모자는 나와 함께 사라진다)
+    const hatDrops = hatsOnLeave([...others, session], session);
+    for (const p of otherPairs) if (hatDrops.some((d) => d.owner === p.session.player?.id)) p.ws.serializeAttachment(p.session);
+    for (const d of hatDrops) this.broadcast({ t: 'hat', owner: d.owner, spot: d.spot, how: 'leave', by: id }, ws);
     const { seatFreed, dropped, released } = leavePlaza(session, Date.now(), others);
     session.player = null;
     ws.serializeAttachment(session);

@@ -13,8 +13,17 @@ export type CharacterState =
   | { kind: 'skating'; vx: number; vy: number }
   | { kind: 'sitting'; bench: number; slot: number };
 
-/** 털모자: 쓰고 있거나('on'), 벗겨져 바닥 어딘가(발밑 기준 좌표)에 떨어져 있거나, 눈사람에게 씌워 줬다('onSnowman'). 쓰고 있지 않은 동안 캐릭터는 대머리다 */
-export type HatState = 'on' | 'onSnowman' | { x: number; y: number };
+/**
+ * 털모자: 쓰고 있거나('on'), 벗겨져 바닥 어딘가(발밑 기준 좌표)에 떨어져 있거나, 눈사람에게 씌워 줬거나('onSnowman'),
+ * 다른 사람이 주워 쓰고 있다('taken'). 쓰고 있지 않은 동안 캐릭터는 대머리다 (남의 모자를 주워 쓰고 있지 않다면)
+ */
+export type HatState = 'on' | 'onSnowman' | 'taken' | { x: number; y: number };
+
+/** 머리에 겹쳐 쓴 남의 털모자 하나: 주인 접속 id와 모자 색(주인 목도리 색) */
+export interface ExtraHat {
+  owner: string;
+  color: number;
+}
 
 export interface HatStore {
   get(): HatState;

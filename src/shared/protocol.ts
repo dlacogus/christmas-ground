@@ -14,8 +14,17 @@ export type WireState =
   | { kind: 'skating' }
   | { kind: 'sitting'; bench: number; slot: number };
 
-/** 털모자: 쓰고 있거나, 눈사람에게 씌워 줬거나, 떨어져 있는 자리 */
-export type WireHat = 'on' | 'onSnowman' | { x: number; y: number };
+/** 털모자: 쓰고 있거나, 눈사람에게 씌워 줬거나, 다른 사람이 주워 쓰고 있거나, 떨어져 있는 자리 */
+export type WireHat = 'on' | 'onSnowman' | 'taken' | { x: number; y: number };
+
+/**
+ * 한 사람의 털모자가 지금 어디 있나 (서버가 정한다): 주인 머리 / 바닥 / 다른 사람 머리(by = 쓴 사람 id, at = 주운 서버 시각 ms) / 눈사람.
+ * 주인이 나가면 모자도 사라진다 (다시 들어오면 새 모자를 쓰고 온다).
+ */
+export type HatSpot = { k: 'me' } | { k: 'ground'; x: number; y: number } | { k: 'worn'; by: string; at: number } | { k: 'snowman' };
+
+/** 모자가 왜 옮겨졌나 (연출을 고른다) */
+export type HatHow = 'pick' | 'give' | 'catch' | 'fall' | 'home' | 'leave' | 'snowman' | 'sync';
 
 /** 눈사람이 쓴 털모자: 주인 닉네임과 모자 색 (목도리 색 번호) */
 export interface SnowmanHat {
@@ -43,6 +52,8 @@ export interface WirePlayer {
   /** 쓰고 있는 털모자 색 (없으면 자기 목도리 색)과, 남의 모자를 쓰고 있으면 그 주인 닉네임 */
   hc?: number | null;
   ho?: string | null;
+  /** 이 사람 털모자가 지금 어디 있나 (서버가 정한다) */
+  hl?: HatSpot;
 }
 
 /** 만든 사람 (접속 id는 나가면 바뀌므로 닉네임과 목도리 색으로 적는다) */
@@ -160,7 +171,19 @@ export type ClientMessage =
   | { t: 'hang'; id: string; x: number; y: number }
   | { t: 'unhang'; id: string }
   /** 개발용: 이 자리에 선물 상자를 바로 떨어뜨린다 (개발 서버에서만 받아 준다) */
-  | { t: 'debugGift'; x: number; y: number };
+  | { t: 'debugGift'; x: number; y: number }
+  /**
+   * 남의 털모자: 바닥에서 주워 쓰겠다 (sm = 눈사람에서 가져올 때 그 눈사람 id) / 내 모자를 쓴 사람에게 조른다 (n = 연달아 몇 번째) /
+   * 쓰고 있던 주인 모자를 돌려준다 / 내 모자를 쓴 사람을 잡았다 / 쓰고 있던 남의 모자가 떨어졌다 (재채기·눈덩이) /
+   * 쓰고 있던 남의 모자를 눈사람에게 씌웠다 / 5분 넘게 남이 쓰고 있는 내 모자를 돌려받겠다
+   */
+  | { t: 'hatPick'; owner: string; sm?: string }
+  | { t: 'hatBeg'; n: number }
+  | { t: 'hatGive'; to: string }
+  | { t: 'hatCatch'; from: string }
+  | { t: 'hatFall'; owner: string; x: number; y: number }
+  | { t: 'hatSnowman'; owner: string }
+  | { t: 'hatHome' };
 
 // ───────────── 서버 → 클라이언트 ─────────────
 
@@ -210,7 +233,11 @@ export type ServerMessage =
   | { t: 'hangDenied'; id: string }
   /** 장식을 뗐다 (모두에게). by = 뗀 사람 id — 장식은 그 사람 손으로 돌아간다 */
   | { t: 'unhung'; id: string; by: string }
-  | { t: 'gift'; gift: WireGift };
+  | { t: 'gift'; gift: WireGift }
+  /** owner의 털모자가 spot으로 옮겨졌다 (모두에게). by = 그렇게 만든 사람 (줍기·돌려주기·잡기·떨어뜨리기), sync = 요청이 거절돼 지금 자리를 알려 준다 */
+  | { t: 'hat'; owner: string; spot: HatSpot; how: HatHow; by?: string }
+  /** id가 모자를 돌려달라고 조른다 (n = 연달아 몇 번째) */
+  | { t: 'hatBeg'; id: string; n: number };
 
 // ───────────── 검사 ─────────────
 
@@ -248,7 +275,7 @@ export function validState(v: unknown): v is WireState {
 }
 
 export function validHat(v: unknown): v is WireHat {
-  if (v === 'on' || v === 'onSnowman') return true;
+  if (v === 'on' || v === 'onSnowman' || v === 'taken') return true;
   if (typeof v !== 'object' || v === null) return false;
   const h = v as Record<string, unknown>;
   return inMap(h.x, h.y);
@@ -387,6 +414,21 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return isId(m.id) && inMap(m.x, m.y) && Number.isInteger(m.x) && Number.isInteger(m.y) ? { t: 'hang', id: m.id, x: m.x as number, y: m.y as number } : null;
     case 'debugGift':
       return inMap(m.x, m.y) ? { t: 'debugGift', x: Math.round(m.x as number), y: Math.round(m.y as number) } : null;
+    case 'hatPick':
+      if (!isId(m.owner)) return null;
+      return m.sm === undefined ? { t: 'hatPick', owner: m.owner } : isId(m.sm) ? { t: 'hatPick', owner: m.owner, sm: m.sm } : null;
+    case 'hatBeg':
+      return isInt(m.n, 1, 99) ? { t: 'hatBeg', n: m.n } : null;
+    case 'hatGive':
+      return isId(m.to) ? { t: 'hatGive', to: m.to } : null;
+    case 'hatCatch':
+      return isId(m.from) ? { t: 'hatCatch', from: m.from } : null;
+    case 'hatFall':
+      return isId(m.owner) && inMap(m.x, m.y) ? { t: 'hatFall', owner: m.owner, x: Math.round(m.x as number), y: Math.round(m.y as number) } : null;
+    case 'hatSnowman':
+      return isId(m.owner) ? { t: 'hatSnowman', owner: m.owner } : null;
+    case 'hatHome':
+      return { t: 'hatHome' };
     default:
       return null;
   }

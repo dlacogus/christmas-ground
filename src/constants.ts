@@ -108,8 +108,8 @@ export const SANTA = {
   sparkleEvery: 0.05,
   sparkleLife: 1.1,
   sparkleFall: 5,
-  /** 개발용(?debug=1): 이 키를 누르면 바로 날아온다 */
-  debugKey: 'KeyH',
+  /** 개발용(?debug=1): 이 키를 누르면 바로 날아온다 (H는 모자 떨어뜨리기) */
+  debugKey: 'KeyG',
 } as const;
 
 export const SANTA_COLORS = {
@@ -612,6 +612,8 @@ export const THROW = {
   faceSnowSeconds: 1,
   cold: 10,
   hatFlyChance: 0.2,
+  /** 남의 모자를 겹쳐 쓰고 있을 때 머리에 맞으면 맨 위 모자가 떨어질 확률 */
+  extraHatFlyChance: 0.5,
   skaterPush: 35,
   /** 눈 파편 수와 수명 */
   splatBits: 7,
@@ -1124,6 +1126,81 @@ export const HAT = {
   hintAbove: 12,
   shadowWidth: 10,
   shadowAlpha: 0.3,
+} as const;
+
+/**
+ * 남의 모자 주워 쓰고 달아나기 / 돌려달라고 조르기 / 잡아서 되찾기.
+ * 모자가 어디 있는지(주인 머리·바닥·누구 머리·눈사람)는 서버가 정한다.
+ */
+export const HAT_CHASE = {
+  /** 한 머리에 쌓이는 모자 수 (내 모자 포함) */
+  maxStack: 3,
+  /** 남의 모자 하나당 걸음이 느려지는 비율 (스케이트는 최대 속도가) */
+  slowPerHat: 0.08,
+  /** 이 거리 안에서 조를 수 있다 / 돌려줄 수 있다 / 잡을 수 있다 (발밑끼리, px) */
+  begRadius: 40,
+  giveRadius: 40,
+  catchRadius: 12,
+  /** 서버 검사: 통신이 늦는 만큼 넉넉히 (마지막으로 받은 위치끼리) */
+  serverCatchReach: 24,
+  serverGiveReach: 60,
+  serverPickReach: 40,
+  /** 같은 사람을 다시 잡을 수 있기까지 (초) */
+  catchCooldown: 3,
+  /** 조르기 한 번 (초), 이 안에 다시 누르면 연달아 조른 것으로 센다, 서버가 받는 간격 (초) */
+  begSeconds: 1.5,
+  begComboGap: 2.5,
+  serverBegEvery: 1,
+  /** 이 번째부터 드러누워 버둥 (떼쓰기), 이 번째부터 눈물 */
+  tantrumFrom: 3,
+  tearsFrom: 5,
+  /** 조를 때 발을 구르는 박자 (초), 높이 */
+  stompSeconds: 0.12,
+  stompHeight: 2,
+  /** 남의 모자를 이만큼 넘게 쓰고 있으면 스스로 주인에게 돌아간다 (초), 주인 화면이 다시 묻는 간격 */
+  returnAfter: 300,
+  homeRetry: 5,
+  /** 줍는 동작, 돌려주며 씌워주는 시간, 모자가 날아가는 시간·높이 */
+  pickSeconds: 0.5,
+  giveSeconds: 0.7,
+  flySeconds: 0.6,
+  flyArc: 18,
+  /** 잡힌 사람 엉덩방아 (초) */
+  pratfallSeconds: 1,
+  /** 돌려받으면 머리 쓰다듬기, 돌려준 사람 머리 긁적 (초), 내려가는 추위 */
+  patSeconds: 0.9,
+  scratchSeconds: 0.9,
+  returnWarmth: 15,
+  /** '잡았다!' 글자 시간 */
+  caughtLabelSeconds: 1.2,
+  /** 모자 탑: 한 층 높이, 걸을 때 흔들리는 폭(층마다 더해진다)·빠르기 */
+  stackStep: 5,
+  swayPerLevel: 0.9,
+  swayHz: 2.4,
+  /** 내 모자를 쓴 사람 머리 위 빨간 '!' 깜빡이는 빠르기, 화면 밖 화살표: 가장자리에서 안쪽으로 */
+  markHz: 3,
+  pointerInset: 9,
+  /** 화난 김, 눈물, 별 */
+  steamEvery: 0.1,
+  steamLife: 0.8,
+  tearEvery: 0.16,
+  tearLife: 0.6,
+  starCount: 3,
+  /** 돌려주기 힌트: 주인이 조르는 중이면 이만큼 크게 */
+  bigHint: 1.35,
+  /** 모자를 쓴 사람이 나가면 모자들이 이 간격으로 흩어져 떨어진다 */
+  leaveSpread: 8,
+  /** 개발용(?debug=1): 내 모자를 바로 앞 바닥에 떨어뜨린다 */
+  debugKey: 'KeyH',
+} as const;
+
+export const HAT_CHASE_COLORS = {
+  mark: '#ff4a4a',
+  steam: '#e4e8f2',
+  tear: '#7fc8ff',
+  star: '#ffe27a',
+  heart: '#ff6b8a',
+  pointer: '#fff6dc',
 } as const;
 
 /** 대머리 */

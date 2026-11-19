@@ -2,9 +2,9 @@
 // 서버는 잠들었다 깨어나므로 기억을 따로 두지 않는다: 접속자 정보는 접속(WebSocket)마다 붙여 둔 Seat에서,
 // 눈덩이·눈사람은 저장소(SQLite)에서 그때그때 읽어 와 이 함수들에 넘긴다.
 
-import { COPUSH, GIFT, NET, SNOWBALL, SNOWMAN, type OrnamentKind } from '../constants';
+import { COPUSH, GIFT, HAT_CHASE as HC, NET, SNOWBALL, SNOWMAN, type OrnamentKind } from '../constants';
 import { canUnhang, checkHang, giftIndexOf, giftOfPass, giftOpenable } from '../features/treeDecor';
-import { emptySeats, seatCount, type BallData, type WireGift, type WireObject, type WirePlayer, type WireSeats } from './protocol';
+import { emptySeats, seatCount, type BallData, type HatSpot, type WireGift, type WireHat, type WireObject, type WirePlayer, type WireSeats } from './protocol';
 
 /** 접속 하나에 붙여 두는 정보 (serializeAttachment) */
 export interface Session {
@@ -19,10 +19,16 @@ export interface Session {
   /** 초당 메시지 수 세기: 이 초(windowStart, ms)에 받은 개수 */
   windowStart: number;
   count: number;
+  /** 이 사람 털모자가 지금 어디 있나 (없으면 머리 위 — 예전 접속) */
+  hat?: HatSpot;
+  /** 마지막으로 조른 때 (ms) — 1초에 한 번만 받는다 */
+  begAt?: number;
+  /** 사람마다 마지막으로 잡은 때 (ms) — 같은 사람은 3초에 한 번 */
+  caught?: Record<string, number>;
 }
 
 export function newSession(): Session {
-  return { player: null, seat: null, holding: null, rolling: null, windowStart: 0, count: 0 };
+  return { player: null, seat: null, holding: null, rolling: null, windowStart: 0, count: 0, hat: { k: 'me' } };
 }
 
 /** 지금 들어와 있는 사람 수가 상한(8명)에 닿았나 */
@@ -196,4 +202,162 @@ export function canHangOrnament(row: OrnamentRow | null, nick: string, x: number
 /** 장식을 떼겠다는 요청: 내가 단 것이고 단 지 1분이 안 됐을 때만 */
 export function canUnhangOrnament(row: OrnamentRow | null, nick: string, nowMs: number): boolean {
   return row !== null && row.x !== null && canUnhang(row, nick, nowMs);
+}
+
+// ───────────── 털모자 (남의 모자 주워 쓰기·조르기·돌려주기·잡기) ─────────────
+// 사람마다 자기 털모자가 하나 있고, 그 모자가 어디 있는지(session.hat)를 서버가 정한다.
+// 아래 함수들은 허락되면 sessions 안의 값을 바꾸고 true를 돌려준다 (바꾼 접속은 부른 쪽이 저장한다).
+
+export function hatOf(session: Session): HatSpot {
+  return session.hat ?? { k: 'me' };
+}
+
+/** 모자 자리를 'state' 메시지의 hat 값으로 (다른 사람 화면에 보이는 모습) */
+export function wireHatOf(spot: HatSpot): WireHat {
+  if (spot.k === 'me') return 'on';
+  if (spot.k === 'ground') return { x: spot.x, y: spot.y };
+  return spot.k === 'snowman' ? 'onSnowman' : 'taken';
+}
+
+function sessionOf(sessions: readonly Session[], id: string): Session | undefined {
+  return sessions.find((s) => s.player?.id === id);
+}
+
+function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/** id 머리 위에 있는 모자들의 주인 (아래 → 위): 자기 모자가 머리에 있으면 맨 아래, 그 위로 주운 차례대로 */
+export function hatStack(sessions: readonly Session[], id: string): string[] {
+  const me = sessionOf(sessions, id);
+  const worn = sessions
+    .filter((s) => s.player && s.player.id !== id)
+    .flatMap((s) => {
+      const spot = hatOf(s);
+      return spot.k === 'worn' && spot.by === id ? [{ owner: s.player!.id, at: spot.at }] : [];
+    })
+    .sort((a, b) => a.at - b.at)
+    .map((w) => w.owner);
+  return me && hatOf(me).k === 'me' ? [id, ...worn] : worn;
+}
+
+/**
+ * 주인이 자기 모자에 대해 보낸 상태(state 메시지의 hat)를 받아들인다. 허락되지 않으면 false (자리는 그대로).
+ * - 'on': 바닥에서 주웠거나(먼저 온 사람) 눈사람에서 돌려받았다. 남이 쓰고 있으면 안 된다
+ * - {x, y}: 머리에서 떨어졌다 (재채기) / 떨어진 자리가 정해졌다
+ * - 'onSnowman': 눈사람에게 씌워 줬다
+ */
+export function applyOwnHat(sessions: readonly Session[], session: Session, wire: WireHat): boolean {
+  const spot = hatOf(session);
+  if (wire === 'taken') return spot.k === 'worn';
+  if (wire === 'on') {
+    if (spot.k === 'me') return true;
+    if (spot.k === 'worn') return false;
+    // 남의 모자를 이미 3개 쓰고 있으면 내 모자는 올릴 자리가 없다
+    if (session.player && hatStack(sessions, session.player.id).length >= HC.maxStack) return false;
+    session.hat = { k: 'me' };
+    return true;
+  }
+  if (wire === 'onSnowman') {
+    if (spot.k === 'snowman') return true;
+    if (spot.k !== 'me') return false;
+    session.hat = { k: 'snowman' };
+    return true;
+  }
+  if (spot.k !== 'me' && spot.k !== 'ground') return false;
+  session.hat = { k: 'ground', x: Math.round(wire.x), y: Math.round(wire.y) };
+  return true;
+}
+
+/**
+ * 남의 모자를 줍겠다: 바닥에 있고 (줍는 사람이 곁에 있고), 내 머리에 3개 미만일 때. 동시에 주우면 먼저 처리된 한 명만.
+ * fromSnowman = 눈사람에서 가져온다 (주인이 눈사람에게 씌워 둔 모자).
+ */
+export function tryPickHat(sessions: readonly Session[], picker: Session, ownerId: string, now: number, fromSnowman = false): boolean {
+  const me = picker.player;
+  const owner = sessionOf(sessions, ownerId);
+  if (!me || !owner || owner === picker || ownerId === me.id) return false;
+  if (hatStack(sessions, me.id).length >= HC.maxStack) return false;
+  const spot = hatOf(owner);
+  const ok = fromSnowman ? spot.k === 'snowman' : spot.k === 'ground' && distance(me, spot) <= HC.serverPickReach;
+  if (!ok) return false;
+  owner.hat = { k: 'worn', by: me.id, at: now };
+  return true;
+}
+
+/** 쓰고 있던 주인 모자를 돌려준다: 내가 쓰고 있고 주인이 곁에 있을 때 */
+export function tryGiveHat(sessions: readonly Session[], giver: Session, ownerId: string): boolean {
+  const owner = sessionOf(sessions, ownerId);
+  const spot = owner ? hatOf(owner) : null;
+  if (!giver.player || !owner?.player || spot?.k !== 'worn' || spot.by !== giver.player.id) return false;
+  if (distance(giver.player, owner.player) > HC.serverGiveReach) return false;
+  owner.hat = { k: 'me' };
+  return true;
+}
+
+/**
+ * 내 모자를 쓴 사람을 잡았다 (잡는 사람 화면이 요청한다): 두 사람의 마지막 위치가 24px 안,
+ * 그 사람이 회전목마를 타고 있지 않고, 스케이트를 타고 있으면 나도 타고 있고, 그 사람을 잡은 지 3초가 지났을 때.
+ */
+export function tryCatchHat(sessions: readonly Session[], catcher: Session, fromId: string, now: number): boolean {
+  const me = catcher.player;
+  const from = sessionOf(sessions, fromId);
+  const spot = hatOf(catcher);
+  if (!me || !from?.player || spot.k !== 'worn' || spot.by !== fromId) return false;
+  if (from.player.state.kind === 'riding') return false;
+  if (from.player.state.kind === 'skating' && me.state.kind !== 'skating') return false;
+  if (distance(me, from.player) > HC.serverCatchReach) return false;
+  const last = catcher.caught?.[fromId];
+  if (last !== undefined && now - last < HC.catchCooldown * 1000) return false;
+  catcher.hat = { k: 'me' };
+  catcher.caught = { ...catcher.caught, [fromId]: now };
+  return true;
+}
+
+/** 쓰고 있던 남의 모자가 머리에서 떨어졌다 (재채기·눈덩이): 바닥으로 */
+export function tryFallHat(sessions: readonly Session[], wearer: Session, ownerId: string, x: number, y: number): boolean {
+  const owner = sessionOf(sessions, ownerId);
+  const spot = owner ? hatOf(owner) : null;
+  if (!owner || !wearer.player || spot?.k !== 'worn' || spot.by !== wearer.player.id) return false;
+  owner.hat = { k: 'ground', x: Math.round(x), y: Math.round(y) };
+  return true;
+}
+
+/** 쓰고 있던 남의 모자를 눈사람에게 씌웠다 */
+export function trySnowmanHat(sessions: readonly Session[], wearer: Session, ownerId: string): boolean {
+  const owner = sessionOf(sessions, ownerId);
+  const spot = owner ? hatOf(owner) : null;
+  if (!owner || !wearer.player || spot?.k !== 'worn' || spot.by !== wearer.player.id) return false;
+  owner.hat = { k: 'snowman' };
+  return true;
+}
+
+/** 남이 5분 넘게 쓰고 있는 내 모자: 스스로 폴짝 주인에게 돌아온다 (타이머 없이, 주인 화면이 때가 되면 묻는다) */
+export function tryHomeHat(owner: Session, now: number): boolean {
+  const spot = hatOf(owner);
+  if (spot.k !== 'worn' || now - spot.at < HC.returnAfter * 1000) return false;
+  owner.hat = { k: 'me' };
+  return true;
+}
+
+/** 조르기는 1초에 한 번만 받는다. 받아도 되면 true (때를 적는다) */
+export function allowBeg(session: Session, now: number): boolean {
+  if (session.begAt !== undefined && now - session.begAt < HC.serverBegEvery * 1000) return false;
+  session.begAt = now;
+  return true;
+}
+
+/**
+ * 누군가 나갔을 때 모자 뒤처리: 그 사람이 쓰고 있던 남의 모자들은 그 자리 바닥에 (조금씩 흩어져) 떨어진다.
+ * 그 사람 자기 모자는 함께 사라진다 (남이 쓰고 있었어도 — 주인에게 돌아간다). 바뀐 모자들을 돌려준다.
+ */
+export function hatsOnLeave(sessions: readonly Session[], leaving: Session): { owner: string; spot: HatSpot }[] {
+  const me = leaving.player;
+  if (!me) return [];
+  const worn = sessions.filter((s) => s !== leaving && s.player && hatOf(s).k === 'worn' && (hatOf(s) as { by: string }).by === me.id);
+  return worn.map((s, i) => {
+    const dx = Math.round((i - (worn.length - 1) / 2) * HC.leaveSpread);
+    s.hat = { k: 'ground', x: Math.round(me.x + dx), y: Math.round(me.y) };
+    return { owner: s.player!.id, spot: s.hat };
+  });
 }

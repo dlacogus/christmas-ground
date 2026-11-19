@@ -3,7 +3,7 @@
 
 import { layerOffsetX } from '../camera';
 import { createCharacter, type Character } from '../character/character';
-import { drawCharacter } from '../character/render';
+import { drawCharacter, headLook, type DrawOptions } from '../character/render';
 import { BENCH_SIT, CAROUSEL, COPUSH, FOOTPRINTS, LAYER_FACTORS, NET, ROOF_SNOW_COLORS, SCREEN_WIDTH, SKATE, type Held, type OutfitName } from '../constants';
 import { drawHeldItem } from '../features/props';
 import { drawFaceSnow } from '../features/snowmanDraw';
@@ -94,7 +94,13 @@ export interface RemotePlayers {
   names(offsetX: number): { id: string; name: string; sx: number; sy: number }[];
 }
 
-export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep?: (x: number, y: number, dx: number, dy: number) => void): RemotePlayers {
+/** poseFor = 친구 자세를 바꿔 그릴 때 (모자 조르기·엉덩방아 등). 없으면 null */
+export function createRemotePlayers(
+  seats: Seats,
+  rideTime: () => number,
+  onStep?: (x: number, y: number, dx: number, dy: number) => void,
+  poseFor?: (id: string) => DrawOptions | null,
+): RemotePlayers {
   const remotes = new Map<string, Remote>();
   const puffs: Puff[] = [];
   let list: DepthDrawable[] = [];
@@ -125,6 +131,7 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
     if (hat === 'on') {
       if (!r.hat.on) r.hat.putOn();
     } else if (hat === 'onSnowman') r.hat.giveAway();
+    else if (hat === 'taken') r.hat.takenAway();
     else if (r.hat.on && animate) r.hat.flyTo({ x: r.ch.x, y: r.ch.y }, hat);
     else r.hat.placeAt(hat);
   };
@@ -141,7 +148,9 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
       const footY = Math.round(r.ch.y);
       // 회전목마에 탄 친구는 회전목마가 탈 것과 함께 그린다
       if (kind !== 'riding') {
+        const special = r.hits.snowman ? null : (poseFor?.(r.info.id) ?? null);
         if (r.hits.snowman) r.hits.drawSnowman(ctx, footX, footY);
+        else if (special) drawCharacter(ctx, r.ch, ox, special);
         else if (kind === 'sitting') drawCharacter(ctx, r.ch, ox, { pose: 'sit', lift: BENCH_SIT.lift, shadow: false });
         else if (kind === 'skating') {
           if (r.fallLeft > 0) drawCharacter(ctx, r.ch, ox, { pose: 'crouch' });
@@ -295,7 +304,9 @@ export function createRemotePlayers(seats: Seats, rideTime: () => number, onStep
           r.jump += dt;
           if (r.jump >= SKATE.jumpSeconds) r.jump = -1;
         }
-        r.occupant.bald = !r.hat.on;
+        const look = headLook(ch);
+        r.occupant.bald = look.bald;
+        r.occupant.hatColor = look.color;
       }
     },
     drawables: () => list,

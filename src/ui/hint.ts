@@ -11,6 +11,8 @@ export interface HintContent {
   sub?: string;
   sx: number;
   sy: number;
+  /** 글자를 이만큼 크게 (없으면 1) */
+  scale?: number;
 }
 
 export interface Hint {
@@ -99,7 +101,7 @@ export function createHint(canvas: HTMLCanvasElement): Hint {
       }
       const rect = canvas.getBoundingClientRect();
       const scale = rect.width / SCREEN_WIDTH;
-      const font = `${Math.max(HINT.minFont, HINT.fontPerScale * scale)}px`;
+      const font = `${Math.max(HINT.minFont, HINT.fontPerScale * scale) * (content.scale ?? 1)}px`;
       if (font !== shownFont) {
         box.style.fontSize = font;
         shownFont = font;

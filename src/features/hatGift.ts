@@ -4,6 +4,8 @@
 // - 눈사람이 이미 모자를 쓰고 있으면 바꿔 씌운다: 다른 사람 털모자는 내가 쓰고, 노점 모자(산타 모자·귀마개)는 내 손에 온다
 // - 대머리일 때 모자 쓴 눈사람 곁에서 가져온다: 내 모자면 '돌려받기', 남의 모자면 '가져가기' (그 사람 모자 색을 쓴다)
 // - 내가 나가도 모자는 눈사람에 남고, 다시 들어오면 새 모자를 쓰고 온다
+// - 주워 쓴 남의 모자가 있으면 맨 위 것을 씌워 준다 (주인은 그 눈사람에서 돌려받아야 한다 — hatChase.ts).
+//   남이 가져가는 모자의 주인이 광장에 있으면 서버에 물어 그 사람 머리에 겹쳐 쓴다
 // 위쪽은 규칙 (테스트 가능), 아래쪽은 조작과 연출.
 
 import type { Character } from '../character/character';
@@ -19,9 +21,9 @@ import { snowmanHeight, type Snowman, type SnowWorld } from './snowman';
 
 // ───────────── 규칙 ─────────────
 
-/** 씌워줄 수 있나: 모자를 쓰고 있고 손이 비어 있을 때만 (소품을 들고 있으면 달아주기가 먼저다) */
-export function canGiveHat(hat: HatState, holding: Held | null): boolean {
-  return hat === 'on' && holding === null;
+/** 씌워줄 수 있나: 모자를 쓰고 있고(내 모자든 주워 쓴 남의 모자든) 손이 비어 있을 때만 (소품을 들고 있으면 달아주기가 먼저다) */
+export function canGiveHat(hat: HatState, holding: Held | null, wearingOthers = false): boolean {
+  return (hat === 'on' || wearingOthers) && holding === null;
 }
 
 export interface GiveResult {
@@ -100,6 +102,11 @@ export interface HatGiftDeps {
   /** 씌워주는 몸짓을 친구들에게도 보인다 */
   onAct?: () => void;
   ding?: () => void;
+  /** 주워 쓴 남의 모자 가운데 맨 위 것 (있으면 그것을 씌워 준다) / 그것을 씌웠다 */
+  topExtra?: () => { owner: string; name: string; color: number } | null;
+  gaveExtra?: (owner: string) => void;
+  /** 눈사람 모자의 주인이 광장에 있으면 서버에 물어 가져온다 (그러면 true — 그 모자는 내 머리에 겹쳐진다) */
+  takeOnline?: (snowman: Snowman, hat: SnowmanHat) => boolean;
 }
 
 type Phase = 'idle' | 'give' | 'take' | 'shiver';
@@ -191,11 +198,14 @@ export function createHatGift(character: Character, hat: Hat, world: SnowWorld, 
     drawables: [overlay],
     // 아래 둘은 걸어 다니는 동안 매 프레임 불린다: 결과 객체를 하나씩 두고 다시 쓴다
     nearestToGive() {
-      if (!canGiveHat(character.hat.get(), character.holding.get())) return null;
+      const extra = deps.topExtra?.() ?? null;
+      if (!canGiveHat(character.hat.get(), character.holding.get(), extra !== null)) return null;
       let best: Snowman | null = null;
       let bestDistance = Infinity;
       for (const s of world.snowmen) {
         if (s.melt >= 0 || s.headless) continue;
+        // 남의 모자는 모자 없는 눈사람에게만 (바꿔 쓰면 받은 모자가 내 머리 아래로 끼어든다)
+        if (extra && s.hat) continue;
         const distance = snowmanDistance(character, s);
         if (distance < bestDistance) {
           best = s;
@@ -230,7 +240,16 @@ export function createHatGift(character: Character, hat: Hat, world: SnowWorld, 
       return takeResult;
     },
     give(s) {
-      if (phase !== 'idle' || !canGiveHat(character.hat.get(), character.holding.get())) return false;
+      const extra = deps.topExtra?.() ?? null;
+      if (phase !== 'idle' || !canGiveHat(character.hat.get(), character.holding.get(), extra !== null)) return false;
+      if (extra) {
+        // 맨 위 남의 모자를 씌워 준다 (내 모자는 그대로)
+        if (s.hat) return false;
+        flying = { name: extra.name, color: extra.color };
+        begin(s, 'give', G.giveSeconds);
+        deps.gaveExtra?.(extra.owner);
+        return true;
+      }
       flying = myHat();
       begin(s, 'give', G.giveSeconds);
       // 나는 바로 대머리가 된다
@@ -272,7 +291,8 @@ export function createHatGift(character: Character, hat: Hat, world: SnowWorld, 
       if (phase === 'take' && !done && timer <= G.takeSeconds * 0.4) {
         done = true;
         if (alive && s.hat && character.hat.get() !== 'on') {
-          wear(s.hat);
+          // 주인이 광장에 있으면 서버가 정한다 (그 사람 모자로 내 머리에 겹쳐진다)
+          if (!deps.takeOnline?.(s, s.hat)) wear(s.hat);
           s.hat = null;
           deps.put?.(s);
         }

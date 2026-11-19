@@ -2,7 +2,8 @@
 //   createSneeze — '흐… 흐…' 준비 2번(1초, 머리를 뒤로 젖힘, 걸음이 느려짐) → '에취!' 몸이 앞으로 확 꺾이고 큰 입김 구름과 침방울.
 //   createHat    — 에취 순간 모자가 바라보는 쪽으로 포물선을 그리며 빙글빙글 날아가 통통 튀다 멈춘다.
 //                  회전목마에서는 판 앞 바닥으로, 스케이트 중에는 얼음 위에 떨어져 내 속도로 미끄러진다 (벽에서 튕김).
-//                  주울 때까지 그 자리에 남는다. 상태는 character.hat('on' | {x, y})에 적고, 벗겨져 있는 동안 캐릭터는 대머리다.
+//                  주울 때까지 그 자리에 남는다 (다른 사람이 주워 갈 수도 있다 — hatChase.ts). 상태는 character.hat('on' | {x, y} | …)에 적고,
+//                  벗겨져 있는 동안 캐릭터는 대머리다.
 //   createBaldHead — 대머리 위 반짝임(빛 근처에서 더 크게), 내려앉았다 녹는 눈송이, 추울 때 빨간 코끝.
 // 계산은 DOM 없이 돌아가고(테스트 가능), 그리기는 받은 ctx에만 한다.
 
@@ -214,6 +215,8 @@ export interface Hat extends DepthDrawable {
   readonly lying: boolean;
   /** 눈사람에게 씌워 줬다 (머리에도 바닥에도 없다) */
   giveAway(): void;
+  /** 다른 사람이 주워 쓰고 있다 (머리에도 바닥에도 없다 — 그 사람 머리에 그려진다) */
+  takenAway(): void;
   /** 바닥 위 자리 (발밑 기준)와 떠 있는 높이 */
   readonly x: number;
   readonly y: number;
@@ -288,6 +291,11 @@ export function createHat(character: Character, random: () => number = Math.rand
       mode = 'away';
       z = 0;
       character.hat.set('onSnowman');
+    },
+    takenAway() {
+      mode = 'away';
+      z = 0;
+      character.hat.set('taken');
     },
     get moving() {
       return mode === 'flying' || mode === 'bouncing' || mode === 'sliding';

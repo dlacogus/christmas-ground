@@ -27,6 +27,8 @@ export interface Skate {
   pushTime: number;
   /** 이번 점프에서 공중 스핀을 했나 */
   airSpin: boolean;
+  /** 최대 속도 배율 (남의 모자를 쓰고 있으면 줄어든다). 없으면 1 */
+  maxSpeedFactor?: number;
 }
 
 export interface MoveDir {
@@ -255,9 +257,10 @@ export function stepSkate(s: Skate, dt: number, dir: MoveDir, events: SkateEvent
       s.vx += ux * S.accel * dt;
       s.vy += uy * S.accel * dt;
       const capped = speedOf(s);
-      if (capped > S.maxSpeed) {
-        s.vx *= S.maxSpeed / capped;
-        s.vy *= S.maxSpeed / capped;
+      const max = S.maxSpeed * (s.maxSpeedFactor ?? 1);
+      if (capped > max) {
+        s.vx *= max / capped;
+        s.vy *= max / capped;
       }
       s.pushing = true;
       s.pushTime += dt;

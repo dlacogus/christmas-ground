@@ -4,7 +4,7 @@ import { CHARACTER, DEFAULT_OUTFIT, type OutfitName } from '../constants';
 import { OBSTACLES, WALK_AREA, rectsOverlap, type Point, type Rect } from '../world';
 import { nextBreathInterval, spawnPuff, updatePuffs, type BreathPuff } from './breath';
 import { POSES, type Facing, type PoseName } from './sprites';
-import { createCharacterState, createHatState, type CharacterStateStore, type HatStore, createHoldState, type HoldStore } from './state';
+import { createCharacterState, createHatState, type CharacterStateStore, type ExtraHat, type HatStore, createHoldState, type HoldStore } from './state';
 
 export interface Character {
   /** 발밑 좌표 */
@@ -25,6 +25,8 @@ export interface Character {
   /** 쓰고 있는 털모자 색 (목도리 색 번호 0~5, null = 기본 빨강)과 그 모자의 주인 닉네임 (내 모자면 null) */
   hatColor: number | null;
   hatOwner: string | null;
+  /** 주워서 겹쳐 쓴 남의 털모자들 (아래 → 위). 내 모자가 없으면 맨 아래 것이 머리에 바로 얹힌다 */
+  extraHats: ExtraHat[];
   /** 손에 든 노점 소품 또는 트리 장식 */
   holding: HoldStore;
   /** 손에 든 것이 트리 장식이면 그 장식의 id (선물 상자에서 받은 것 — 서버가 이 id로 확인한다) */
@@ -58,6 +60,7 @@ export function createCharacter(x: number, y: number, outfit: OutfitName = DEFAU
     hat: createHatState(),
     hatColor: null,
     hatOwner: null,
+    extraHats: [],
     holding: createHoldState(),
     heldTag: null,
     lean: 0,

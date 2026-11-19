@@ -6,6 +6,7 @@
 import { layerOffsetX, type Camera } from './camera';
 import { LAYER_FACTORS, SCENERY_SEED, SCREEN_WIDTH } from './constants';
 import { createRng } from './random';
+import { VIEW } from './screen';
 import { createFarCity } from './scenery/farCity';
 import { createForeground } from './scenery/foreground';
 import { createGround } from './scenery/ground';
@@ -64,7 +65,8 @@ export function createLayers(
   const farCity = createFarCity(createRng(seed + 1), layerWidth(f.farBuildings));
   const treeLine = createTreeLine(createRng(seed + 2), layerWidth(f.treeLine));
   const ground = createGround(createRng(seed + 3), layerWidth(f.main));
-  const foreground = createForeground(createRng(seed + 4), layerWidth(f.foregroundSnow));
+  const foregroundWidth = layerWidth(f.foregroundSnow);
+  const foreground = createForeground(createRng(seed + 4), foregroundWidth);
   const snow = createSnowfall(createRng(seed + 5));
   const snowRng = createRng(seed + 6);
   // 기존 그림 위에 덧입히는 조명·분위기 층
@@ -142,7 +144,10 @@ export function createLayers(
       name: 'foregroundSnow',
       factor: f.foregroundSnow,
       draw: (ctx, camera) => {
-        foreground.draw(ctx, layerOffsetX(camera, f.foregroundSnow));
+        // 휴대폰 세로에서 카메라가 맵 끝을 조금 넘어가면, 앞 눈 더미(1.3배로 움직임)는 그 바깥까지 그려 둔 것이 없다:
+        // 보이는 부분에 빈 곳이 생기지 않게 거기서 잠깐 멈춘다
+        const offset = layerOffsetX(camera, f.foregroundSnow);
+        foreground.draw(ctx, Math.min(Math.max(offset, -VIEW.left), foregroundWidth - VIEW.right));
         vignette.draw(ctx);
       },
     },

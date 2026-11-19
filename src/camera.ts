@@ -1,4 +1,5 @@
 import { CAMERA_FOLLOW_RATE, CAMERA_REFERENCE_FPS, SCREEN_WIDTH } from './constants';
+import { VIEW } from './screen';
 import { MAP_WIDTH } from './world';
 
 /** 좌우로만 움직이는 카메라. x는 화면 왼쪽 끝의 맵 좌표 (소수). */
@@ -13,9 +14,12 @@ export function createCamera(): Camera {
   return { x: 0 };
 }
 
-/** 카메라 x를 맵 범위(0~960) 안으로 제한한다. */
+/**
+ * 카메라 x를 맵 범위(0~960) 안으로 제한한다.
+ * 휴대폰 세로처럼 캔버스 양옆이 잘려 보일 때는 그만큼 더 나가서, 보이는 부분이 맵 끝까지 닿게 한다.
+ */
 export function clampCameraX(x: number): number {
-  return Math.min(Math.max(x, CAMERA_MIN_X), CAMERA_MAX_X);
+  return Math.min(Math.max(x, CAMERA_MIN_X - VIEW.left), CAMERA_MAX_X + VIEW.left);
 }
 
 /** 대상 x를 화면 가운데에 두는 카메라 위치 */

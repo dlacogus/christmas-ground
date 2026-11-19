@@ -3,6 +3,7 @@
 import { layerOffsetX, type Camera } from './camera';
 import { footRect, type Character } from './character/character';
 import { DEBUG, DEBUG_COLORS, LAYER_FACTORS } from './constants';
+import { VIEW } from './screen';
 import { INTERACTION_POINTS, OBSTACLES, WALK_AREA } from './world';
 import type { Zone } from './zones/zone';
 
@@ -73,11 +74,13 @@ export function drawDebugOverlay(
   ];
   const width = Math.max(...lines.map((l) => ctx.measureText(l).width)) + DEBUG.hudPadding * 2;
   const top = DEBUG.hudLineHeight + pad * 2;
+  // 보이는 부분의 왼쪽 위 (휴대폰 세로에서는 캔버스 양옆이 잘린다)
+  const left = VIEW.left + pad;
   ctx.fillStyle = DEBUG_COLORS.hudBackground;
-  ctx.fillRect(pad, top, width, lines.length * DEBUG.hudLineHeight + DEBUG.hudPadding * 2);
+  ctx.fillRect(left, top, width, lines.length * DEBUG.hudLineHeight + DEBUG.hudPadding * 2);
   ctx.fillStyle = DEBUG_COLORS.hudText;
   lines.forEach((line, i) => {
-    ctx.fillText(line, pad + DEBUG.hudPadding, top + DEBUG.hudPadding + i * DEBUG.hudLineHeight);
+    ctx.fillText(line, left + DEBUG.hudPadding, top + DEBUG.hudPadding + i * DEBUG.hudLineHeight);
   });
 
   ctx.restore();

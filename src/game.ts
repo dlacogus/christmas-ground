@@ -10,7 +10,8 @@ import { warmBuffers } from './scenery/buffer';
 import { createFootprints } from './scenery/footprints';
 import { isSnowAt, snowField } from './scenery/ground';
 import { createSanta } from './scenery/santa';
-import { fitCanvasToWindow, frameDt } from './screen';
+import { fitGameToWindow, frameDt } from './screen';
+import { createTouchPad } from './ui/touchPad';
 import { createAmbience } from './audio/ambience';
 import { advanceStepTimer, createFootsteps, createStepTimer } from './audio/footsteps';
 import { createMusicBox } from './audio/musicBox';
@@ -60,7 +61,13 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   canvas.height = SCREEN_HEIGHT;
   const ctx = canvas.getContext('2d')!;
   ctx.imageSmoothingEnabled = false;
-  fitCanvasToWindow(canvas, SCREEN_WIDTH, SCREEN_HEIGHT);
+  // 휴대폰을 세로로 들면 게임 화면을 위쪽에 크게(양옆은 잘라서) 두고, 아래쪽에 조작 패드를 보인다
+  const hint = createHint(canvas);
+  const touchPad = createTouchPad();
+  fitGameToWindow(canvas, SCREEN_WIDTH, SCREEN_HEIGHT, (top) => {
+    touchPad.place(top);
+    hint.setPad(top !== null);
+  });
 
   const camera = createCamera();
   const world = createWorldZones();
@@ -71,8 +78,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
 
   // 회전목마 타기
   const play = createCarouselPlay(character, world.carousel);
-  const hint = createHint(canvas);
-  const touch = window.matchMedia('(pointer: coarse)').matches;
+  /** 손가락으로 쓰는 기기 (탭 조작 힌트를 보인다 — 아래 조작 패드를 쓰는 동안은 키보드 힌트를 패드 버튼 이름으로) */
+  const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
 
   // 소리: 광장 배경 + 구역별 소리(거리에 따라 크기·좌우) + 발자국. 브라우저 규칙상 첫 클릭·키 입력 뒤에만 켠다
   const footsteps = createFootsteps();
@@ -700,7 +707,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       ctx.fillText(session.debugLine(), 200, 262);
     }
 
-    // 힌트도 고른 상호작용 하나만
+    // 힌트도 고른 상호작용 하나만. 조작 패드를 쓰는 동안은 패드가 키보드 역할이라 키보드 힌트를 (버튼 이름으로 바꿔) 보인다
+    const touch = coarsePointer && !touchPad.active;
     let h: PlayHint | null;
     if (snowPlay.busy) h = snowPlay.hint(touch);
     else if (propsPlay.busy) h = propsPlay.hint(touch);

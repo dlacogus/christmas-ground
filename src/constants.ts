@@ -2299,6 +2299,48 @@ export const WIND = {
   filterQ: 0.8,
 } as const;
 
+/**
+ * 휴대폰 세로 화면: 게임 화면을 위쪽에 크게 두고 (양옆은 잘라 가운데만 보인다), 아래쪽은 조작 패드.
+ * 확대 배율 = 보이는 폭이 minViewWidth가 되는 배율과, 게임 화면 높이가 창 높이의 maxGameHeightRatio가 되는 배율 가운데 작은 쪽
+ * (창 폭에 480px이 다 들어가면 자르지 않는다).
+ */
+export const MOBILE_SCREEN = {
+  /** 세로 화면에서 보이는 게임 폭의 최소값 (내부 해상도 px) — 큰 트리(폭 176px)가 한 화면에 다 들어간다 */
+  minViewWidth: 240,
+  /** 게임 화면이 창 높이에서 차지할 수 있는 최대 비율 (나머지는 조작 패드) */
+  maxGameHeightRatio: 0.55,
+  /** 패드에 남겨야 하는 최소 높이 (CSS px) */
+  minPadHeight: 220,
+} as const;
+
+/** 휴대폰 세로 화면 아래쪽 조작 패드 (CSS px). 누르면 키보드와 똑같이 동작한다 */
+export const TOUCH_PAD = {
+  /** 조이스틱: 받침 반지름, 손잡이 반지름, 이 비율 안쪽은 움직이지 않는다 */
+  stickRadius: 58,
+  knobRadius: 26,
+  deadZone: 0.28,
+  /** 큰 버튼(A = 스페이스), 던지기 버튼, 취소 버튼 지름 */
+  aSize: 84,
+  throwSize: 62,
+  cancelSize: 44,
+  /** 패드 안쪽 여백 */
+  padding: 18,
+  background: '#0d1130',
+  border: '#2b3352',
+  stickBase: 'rgba(232, 238, 248, 0.10)',
+  stickRing: 'rgba(232, 238, 248, 0.28)',
+  knob: '#e8eef8',
+  aColor: '#e2b23e',
+  aPressed: '#b8862a',
+  throwColor: '#4f7fd9',
+  throwPressed: '#385fa8',
+  cancelColor: '#3a3f5c',
+  cancelPressed: '#262a40',
+  label: '#141a3a',
+  lightLabel: '#f3ead6',
+  caption: '#9aa6c8',
+} as const;
+
 /** 화면 위에 띄우는 조작 힌트 (글자는 또렷하게 보이도록 캔버스 위 DOM으로 띄운다) */
 export const HINT = {
   /** 글자 크기 = 캔버스 확대 배율 × 이 값 (px), 최소 크기 */

@@ -1,7 +1,8 @@
 // 오른쪽 위 작은 스피커 버튼: 눌러서 소리를 켜고 끈다. 글자 없이 픽셀 그림으로만.
 
-import { SCREEN_WIDTH, SOUND_BUTTON as B } from '../constants';
+import { SOUND_BUTTON as B } from '../constants';
 import { stampPixels } from '../props/pixel';
+import { VIEW } from '../screen';
 
 /** 스피커 + 소리 물결 (X 스피커, W 물결) */
 const SPEAKER_ON = [
@@ -30,7 +31,8 @@ const SPEAKER_OFF = [
 export function soundButtonRect(): { x: number; y: number; w: number; h: number } {
   const w = SPEAKER_ON[0].length + B.padding * 2;
   const h = SPEAKER_ON.length + B.padding * 2;
-  return { x: SCREEN_WIDTH - B.margin - w, y: B.margin, w, h };
+  // 보이는 부분의 오른쪽 위 (휴대폰 세로에서는 캔버스 양옆이 잘린다)
+  return { x: VIEW.right - B.margin - w, y: B.margin, w, h };
 }
 
 /** 화면 좌표 (sx, sy)가 버튼 위인가 — 손가락으로도 누르기 쉽게 둘레를 넉넉히 잡는다 */

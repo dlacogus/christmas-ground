@@ -16,6 +16,7 @@ import type { InputActions } from '../input';
 import { fillPixelEllipse } from '../props/pixel';
 import type { TreeLight, TreeProp } from '../props/tree';
 import type { PointLight } from '../scenery/lighting';
+import { VIEW } from '../screen';
 import { debugGiftId } from '../shared/plazaCore';
 import type { Act, WireGift, WireOrnament } from '../shared/protocol';
 import { TREE_X, WALK_AREA, getObstacle } from '../world';
@@ -908,9 +909,10 @@ export function createTreeDecor(character: Character, deps: TreeDecorDeps): Tree
         const fresh = box.state === 'air' || (box.state === 'ground' && now - g.landAt < GIFT.pointerSeconds);
         if (!fresh) continue;
         const gx = g.x - offsetX;
-        if (gx >= 0 && gx < SCREEN_WIDTH) continue;
-        const left = gx < 0;
-        const ix = left ? GIFT.pointerInset + 5 : SCREEN_WIDTH - GIFT.pointerInset - 5;
+        // 보이는 부분 기준 (휴대폰 세로에서는 캔버스 양옆이 잘린다)
+        if (gx >= VIEW.left && gx < VIEW.right) continue;
+        const left = gx < VIEW.left;
+        const ix = left ? VIEW.left + GIFT.pointerInset + 5 : VIEW.right - GIFT.pointerInset - 5;
         const iy = clamp(g.y - 20, 80, 236);
         const c = GC.boxes[g.color] ?? GC.boxes[0];
         for (let r = 0; r < POINTER_ICON.length; r++) {

@@ -11,11 +11,56 @@ import { canStandAt, setWalkTarget, type Character, type MoveInput } from '../ch
 import type { DrawOptions } from '../character/render';
 import { LAYER_FACTORS, MARKET_HUT, PROPS, PROP_COLORS, SCREEN_WIDTH, type Held, type PropId } from '../constants';
 import type { InputActions } from '../input';
+import { stampPixels } from '../props/pixel';
 import type { DepthDrawable } from '../zones/zone';
 import { HUTS, STALLS, STREET_LINE_Y, WALK_AREA } from '../world';
 import { attachProp, attachStyle, canAttach, drawHeldItem, drawItemIcon, drawPropIcon, PROP_NAMES, PROP_SLOT, takeFromStall } from './props';
 import { isOrnamentKind } from './treeDecor';
 import { snowmanHeight, type Snowman, type SnowWorld } from './snowman';
+
+/**
+ * 노점 입간판: 칠판에 모자·목도리를 한 눈사람 그림 (이 노점은 눈사람 꾸미기 소품을 판다).
+ * 글자 = 픽셀: K 나무 틀, g 칠판, S 눈, W 눈사람, O 당근 코, R 목도리, r 모자, k 단추
+ */
+const SIGN_ROWS = [
+  '.SSSSSSS.',
+  'KKKKKKKKK',
+  'KggrrrggK',
+  'KgrrrrrgK',
+  'KggWWWggK',
+  'KggWWOggK',
+  'KgRRRRggK',
+  'KgWWWWWgK',
+  'KgWWkWWgK',
+  'KgWWWWWgK',
+  'KKKKKKKKK',
+  '.K.....K.',
+  '.K.....K.',
+  'K.......K',
+];
+
+let signCache: HTMLCanvasElement | null = null;
+
+/** 입간판 그림을 한 번만 그려 둔다 */
+function signCanvas(): HTMLCanvasElement {
+  if (signCache) return signCache;
+  const palette: Record<string, string> = {
+    K: PROP_COLORS.signWood,
+    g: PROP_COLORS.signBoard,
+    S: PROP_COLORS.signSnow,
+    W: PROP_COLORS.W,
+    O: PROP_COLORS.O,
+    R: PROP_COLORS.R,
+    r: PROP_COLORS.r,
+    k: PROP_COLORS.K,
+  };
+  const canvas = document.createElement('canvas');
+  canvas.width = SIGN_ROWS[0].length;
+  canvas.height = SIGN_ROWS.length;
+  stampPixels(canvas.getContext('2d')!, SIGN_ROWS, palette, 0, 0);
+  signCache = canvas;
+  return canvas;
+}
 
 export interface GroundProp {
   /** 노점 소품 또는 트리 장식 */
@@ -105,6 +150,10 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
     return h && !isOrnamentKind(h) ? h : null;
   };
 
+  const signX = (s: number) => {
+    const hut = HUTS[STALLS[s].hut];
+    return hut.x + Math.floor(hut.w / 2) - PROPS.signInset;
+  };
   const shelfX = (s: number, i: number) => HUTS[STALLS[s].hut].x + Math.round((i - (STALLS[s].props.length - 1) / 2) * PROPS.shelfGap);
   const shelfY = STREET_LINE_Y - MARKET_HUT.counterHeight - PROPS.shelfAbove;
   const menuX = (s: number, i: number) => HUTS[STALLS[s].hut].x + Math.round((i - (STALLS[s].props.length - 1) / 2) * PROPS.menuGap);
@@ -170,9 +219,13 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
     footY: STREET_LINE_Y + 0.5,
     draw(ctx, camera) {
       const ox = layerOffsetX(camera, LAYER_FACTORS.main);
+      const sign = signCanvas();
       for (let s = 0; s < STALLS.length; s++) {
         const cx = HUTS[STALLS[s].hut].x - ox;
         if (cx < -60 || cx > SCREEN_WIDTH + 60) continue;
+        // 오른쪽 모퉁이 입간판: 눈사람 그림 = 눈사람 꾸미기 소품을 판다
+        const sx = signX(s) - ox;
+        ctx.drawImage(sign, sx - (sign.width >> 1), STREET_LINE_Y + PROPS.signBelowStreet - sign.height);
         const list = STALLS[s].props;
         for (let i = 0; i < list.length; i++) {
           // 건네받는 중인 것은 진열대에서 손으로 넘어온다
@@ -443,7 +496,11 @@ export function createPropsPlay(character: Character, world: SnowWorld, deps: Pr
     hint(touch) {
       if (phase === 'browse') {
         const p = STALLS[stall].props[pick];
-        return { text: touch ? `${PROP_NAMES[p]} — 눌러서 받기` : `←→ 고르기 · Space ${PROP_NAMES[p]} 받기`, anchor: 'bottom' };
+        return {
+          text: touch ? `${PROP_NAMES[p]} — 눌러서 받기` : `←→ 고르기 · Space ${PROP_NAMES[p]} 받기`,
+          sub: touch ? '받아서 눈사람을 탭하면 달아 준다' : '받아서 눈사람 곁에서 Space = 달아주기',
+          anchor: 'bottom',
+        };
       }
       return null;
     },

@@ -659,6 +659,11 @@ export const PROPS = {
   /** 진열대에 놓인 소품 사이 간격, 계산대 위로 띄우는 높이 */
   shelfGap: 9,
   shelfAbove: 3,
+  /** 노점 오른쪽 모퉁이의 눈사람 그림 입간판: 오두막 오른쪽 끝에서 안쪽으로 (가운데까지), 연석에서 아래로 (발끝) */
+  signInset: 5,
+  signBelowStreet: 2,
+  /** 처음 와서 노점 곁을 지나면 '눈사람 꾸미기 소품' 이름표를 띄우는 거리 (구경 거리보다 넓게) */
+  signNoticeRadius: 44,
   /** 고르는 화면: 노점 위에 뜨는 아이콘 크기(배율)·간격·칸 크기·노점 바닥에서 위로 */
   menuScale: 2,
   menuGap: 24,
@@ -711,6 +716,10 @@ export const PROP_COLORS = {
   menuEdge: '#2b3352',
   menuPick: '#ffd76a',
   hand: '#f1c9a5',
+  /** 노점 입간판: 나무 틀, 칠판 바탕, 위에 쌓인 눈 */
+  signWood: '#7a4f2a',
+  signBoard: '#2c4a3c',
+  signSnow: '#eef3fa',
 } as const;
 
 // ───────────── 트리 꾸미기 (산타 선물 → 장식 → 트리에 달기) ─────────────
@@ -814,10 +823,10 @@ export const ORNAMENT = {
   commonCount: 11,
   specialChance: 0.15,
   /** 달 수 있는 영역: 잎 실루엣에서 안쪽으로, 잎 꼭대기에서 아래로 (별과 겹치지 않게) */
-  inset: 2,
-  topMargin: 6,
+  inset: 3,
+  topMargin: 7,
   /** 다른 장식과 가운데끼리 이보다 가까우면 달 수 없다 (그림이 3px 넘게 겹치지 않게) */
-  minGap: 6,
+  minGap: 8,
   /** 최대 개수, 축하하는 개수, 이 개수부터 별이 더 밝다 */
   max: 150,
   milestones: [25, 50, 100],
@@ -1876,11 +1885,11 @@ export const RINK = {
   sparkleOn: 0.82,
   sparkleCross: 0.96,
   /** 입구·출구 문 폭, 문 기둥이 울타리보다 솟는 높이 (기둥 위에 전구 아치를 얹는다) */
-  gateWidth: 18,
-  gatePostRise: 14,
+  gateWidth: 24,
+  gatePostRise: 18,
   /** 아치 가운데가 기둥 꼭대기보다 더 솟는 높이, 아치 두께, 전구 간격 */
-  gateArchLift: 4,
-  gateArchThickness: 2,
+  gateArchLift: 5,
+  gateArchThickness: 3,
   gateBulbEvery: 3,
 } as const;
 

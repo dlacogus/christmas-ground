@@ -6,7 +6,7 @@
 // 판·기둥·지붕(줄무늬가 도는 모습 몇 장)은 미리 그려 두고, 탈 것·전구·깃발만 매 프레임 그린다.
 
 import { layerOffsetX, type Camera } from '../camera';
-import { getSpriteCanvas } from '../character/render';
+import { getSpriteCanvas, hatCanvas, headTopRow, HAT_STACK_COLUMN } from '../character/render';
 import { POSES, type PoseName } from '../character/sprites';
 import {
   CAROUSEL as K,
@@ -14,6 +14,7 @@ import {
   CAROUSEL_RAIL as RAIL,
   CARRIAGE as G,
   CHARACTER,
+  HAT_CHASE,
   LAYER_FACTORS,
   SCREEN_WIDTH,
   type OutfitName,
@@ -387,6 +388,22 @@ export interface RiderView {
   bald?: boolean;
   /** 털모자 색 (없으면 기본 빨강) */
   hatColor?: number | null;
+  /** 그 위로 겹쳐 쓴 남의 모자 색 (아래 → 위) */
+  stack?: readonly number[];
+}
+
+/** 겹쳐 쓴 모자 하나: 탈 것과 같은 크기·밝기로 */
+function riderHat(color: number, small: boolean, level: number): HTMLCanvasElement {
+  return cached(`riderHat|${color}|${small}|${level}`, () => {
+    const source = hatCanvas(color);
+    const scale = small ? K.backScale : 1;
+    const w = Math.max(1, Math.round(source.width * scale));
+    const h = Math.max(1, Math.round(source.height * scale));
+    const [canvas, ctx] = newCanvas(w, h);
+    ctx.drawImage(source, 0, 0, w, h);
+    darken(ctx, w, h, level);
+    return canvas;
+  });
 }
 
 /** 탄 사람 그림: 탈 것과 같은 크기·밝기로 미리 만들어 둔다 */
@@ -612,8 +629,22 @@ export function createCarousel(): CarouselProp {
     const pose: PoseName = rider.waving ? (`${base}Wave` as PoseName) : base;
     const frame = rider.waving ? Math.floor(time / K.waveFrameDuration) % POSES[pose].length : 0;
     const facing = rider.waving && rider.lookAt ? rider.lookAt : m.facing;
-    const sprite = riderSprite(pose, frame, facing, rider.outfit, m.z < 0, shadeLevel(m.z), rider.bald === true, rider.hatColor ?? null);
-    ctx.drawImage(sprite, seat.x - Math.floor(sprite.width / 2) - ox, seat.y - Math.round(K.riderAboveSeat * seat.scale));
+    const small = m.z < 0;
+    const level = shadeLevel(m.z);
+    const sprite = riderSprite(pose, frame, facing, rider.outfit, small, level, rider.bald === true, rider.hatColor ?? null);
+    const left = seat.x - Math.floor(sprite.width / 2) - ox;
+    const top = seat.y - Math.round(K.riderAboveSeat * seat.scale);
+    ctx.drawImage(sprite, left, top);
+    // 겹쳐 쓴 남의 모자: 머리 위로 차곡차곡 (타는 동안은 흔들지 않는다)
+    const stack = rider.stack;
+    if (stack && stack.length > 0) {
+      const scale = small ? K.backScale : 1;
+      const headTop = top + Math.round(headTopRow(pose, frame, facing) * scale);
+      for (let k = 1; k <= stack.length; k++) {
+        const hat = riderHat(stack[k - 1], small, level);
+        ctx.drawImage(hat, left + Math.round(HAT_STACK_COLUMN * scale), headTop - Math.round(k * HAT_CHASE.stackStep * scale));
+      }
+    }
   };
 
   const drawMount = (ctx: CanvasRenderingContext2D, m: MountState, ox: number) => {

@@ -790,7 +790,7 @@ export function createTreeDecor(character: Character, deps: TreeDecorDeps): Tree
         // 가까운 전구가 밝을 때 장식볼에 1px 하이라이트
         if (o.light && deps.tree.levelOf(o.light) >= D.shineLevel) {
           ctx.fillStyle = OC.shine;
-          ctx.fillRect(x + Math.sign(o.light.x - o.x), o.y + Math.sign(o.light.y - o.y), 1, 1);
+          ctx.fillRect(x + Math.sign(o.light.x - o.x) * 2, o.y + Math.sign(o.light.y - o.y) * 2, 1, 1);
         }
       }
     },

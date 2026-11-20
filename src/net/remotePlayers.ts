@@ -3,7 +3,7 @@
 
 import { layerOffsetX } from '../camera';
 import { createCharacter, type Character } from '../character/character';
-import { drawCharacter, headLook, type DrawOptions } from '../character/render';
+import { drawCharacter, headLook, stackColors, type DrawOptions } from '../character/render';
 import { BENCH_SIT, CAROUSEL, COPUSH, FOOTPRINTS, LAYER_FACTORS, NET, ROOF_SNOW_COLORS, SCREEN_WIDTH, SKATE, type Held, type OutfitName } from '../constants';
 import { drawHeldItem } from '../features/props';
 import { drawFaceSnow } from '../features/snowmanDraw';
@@ -307,6 +307,7 @@ export function createRemotePlayers(
         const look = headLook(ch);
         r.occupant.bald = look.bald;
         r.occupant.hatColor = look.color;
+        r.occupant.stack = stackColors(look.above, r.occupant.stack);
       }
     },
     drawables: () => list,

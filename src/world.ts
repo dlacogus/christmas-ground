@@ -107,7 +107,7 @@ export const RINK_GATE_OFFSET = 60;
 /** 울타리 오른쪽 끝에서 출구 문 가운데까지 (입구 반대편 끝) */
 export const RINK_EXIT_OFFSET = 60;
 /** 입구·출구 팻말 기둥: 문 가운데에서 옆으로 (입구는 오른쪽, 출구는 왼쪽 — 둘 다 링크 안쪽 방향), 앞 울타리에서 앞으로 */
-export const RINK_SIGN_SIDE = 16;
+export const RINK_SIGN_SIDE = 20;
 export const RINK_SIGN_FRONT = 3;
 
 /** 스케이트장 오른쪽 끝을 막는 전나무 줄 (이 x부터 못 들어간다) */

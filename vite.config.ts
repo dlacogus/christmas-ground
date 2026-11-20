@@ -5,6 +5,7 @@ export default defineConfig({
   base: './',
   server: {
     // 개발 중 실시간 서버: /ws를 wrangler dev(8787)의 Worker로 넘긴다
-    proxy: { '/ws': { target: 'ws://localhost:8787', ws: true } },
+    // (8787을 다른 프로그램이 쓰고 있으면 WS_PORT로 바꿔 띄운다)
+    proxy: { '/ws': { target: `ws://localhost:${process.env.WS_PORT ?? 8787}`, ws: true } },
   },
 });

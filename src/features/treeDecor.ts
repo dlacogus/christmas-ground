@@ -205,22 +205,22 @@ export const ORNAMENT_NAMES: Record<OrnamentKind, string> = {
   musicBox: '오르골 장식',
 };
 
-/** 글자 = 픽셀 (ORNAMENT_COLORS), '.'은 투명. 가로세로 4~7px */
+/** 글자 = 픽셀 (ORNAMENT_COLORS), '.'은 투명. 가로 5~7px, 세로 6~9px */
 export const ORNAMENT_SPRITES: Record<OrnamentKind, readonly string[]> = {
-  ballRed: ['.RRR.', 'RWRRr', 'RRRRr', 'RRRrr', '.rrr.'],
-  ballGold: ['.GGG.', 'GWGGg', 'GGGGg', 'GGGgg', '.ggg.'],
-  ballSilver: ['.SSS.', 'SWSSs', 'SSSSs', 'SSSss', '.sss.'],
-  ballBlue: ['.BBB.', 'BWBBb', 'BBBBb', 'BBBbb', '.bbb.'],
-  cane: ['.WR.', 'R..W', '...R', '...W', '...R', '...W', '...R'],
-  bell: ['..G..', '.GGG.', '.GYG.', 'GGGGg', 'GGGGg', '..K..'],
-  snowflake: ['W.W.W', '.WWW.', 'WWCWW', '.WWW.', 'W.W.W'],
-  pinecone: ['.EE.', 'NnNn', 'nNnN', 'NnNn', '.nN.'],
-  cookie: ['.NNN.', '.NNN.', 'NNWNN', '.NNN.', '.NWN.', '.N.N.'],
-  bow: ['RR.RR', 'RRGRR', 'RR.RR', '.r.r.'],
-  icicle: ['.CCC', '.CWC', '.cC.', '.cC.', '..C.', '..C.', '..c.'],
-  glowBall: ['.YYY.', 'YWWYy', 'YWYYy', 'YYYyy', '.yyy.'],
-  star: ['..Y..', 'YYYYY', '.YWY.', '.YYY.', 'Y...Y'],
-  musicBox: ['..KK.', '.GGGG', 'GPPPG', 'GPWPG', 'GPPPG', '.GGG.'],
+  ballRed: ['..gGg..', '.RRRRR.', 'RWWRRRr', 'RWRRRRr', 'RRRRRrr', '.RRrrr.', '..rrr..'],
+  ballGold: ['..sSs..', '.GGGGG.', 'GWWGGGg', 'GWGGGGg', 'GGGGGgg', '.GGggg.', '..ggg..'],
+  ballSilver: ['..gGg..', '.SSSSS.', 'SWWSSSs', 'SWSSSSs', 'SSSSSss', '.SSsss.', '..sss..'],
+  ballBlue: ['..gGg..', '.BBBBB.', 'BWWBBBb', 'BWBBBBb', 'BBBBBbb', '.BBbbb.', '..bbb..'],
+  cane: ['.RWR.', 'W...W', 'R...R', '....W', '....R', '....W', '....R', '....W', '....R'],
+  bell: ['...G...', '..GGG..', '.GYGGg.', '.GYGGg.', '.GGGGg.', 'GGGGGgg', '...K...'],
+  snowflake: ['W..W..W', '.W.W.W.', '..WCW..', 'WWCCCWW', '..WCW..', '.W.W.W.', 'W..W..W'],
+  pinecone: ['.EEE.', '.NnN.', 'NnNnN', 'nNnNn', 'NnNnN', '.nNn.', '..n..'],
+  cookie: ['..NNN..', '..WNW..', 'NNNNNNN', '..NWN..', '..NWN..', '.NN.NN.', '.N...N.'],
+  bow: ['RR...RR', 'RRR.RRR', 'RRrGrRR', 'RRR.RRR', '..r.r..', '.r...r.'],
+  icicle: ['CCCCC', 'CWCCc', '.CWc.', '.CWc.', '.CCc.', '..Cc.', '..C..', '..C..', '..c..'],
+  glowBall: ['..gGg..', '.YYYYY.', 'YWWYYYy', 'YWYYYYy', 'YYYYYyy', '.YYyyy.', '..yyy..'],
+  star: ['...Y...', '...Y...', 'YYYWYYY', '.YYYYY.', '..YYY..', '.YY.YY.', '.Y...Y.'],
+  musicBox: ['...KK..', '.GGGGG.', 'GPPPPPG', 'GPWPWPG', 'GPPPPPG', 'GGGGGGG', '.g...g.'],
 };
 
 export function ornamentSize(kind: OrnamentKind): { w: number; h: number } {

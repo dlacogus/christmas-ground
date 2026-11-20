@@ -209,14 +209,14 @@ describe('상자 열기 (서버 검사)', () => {
 });
 
 describe('장식', () => {
-  it('14가지: 보통 11가지(85%)와 특별 3가지(15%), 모두 4~7px 그림', () => {
+  it('14가지: 보통 11가지(85%)와 특별 3가지(15%), 가로 5~7px·세로 6~9px 그림', () => {
     expect(ORNAMENT_KINDS).toHaveLength(14);
     expect(ORNAMENT_KINDS.filter(isSpecial)).toEqual(['glowBall', 'star', 'musicBox']);
     for (const kind of ORNAMENT_KINDS) {
       const rows = ORNAMENT_SPRITES[kind];
-      expect(rows.length, kind).toBeGreaterThanOrEqual(4);
-      expect(rows.length, kind).toBeLessThanOrEqual(7);
-      expect(rows[0].length, kind).toBeGreaterThanOrEqual(4);
+      expect(rows.length, kind).toBeGreaterThanOrEqual(6);
+      expect(rows.length, kind).toBeLessThanOrEqual(9);
+      expect(rows[0].length, kind).toBeGreaterThanOrEqual(5);
       expect(rows[0].length, kind).toBeLessThanOrEqual(7);
       for (const row of rows) expect(row.length, kind).toBe(rows[0].length);
       expect(ORNAMENT_NAMES[kind].length).toBeGreaterThan(0);
@@ -242,7 +242,7 @@ describe('장식', () => {
 describe('트리에 달기', () => {
   const lowY = TREE.foliageBottomY - 10;
 
-  it('달 수 있는 자리: 잎 실루엣에서 2px 안쪽이고, 다른 장식과 겹치지 않는다', () => {
+  it('달 수 있는 자리: 잎 실루엣에서 3px 안쪽이고, 다른 장식과 겹치지 않는다', () => {
     expect(inHangArea(TREE_X, 120)).toBe(true);
     expect(checkHang(TREE_X, 120, [])).toBe('ok');
     // 잎 밖: 옆으로 벗어남, 잎 아래, 별 바로 밑
@@ -250,10 +250,10 @@ describe('트리에 달기', () => {
     expect(checkHang(TREE_X, TREE.foliageBottomY + 6, [])).toBe('outside');
     expect(checkHang(TREE_X, TREE.tipY + 1, [])).toBe('outside');
     expect(checkHang(TREE_X + 60, 60, [])).toBe('outside');
-    // 테두리에서 2px 안쪽까지만
+    // 테두리에서 3px 안쪽까지만
     let edge = TREE_X;
     while (inHangArea(edge + 1, lowY)) edge++;
-    expect(ORNAMENT.inset).toBe(2);
+    expect(ORNAMENT.inset).toBe(3);
     expect(inHangArea(edge + ORNAMENT.inset + 1, lowY)).toBe(false);
     // 겹침
     const others = [{ x: TREE_X, y: 120 }];

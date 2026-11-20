@@ -19,6 +19,8 @@ export interface Occupant {
   bald?: boolean;
   /** 털모자 색 (없으면 기본 빨강) */
   hatColor?: number | null;
+  /** 그 위로 겹쳐 쓴 남의 모자 색 (아래 → 위) */
+  stack?: readonly number[];
 }
 
 /** seats[탈 것 번호][자리 번호] = 앉은 사람 또는 null */
@@ -200,7 +202,7 @@ export function riderViews(seats: Seats, time: number): RiderView[] {
       const other = slots.findIndex((o, i) => o !== null && i !== slot);
       let lookAt: Facing | null = null;
       if (other >= 0) lookAt = seatPosition(mount, other, time).x > seatPosition(mount, slot, time).x ? 'right' : 'left';
-      views.push({ mount, slot, outfit: who.outfit, waving: who.waveLeft > 0, lookAt, bald: who.bald === true, hatColor: who.hatColor ?? null });
+      views.push({ mount, slot, outfit: who.outfit, waving: who.waveLeft > 0, lookAt, bald: who.bald === true, hatColor: who.hatColor ?? null, stack: who.stack });
     });
   });
   return views;

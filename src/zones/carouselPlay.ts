@@ -3,7 +3,7 @@
 //   모바일은 회전목마를 탭 (멀리 있으면 입구까지 걸어가서 탄다).
 
 import { setWalkTarget, updateCharacter, type Character, type MoveInput } from '../character/character';
-import { headLook } from '../character/render';
+import { headLook, stackColors } from '../character/render';
 import { CAROUSEL as K, type OutfitName } from '../constants';
 import type { InputActions } from '../input';
 import { carouselGeometry, mountAngle, mountKind, mountState } from '../props/carousel';
@@ -121,6 +121,7 @@ export function createCarouselPlay(character: Character, zone: CarouselZone): Ca
       const look = headLook(character);
       me.bald = look.bald;
       me.hatColor = look.color;
+      me.stack = stackColors(look.above, me.stack);
       me.outfit = character.outfit;
       const events: PlayEvent[] = [];
       const result = updateBoarding(boarding, seats, time, me);

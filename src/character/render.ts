@@ -100,8 +100,17 @@ export function hatCanvas(color: number | null): HTMLCanvasElement {
 
 const topRows = new Map<string, number>();
 
+/** 겹쳐 쓴 모자 색 목록 (아래 → 위). 그대로면 지난 배열을 다시 쓴다 (매 프레임 새로 만들지 않게) */
+export function stackColors(above: readonly ExtraHat[], previous: readonly number[] | undefined): readonly number[] {
+  if (previous && previous.length === above.length && above.every((h, i) => h.color === previous[i])) return previous;
+  return above.map((h) => h.color);
+}
+
+/** 겹쳐 쓴 모자를 놓는 가로 자리 (스프라이트 왼쪽에서) */
+export const HAT_STACK_COLUMN = HAT_COLUMN;
+
 /** 이 프레임에서 머리 꼭대기(방울)가 있는 줄 */
-function headTopRow(pose: PoseName, index: number, facing: Facing): number {
+export function headTopRow(pose: PoseName, index: number, facing: Facing): number {
   const key = `${pose}|${index}|${facing}`;
   let row = topRows.get(key);
   if (row === undefined) {

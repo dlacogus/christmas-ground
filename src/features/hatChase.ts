@@ -225,6 +225,8 @@ export function createHatChase(character: Character, myHat: Hat, deps: HatChaseD
     const r = deps.find(id);
     return r ? { ch: r.ch, hat: r.hat, scarf: r.info.scarf, name: r.info.name, kind: r.info.state.kind } : null;
   };
+  /** 그 사람 모자의 실제 색 (눈사람에서 바꿔 쓴 모자면 목도리 색과 다르다) */
+  const hatColorOf = (b: { ch: Character; scarf: number }): number => b.ch.hatColor ?? b.scarf;
   /** 머리 꼭대기 (모자 탑 위) */
   const headOf = (ch: Character) => ({ x: ch.x, y: ch.y - CHARACTER.spriteHeight - ch.extraHats.length * C.stackStep });
 
@@ -235,11 +237,22 @@ export function createHatChase(character: Character, myHat: Hat, deps: HatChaseD
       const owners = stackOwners(spots, id).filter((o) => o !== id);
       ch.extraHats = owners.flatMap((o) => {
         const b = bodyOf(o);
-        return b ? [{ owner: o, color: b.scarf }] : [];
+        return b ? [{ owner: o, color: hatColorOf(b) }] : [];
       });
     };
     apply(myKey(), character);
     for (const r of deps.others()) apply(r.info.id, r.ch);
+  };
+
+  /** 쌓인 모자 색이 주인 모자의 지금 색과 다른가 (주인이 모자를 바꿔 쓰면 다시 쌓는다) */
+  const colorsStale = (): boolean => {
+    const check = (ch: Character) => ch.extraHats.some((e) => {
+      const b = bodyOf(e.owner);
+      return b !== null && hatColorOf(b) !== e.color;
+    });
+    if (check(character)) return true;
+    for (const r of deps.others()) if (check(r.ch)) return true;
+    return false;
   };
 
   const setSpot = (id: string, spot: HatSpot) => {
@@ -257,7 +270,7 @@ export function createHatChase(character: Character, myHat: Hat, deps: HatChaseD
   const flyHome = (owner: string, from: { x: number; y: number }, land?: () => void) => {
     const b = bodyOf(owner);
     if (!b) return;
-    flights.push({ color: b.scarf, fromX: from.x, fromY: from.y, to: owner, t: 0, land });
+    flights.push({ color: hatColorOf(b), fromX: from.x, fromY: from.y, to: owner, t: 0, land });
   };
 
   const sparkle = (x: number, y: number) => {
@@ -338,7 +351,7 @@ export function createHatChase(character: Character, myHat: Hat, deps: HatChaseD
       const left = sx < VIEW.left;
       const ix = left ? VIEW.left + C.pointerInset + 6 : VIEW.right - C.pointerInset - 6;
       const iy = Math.min(Math.max(Math.round(w.ch.y) - 24, 80), 236);
-      const img = hatCanvas(deps.myScarf());
+      const img = hatCanvas(character.hatColor ?? deps.myScarf());
       ctx.drawImage(img, ix - (img.width >> 1), iy - (img.height >> 1));
       const nudge = Math.floor(time * 3) % 2;
       const ax = left ? ix - 9 - nudge : ix + 9 + nudge;
@@ -509,6 +522,7 @@ export function createHatChase(character: Character, myHat: Hat, deps: HatChaseD
         const own = spotFromWire(wire, current);
         if (!sameSpot(own, current)) setSpot(myKey(), own);
       }
+      if (!dirty) dirty = colorsStale();
       if (dirty) restack();
       // 내 동작
       if (phase !== 'idle') {

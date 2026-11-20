@@ -5,6 +5,7 @@ import { layerOffsetX } from '../camera';
 import { createCharacter, type Character } from '../character/character';
 import { drawCharacter, headLook, stackColors, type DrawOptions } from '../character/render';
 import { BENCH_SIT, CAROUSEL, COPUSH, FOOTPRINTS, LAYER_FACTORS, NET, ROOF_SNOW_COLORS, SCREEN_WIDTH, SKATE, type Held, type OutfitName } from '../constants';
+import { hopLift } from '../features/emotes';
 import { drawHeldItem } from '../features/props';
 import { drawFaceSnow } from '../features/snowmanDraw';
 import { createSnowHits, type SnowHits } from '../features/roofSnow';
@@ -42,6 +43,8 @@ export interface Remote {
   walked: number;
   /** 눈덩이에 맞아 얼굴에 눈이 묻어 있는 남은 시간 */
   faceSnow: number;
+  /** 이모트를 보내며 폴짝 뛰는 남은 시간 */
+  hop: number;
 }
 
 interface Puff {
@@ -162,7 +165,7 @@ export function createRemotePlayers(
             drawCharacter(ctx, r.ch, ox, { pose: 'skateGlide', lift });
           }
         } else if (r.cheerLeft > 0) drawCharacter(ctx, r.ch, ox, { pose: 'cheer', index: 0 });
-        else drawCharacter(ctx, r.ch, ox);
+        else drawCharacter(ctx, r.ch, ox, r.hop > 0 ? { lift: hopLift(r.hop) } : undefined);
         if (r.faceSnow > 0 && !r.hits.snowman) drawFaceSnow(ctx, footX, footY, r.ch.facing, kind === 'sitting' ? BENCH_SIT.lift : 0);
         // 손에 든 노점 소품
         if (r.info.hold && kind !== 'skating' && !r.hits.snowman) drawHeldItem(ctx, r.info.hold, footX, footY, r.ch.facing, kind === 'sitting' ? BENCH_SIT.lift : 0);
@@ -226,6 +229,7 @@ export function createRemotePlayers(
         cheerLeft: 0,
         walked: 0,
         faceSnow: 0,
+        hop: 0,
       };
       remotes.set(player.id, r);
       applyState(r, player.state, player.hat, false, player.hold ?? null, player.hc ?? null, player.ho ?? null);
@@ -300,6 +304,7 @@ export function createRemotePlayers(
         r.hits.update(dt);
         r.fallLeft = Math.max(0, r.fallLeft - dt);
         r.cheerLeft = Math.max(0, r.cheerLeft - dt);
+        r.hop = Math.max(0, r.hop - dt);
         if (r.jump >= 0) {
           r.jump += dt;
           if (r.jump >= SKATE.jumpSeconds) r.jump = -1;

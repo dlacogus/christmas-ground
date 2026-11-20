@@ -1,4 +1,4 @@
-// 휴대폰 세로 화면 아래쪽 조작 패드 (DOM): 왼쪽 조이스틱, 오른쪽 A(스페이스)·❄(던지기, F)·✕(취소, Esc) 버튼.
+// 휴대폰 세로 화면 아래쪽 조작 패드 (DOM): 왼쪽 조이스틱, 오른쪽 A(스페이스)·❄(던지기, F)·✕(취소, Esc) 버튼, 위쪽 가운데 😊(이모트, E).
 // 누르면 키보드와 똑같은 키 이벤트(keydown/keyup)를 창에 보낸다 — 그래서 기능마다 따로 손대지 않아도 키보드로 되는 것은 모두 패드로도 된다
 // (꾹 누르기·연타·누른 채 방향 바꾸기까지). 화면 탭 조작(바닥 탭으로 걷기, 시설 탭)도 그대로 쓸 수 있다.
 
@@ -12,7 +12,7 @@ export interface TouchPad {
 }
 
 const ARROWS = { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown' } as const;
-const KEY_NAMES: Record<string, string> = { Space: ' ', KeyF: 'f', Escape: 'Escape', ...Object.fromEntries(Object.values(ARROWS).map((c) => [c, c])) };
+const KEY_NAMES: Record<string, string> = { Space: ' ', KeyF: 'f', KeyE: 'e', Escape: 'Escape', ...Object.fromEntries(Object.values(ARROWS).map((c) => [c, c])) };
 /** 8방향을 가르는 기준: cos 22.5°쯤 */
 const AXIS = Math.sin(Math.PI / 8);
 
@@ -188,7 +188,10 @@ export function createTouchPad(): TouchPad {
   const cancel = button('Escape', P.cancelSize, P.cancelColor, P.cancelPressed, '✕', '취소', P.lightLabel);
   Object.assign(cancel.style, { right: `${Math.round((P.aSize - P.cancelSize) / 2)}px`, top: '0' });
   buttons.append(toss, cancel, a);
-  pad.append(stickZone, buttons);
+  // 😊 = E (이모트 바퀴): 패드 위쪽 가운데, 스틱과 버튼들 사이
+  const emote = button('KeyE', P.cancelSize, P.emoteColor, P.emotePressed, '😊', '표현', P.lightLabel);
+  Object.assign(emote.style, { left: '50%', top: `${P.padding}px`, transform: 'translateX(-50%)' });
+  pad.append(stickZone, buttons, emote);
 
   window.addEventListener('blur', releaseAll);
   document.addEventListener('visibilitychange', () => {

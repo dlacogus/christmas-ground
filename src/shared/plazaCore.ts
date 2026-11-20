@@ -2,7 +2,7 @@
 // 서버는 잠들었다 깨어나므로 기억을 따로 두지 않는다: 접속자 정보는 접속(WebSocket)마다 붙여 둔 Seat에서,
 // 눈덩이·눈사람은 저장소(SQLite)에서 그때그때 읽어 와 이 함수들에 넘긴다.
 
-import { COPUSH, GIFT, HAT_CHASE as HC, NET, SNOWBALL, SNOWMAN, type OrnamentKind } from '../constants';
+import { COPUSH, EMOTE, GIFT, HAT_CHASE as HC, NET, SNOWBALL, SNOWMAN, type OrnamentKind } from '../constants';
 import { canUnhang, checkHang, giftIndexOf, giftOfPass, giftOpenable } from '../features/treeDecor';
 import { emptySeats, seatCount, type BallData, type HatSpot, type WireGift, type WireHat, type WireObject, type WirePlayer, type WireSeats } from './protocol';
 
@@ -23,6 +23,8 @@ export interface Session {
   hat?: HatSpot;
   /** 마지막으로 조른 때 (ms) — 1초에 한 번만 받는다 */
   begAt?: number;
+  /** 마지막으로 이모트를 보낸 때 (ms) — 0.8초에 하나만 받는다 */
+  emoteAt?: number;
   /** 사람마다 마지막으로 잡은 때 (ms) — 같은 사람은 3초에 한 번 */
   caught?: Record<string, number>;
 }
@@ -344,6 +346,13 @@ export function tryHomeHat(owner: Session, now: number): boolean {
 export function allowBeg(session: Session, now: number): boolean {
   if (session.begAt !== undefined && now - session.begAt < HC.serverBegEvery * 1000) return false;
   session.begAt = now;
+  return true;
+}
+
+/** 이모트는 한 사람 EMOTE.serverEvery초에 하나만 전한다. 받아도 되면 true (보낸 때를 적는다) */
+export function allowEmote(session: Session, now: number): boolean {
+  if (session.emoteAt !== undefined && now - session.emoteAt < EMOTE.serverEvery * 1000) return false;
+  session.emoteAt = now;
   return true;
 }
 

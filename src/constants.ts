@@ -2422,6 +2422,9 @@ export const TOUCH_PAD = {
   throwPressed: '#385fa8',
   cancelColor: '#3a3f5c',
   cancelPressed: '#262a40',
+  /** 이모트 버튼 (E): 취소 버튼과 같은 크기 */
+  emoteColor: '#8a5bc4',
+  emotePressed: '#6a4398',
   label: '#141a3a',
   lightLabel: '#f3ead6',
   caption: '#9aa6c8',
@@ -2647,5 +2650,56 @@ export const NET = {
   nameAbove: 38,
   puffCount: 10,
   storageKey: 'christmas-square.profile',
+} as const;
+
+/**
+ * 이모트(감정 표현) 6가지: 바퀴에서 위(↑)부터 시계 방향으로 60°마다 놓인다 (위·↗·↘·아래·↙·↖ — 스틱이 가리키는 쪽에서 가장 가까운 칸).
+ * 숫자 키 1~6도 이 순서. 정해진 말만 보내므로 거를 필요가 없고 메시지도 번호 하나다.
+ */
+export const EMOTES = [
+  { text: '안녕!', icon: '👋' },
+  { text: '좋아!', icon: '♥' },
+  { text: '이리 와!', icon: '👉' },
+  { text: '같이 하자!', icon: '⛄' },
+  { text: '고마워!', icon: '🙏' },
+  { text: '잘 가~', icon: '🌙' },
+] as const;
+
+export const EMOTE = {
+  /** 바퀴를 여는 키 (휴대폰 패드는 😊 버튼, 화면은 오른쪽 위 웃는 얼굴 버튼) */
+  key: 'KeyE',
+  /** 한 번 보낸 뒤 이만큼은 다시 못 보낸다 (초). 서버는 serverEvery초에 하나만 받는다 */
+  cooldown: 1,
+  serverEvery: 0.8,
+  /** 머리 위 말풍선: 떠 있는 시간, 커지며 나타나는 시간, 사라지는 시간 (초) */
+  bubbleSeconds: 2.6,
+  popSeconds: 0.18,
+  fadeSeconds: 0.35,
+  /** 말풍선 아래 끝 높이 (발밑에서 위로, 닉네임보다 조금 위) */
+  bubbleAbove: 56,
+  /** 말풍선끼리 이만큼 가까우면 (좌우, 위아래 px) 나중 것을 위로 쌓는다 */
+  stackX: 40,
+  stackY: 9,
+  /** 보낼 때 폴짝 뛰는 높이와 시간 */
+  hopHeight: 3,
+  hopSeconds: 0.3,
+  /** 말풍선 글자 크기 = 캔버스 확대 배율 × 이 값 (px), 최소 크기 */
+  fontPerScale: 5.6,
+  minFont: 13,
+  /** 바퀴 반지름 (CSS px): 게임 화면 높이 × 이 비율, 최대값 */
+  wheelRatio: 0.36,
+  wheelMax: 130,
+  bubbleBack: '#fffaf0',
+  bubbleText: '#1a1f3d',
+  bubbleBorder: '#1a1f3d',
+  heart: '#e0384a',
+  wheelBack: 'rgba(10, 13, 32, 0.86)',
+  wheelPicked: '#e2b23e',
+  /** 화면 버튼 (스피커 버튼 아래, 픽셀 웃는 얼굴) */
+  buttonGap: 3,
+  /** 바퀴를 여는 동안 안내 글자의 y (화면 위쪽, 말풍선 아래 끝) */
+  hintY: 24,
+  buttonFace: '#ffd84a',
+  buttonInk: '#3a2a10',
 } as const;
 export const DEFAULT_OUTFIT: OutfitName = 'camel';

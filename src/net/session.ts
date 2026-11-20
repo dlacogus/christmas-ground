@@ -3,7 +3,9 @@
 // 무료 한도를 아끼게 꼭 필요할 때만 보낸다 — 위치는 움직이는 동안 초당 최대 8번, 상태는 바뀔 때만.
 
 import type { Character } from '../character/character';
-import { COPUSH, HAT_GIFT, NET, SNOWMAN, THROW } from '../constants';
+import { BENCH_SIT, CAROUSEL, COPUSH, EMOTE, HAT_GIFT, NET, SNOWMAN, THROW } from '../constants';
+import { canEmote, hopLift } from '../features/emotes';
+import { createEmoteBubbles, type BubbleItem } from '../ui/emoteUi';
 import { hatOnEntry } from '../features/hatGift';
 import type { MoveInput } from '../character/character';
 import type { SnowmanPlay } from '../features/snowmanPlay';
@@ -107,6 +109,10 @@ export interface Session {
   nearCoMaker(snowman: Snowman): boolean;
   /** 한 번짜리 동작을 알린다 (재채기처럼 게임이 직접 아는 것) */
   act(a: Act): void;
+  /** 이모트 e를 보낸다 (내 머리 위에 바로 띄우고, 접속 중이면 친구들에게). 1초 안에 또 보내면 false */
+  emote(e: number): boolean;
+  /** 이모트를 보내며 폴짝 뛰는 높이 (px) */
+  myHop(): number;
   /** 매 프레임: offsetX = 본 레이어가 왼쪽으로 밀린 정도 */
   tick(dt: number, offsetX: number, labels?: readonly { x: number; y: number; text: string }[]): void;
   /** 친구 캐릭터들 */
@@ -125,6 +131,12 @@ export function createSession(deps: SessionDeps): Session {
     // 친구가 조르거나 엉덩방아를 찧는 자세
     (id) => deps.hatChase?.().poseFor(id) ?? null,
   );
+  // 머리 위 이모트 말풍선 (id → 번호·뜬 지 몇 초, 나는 'me')
+  const bubbles = createEmoteBubbles(deps.canvas);
+  const emoting = new Map<string, { e: number; age: number }>();
+  const bubbleList: BubbleItem[] = [];
+  let lastEmoteAt: number | null = null;
+  let myHopLeft = 0;
   let profile: Profile | null = loadProfile();
   let legacy = deps.legacy;
   let lastSeats: WireSeats = emptySeats();
@@ -238,6 +250,7 @@ export function createSession(deps: SessionDeps): Session {
         break;
       case 'left':
         deps.hatChase?.().left(message.id);
+        emoting.delete(message.id);
         remotes.remove(message.id);
         for (const b of snowWorld.balls) if (b.heldBy === message.id) b.heldBy = null;
         break;
@@ -254,6 +267,13 @@ export function createSession(deps: SessionDeps): Session {
       case 'hatBeg':
         deps.hatChase?.().onBeg(message.id, message.n);
         break;
+      case 'emote': {
+        const r = remotes.get(message.id);
+        if (!r) break;
+        emoting.set(message.id, { e: message.e, age: 0 });
+        r.hop = EMOTE.hopSeconds;
+        break;
+      }
       case 'act': {
         remotes.handle(message, now);
         // 곁에서 하이파이브를 청하면 나도 두 손을 든다
@@ -604,6 +624,16 @@ export function createSession(deps: SessionDeps): Session {
     act(a) {
       net.send({ t: 'act', a });
     },
+    emote(e) {
+      const now = seconds();
+      if (!canEmote(lastEmoteAt, now)) return false;
+      lastEmoteAt = now;
+      emoting.set('me', { e, age: 0 });
+      myHopLeft = character.state.get().kind === 'walk' ? EMOTE.hopSeconds : 0;
+      if (net.status === 'online') net.send({ t: 'emote', e });
+      return true;
+    },
+    myHop: () => hopLift(myHopLeft),
     tick(dt, offsetX, labels = []) {
       if (character.hatColor !== sentHatColor || character.hatOwner !== sentHatOwner) {
         sentHatColor = character.hatColor;
@@ -627,6 +657,36 @@ export function createSession(deps: SessionDeps): Session {
       if (character.hatOwner && character.hat.get() === 'on') noticeOwner(tags, offsetX, character, character.hatOwner);
       for (const r of remotes.all()) if (r.info.ho && r.info.hat === 'on') noticeOwner(tags, offsetX, r.ch, r.info.ho);
       ui.names(tags);
+      // 이모트 말풍선: 닉네임보다 조금 위에
+      myHopLeft = Math.max(0, myHopLeft - dt);
+      bubbleList.length = 0;
+      for (const [id, b] of emoting) {
+        b.age += dt;
+        if (b.age >= EMOTE.bubbleSeconds) {
+          emoting.delete(id);
+          continue;
+        }
+        if (id === 'me') {
+          const kind = character.state.get().kind;
+          const lift = kind === 'riding' ? CAROUSEL.riderAboveSeat - 30 : kind === 'sitting' ? BENCH_SIT.lift : 0;
+          bubbleList.push({ id, e: b.e, sx: character.x - offsetX, sy: character.y - EMOTE.bubbleAbove - lift, age: b.age });
+          continue;
+        }
+        const r = remotes.get(id);
+        if (!r) continue;
+        const kind = r.info.state.kind;
+        const lift = kind === 'riding' ? CAROUSEL.riderAboveSeat - 30 : kind === 'sitting' ? BENCH_SIT.lift : 0;
+        bubbleList.push({ id, e: b.e, sx: r.ch.x - offsetX, sy: r.ch.y - EMOTE.bubbleAbove - lift, age: b.age });
+      }
+      // 가까이 선 사람들의 말풍선이 겹치면 나중 것을 위로 쌓는다
+      for (let i = 1; i < bubbleList.length; i++) {
+        for (let j = 0; j < i; j++) {
+          const a = bubbleList[j];
+          const c = bubbleList[i];
+          if (Math.abs(a.sx - c.sx) < EMOTE.stackX && Math.abs(a.sy - c.sy) < EMOTE.stackY) c.sy = a.sy - EMOTE.stackY;
+        }
+      }
+      bubbles.show(bubbleList);
       if (net.status !== 'online') return;
       // 회전목마 각도와 지붕 눈이 떨어지는 때를 서버 시각에 맞춘다 (모두 같은 화면)
       const serverSeconds = net.serverNow() / 1000;

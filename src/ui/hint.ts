@@ -22,11 +22,12 @@ export interface Hint {
   setPad(on: boolean): void;
 }
 
-/** 키보드 힌트의 키 이름을 조작 패드 버튼 이름으로: Space → Ⓐ, F 던지기 → ❄ 던지기, Esc → ✕, 방향키·←→·↑ → 스틱 */
+/** 키보드 힌트의 키 이름을 조작 패드 버튼 이름으로: Space → Ⓐ, F 던지기 → ❄ 던지기, E 표현 → 😊 표현, Esc → ✕, 방향키·←→·↑ → 스틱 */
 export function padLabels(text: string): string {
   return text
     .replace(/Space/g, 'Ⓐ')
     .replace(/F 던지기/g, '❄ 던지기')
+    .replace(/E 표현/g, '😊 표현')
     .replace(/Esc/g, '✕')
     .replace(/방향키/g, '스틱')
     .replace(/(^|· )(←→|↑) /g, '$1스틱 $2 ');

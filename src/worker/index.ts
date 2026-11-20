@@ -14,6 +14,7 @@ import { ORNAMENT, type OrnamentKind } from '../constants';
 import { milestoneAt, openableGiftIds, rollOrnament } from '../features/treeDecor';
 import {
   allowBeg,
+  allowEmote,
   allowMessage,
   applyOwnHat,
   canHangOrnament,
@@ -316,6 +317,10 @@ export class Plaza extends DurableObject<Env> {
       }
       case 'act':
         this.broadcast({ t: 'act', id: me.id, a: message.a }, ws);
+        break;
+      case 'emote':
+        // 정해진 이모트 번호만, 한 사람 0.8초에 하나 (보낸 사람 화면은 이미 띄웠다)
+        if (allowEmote(session, now)) this.broadcast({ t: 'emote', id: me.id, e: message.e }, ws);
         break;
       case 'sit': {
         // 자리는 서버가 정한다: 빈자리일 때만 앉힌다

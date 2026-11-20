@@ -2,7 +2,7 @@ import { createCamera, layerOffsetX, snapCamera, updateCamera, type Camera } fro
 import { createCharacter, setDynamicObstacles, setWalkTarget } from './character/character';
 import { drawCharacter, headLook } from './character/render';
 import type { CharacterState } from './character/state';
-import { BENCH_SIT, CAROUSEL, CHARACTER, COLD, FOOTPRINTS, GIFT, HAT, HAT_CHASE, HINT, LAYER_FACTORS, PROPS, ROOF_SNOW, THROW, SANTA, SKATE, SNEEZE, SNOWBALL, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, TREE_DECOR, WARM_BUFFERS } from './constants';
+import { BENCH_SIT, CAROUSEL, CHARACTER, COLD, EMOTE, EMOTES, FOOTPRINTS, GIFT, HAT, HAT_CHASE, HINT, LAYER_FACTORS, PROPS, ROOF_SNOW, THROW, SANTA, SKATE, SNEEZE, SNOWBALL, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, TREE_DECOR, WARM_BUFFERS } from './constants';
 import { createFpsMeter, drawDebugOverlay } from './debug';
 import { createInput } from './input';
 import { createLayers, drawLayers, updateLayers } from './layers';
@@ -10,7 +10,7 @@ import { warmBuffers } from './scenery/buffer';
 import { createFootprints } from './scenery/footprints';
 import { isSnowAt, snowField } from './scenery/ground';
 import { createSanta } from './scenery/santa';
-import { fitGameToWindow, frameDt } from './screen';
+import { fitGameToWindow, frameDt, VIEW } from './screen';
 import { createTouchPad } from './ui/touchPad';
 import { createAmbience } from './audio/ambience';
 import { advanceStepTimer, createFootsteps, createStepTimer } from './audio/footsteps';
@@ -39,6 +39,9 @@ import { createRoofSnow, createSnowHits } from './features/roofSnow';
 import { createWind } from './audio/wind';
 import { createHint } from './ui/hint';
 import { drawSoundButton, hitSoundButton } from './ui/soundButton';
+import { drawEmoteButton, hitEmoteButton } from './ui/emoteButton';
+import { createEmoteWheel } from './ui/emoteUi';
+import { emoteForDir, emoteForKey } from './features/emotes';
 import { carouselGeometry } from './props/carousel';
 import { gateGeometry } from './props/carouselEntrance';
 import { CAROUSEL_GATE, CAROUSEL_X, INTERACTION_POINTS, SPAWN, TREE_X, WALK_AREA, getObstacle } from './world';
@@ -126,6 +129,16 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       // 아직 소리가 안 켜졌으면 이번 누름은 켜기만 한다 (바로 꺼지지 않게). 지난번에 꺼 두었다면 다시 켠다
       if (sound.started || sound.muted) sound.toggleMuted();
       sound.unlock();
+      return;
+    }
+    // 웃는 얼굴 버튼: 이모트 바퀴를 열고 닫는다. 바퀴가 열려 있을 때 화면을 누르면 닫기만 한다
+    if (hitEmoteButton(sx, sy)) {
+      if (emoteWheel.isOpen) emoteWheel.close();
+      else emoteWheel.open();
+      return;
+    }
+    if (emoteWheel.isOpen) {
+      emoteWheel.close();
       return;
     }
     const worldX = sx + layerOffsetX(camera, LAYER_FACTORS.main);
@@ -285,6 +298,25 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       if (isSnowAt(x, y) && !onCarpet(x, y)) footprints.add(x, y, dx, dy);
     },
   });
+  // 이모트: E(패드 😊, 화면 오른쪽 위 웃는 얼굴)로 바퀴를 열어 고르거나, 숫자 키로 바로 보낸다
+  const sendEmote = (i: number) => {
+    session.emote(i);
+    emoteWheel.close();
+  };
+  const emoteWheel = createEmoteWheel(canvas, sendEmote);
+  /** 바퀴를 가리키던 방향 (대각선에서 손을 뗄 때 한 축만 먼저 떼어져도 가리킨 칸이 바뀌지 않게) */
+  let wheelDir = { x: 0, y: 0 };
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    if (e.code === EMOTE.key) {
+      if (!emoteWheel.isOpen) emoteWheel.open();
+      else if (emoteWheel.picked !== null) sendEmote(emoteWheel.picked);
+      else emoteWheel.close();
+      return;
+    }
+    const quick = emoteForKey(e.code);
+    if (quick !== null) sendEmote(quick);
+  });
   const snowPlay = createSnowmanPlay(character, snowWorld, {
     field: snowField(),
     takePile: (x, y, halfW) => roofSnow.takePile(x, y, halfW),
@@ -422,7 +454,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
         if (skate.active) skate.drawCharacter(c, cam);
         else if (kind === 'sitting') bench.draw(c, cam);
         else if (snowHits.snowman) snowHits.drawSnowman(c, footX, footY);
-        else drawCharacter(c, character, ox, bending ? { pose: 'crouch', index: 0 } : (snowPlay.pose() ?? propsPlay.pose() ?? hatGift.pose() ?? throwPlay.pose() ?? treeDecor.pose() ?? hatChase.pose() ?? { lean: snowHits.shakeLean() }));
+        else drawCharacter(c, character, ox, bending ? { pose: 'crouch', index: 0 } : (snowPlay.pose() ?? propsPlay.pose() ?? hatGift.pose() ?? throwPlay.pose() ?? treeDecor.pose() ?? hatChase.pose() ?? { lean: snowHits.shakeLean(), lift: session.myHop() }));
         // 손에 든 노점 소품·트리 장식 (다는 동안은 treeDecor가 손에서 자리로 옮겨 그린다)
         if (!skate.active && !snowHits.snowman && !bending && !treeDecor.hidesHeld) propsPlay.drawHeld(c, footX, footY, kind === 'sitting' ? BENCH_SIT.lift : 0);
         if (!snowHits.snowman && !bending) {
@@ -490,8 +522,22 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     const fps = fpsMeter.tick((now - lastTime) / 1000);
     lastTime = now;
 
-    const actions = input.takeActions();
-    const dir = input.direction();
+    let actions = input.takeActions();
+    let dir = input.direction();
+    // 이모트 바퀴가 열려 있으면 방향키·스페이스·Esc는 바퀴가 쓴다 (캐릭터는 멈춰 있다)
+    if (emoteWheel.isOpen) {
+      const count = Math.abs(dir.x) + Math.abs(dir.y);
+      const released = count === 1 && Math.abs(wheelDir.x) + Math.abs(wheelDir.y) === 2 && (dir.x === wheelDir.x || dir.y === wheelDir.y);
+      const pointed = emoteForDir(dir.x, dir.y);
+      if (pointed !== null && !released) emoteWheel.highlight(pointed);
+      wheelDir = dir;
+      if (actions.tap || actions.hold) {
+        if (emoteWheel.picked !== null) sendEmote(emoteWheel.picked);
+        else emoteWheel.close();
+      } else if (actions.cancel) emoteWheel.close();
+      actions = { tap: false, hold: false, cancel: false, up: false, debugFriend: actions.debugFriend };
+      dir = { x: 0, y: 0 };
+    } else wheelDir = { x: 0, y: 0 };
     if (debug && actions.debugFriend) play.toggleFriend();
 
     // 추위와 재채기 (회전목마·스케이트 중에도 한다)
@@ -613,7 +659,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
         }
         skateActions = withoutSpace(actions);
       }
-      skate.handleInput(dir, skateActions, choice === 'hat' || choice === 'catchHat' || swallowSpace ? false : input.spaceHeld(), pointerWorld);
+      skate.handleInput(dir, skateActions, choice === 'hat' || choice === 'catchHat' || swallowSpace || emoteWheel.isOpen ? false : input.spaceHeld(), pointerWorld);
     } else if (bench.seated) {
       bench.handleSeated(dt, dir, actions);
     } else if (play.boarding.phase !== 'none') {
@@ -764,6 +810,9 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     stillTime = walking && !character.moving && !snowPlay.busy ? stillTime + dt : 0;
     drawLayers(ctx, camera, layers);
     drawSoundButton(ctx, sound.started && !sound.muted);
+    drawEmoteButton(ctx, emoteWheel.isOpen);
+    // 바퀴는 내 캐릭터 몸 가운데를 둘러싼다
+    emoteWheel.place(character.x - layerOffsetX(camera, LAYER_FACTORS.main), character.y - CHARACTER.spriteHeight / 2);
     if (debug) {
       drawDebugOverlay(ctx, camera, character, zones, fps, [describeState(character.state.get()), `cold ${cold.value.toFixed(0)}  B: friend  H: santa  N: sneeze  R: roof snow  T: slow${slowMotion ? ' ON' : ''}`, treeDecor.debugLine()]);
       roofSnow.drawDebug(ctx, camera);
@@ -804,9 +853,11 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     }
     // 더 가까운 상호작용이 없는 눈밭에 가만히 서 있으면 눈 굴리기를 알려 준다
     if (!h && choice === null && !propsPlay.busy && !hatGift.busy && !throwPlay.busy && !treeDecor.busy && !hatChase.busy && stillTime >= SNOWBALL.hintAfter && snowPlay.canStartHere()) {
-      h = { text: touch ? '길게 눌러 눈 굴리기 · 두 번 탭해 던지기' : 'Space 눈 굴리기 · F 던지기', anchor: 'head' };
+      h = { text: touch ? '길게 눌러 눈 굴리기 · 두 번 탭해 던지기' : 'Space 눈 굴리기 · F 던지기 · E 표현', anchor: 'head' };
     }
-    if (!h || pickLeft > 0) hint.show(null);
+    // 이모트 바퀴를 여는 동안은 화면 위쪽 가운데에 (바퀴 칸을 가리지 않게)
+    if (emoteWheel.isOpen) hint.show({ text: touch ? '눌러서 보내기 · 가운데 ✕ 닫기' : touchPad.active ? '방향키 고르기 · Space 보내기 · Esc 닫기' : `방향키 고르기 · Space 보내기 · 1~${EMOTES.length} 바로 · Esc 닫기`, sx: (VIEW.left + VIEW.right) / 2, sy: EMOTE.hintY });
+    else if (!h || pickLeft > 0) hint.show(null);
     else if (h.anchor === 'point' && h.at) hint.show({ text: h.text, sub: h.sub, sx: h.at.x - layerOffsetX(camera, LAYER_FACTORS.main), sy: h.at.y, scale: h.scale });
     else if (h.anchor === 'bottom') hint.show({ text: h.text, sub: h.sub, sx: SCREEN_WIDTH / 2, sy: HINT.bottomY });
     else if (h.anchor === 'arch') {

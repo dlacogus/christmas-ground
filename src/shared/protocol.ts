@@ -2,7 +2,7 @@
 // 서버(Durable Object 'Plaza')는 받은 메시지를 parseClientMessage로 확인하고, 다른 사람들에게 전달만 한다.
 // 브라우저·Worker 어느 쪽에서도 돌아가게 DOM도 Cloudflare API도 쓰지 않는다.
 
-import { CAROUSEL, CARRIAGE, COPUSH, NET, ORNAMENT_KINDS, PROP_IDS, PROPS, SNOWBALL, SNOWMAN, THROW, type Held, type OrnamentKind, type PropId } from '../constants';
+import { CAROUSEL, CARRIAGE, COPUSH, EMOTES, NET, ORNAMENT_KINDS, PROP_IDS, PROPS, SNOWBALL, SNOWMAN, THROW, type Held, type OrnamentKind, type PropId } from '../constants';
 import { MAP_HEIGHT, MAP_WIDTH } from '../world';
 
 // ───────────── 공통 ─────────────
@@ -183,7 +183,9 @@ export type ClientMessage =
   | { t: 'hatCatch'; from: string }
   | { t: 'hatFall'; owner: string; x: number; y: number }
   | { t: 'hatSnowman'; owner: string }
-  | { t: 'hatHome' };
+  | { t: 'hatHome' }
+  /** 이모트 (정해진 6가지 가운데 번호 하나). 서버는 한 사람 0.8초에 하나만 받는다 */
+  | { t: 'emote'; e: number };
 
 // ───────────── 서버 → 클라이언트 ─────────────
 
@@ -237,7 +239,9 @@ export type ServerMessage =
   /** owner의 털모자가 spot으로 옮겨졌다 (모두에게). by = 그렇게 만든 사람 (줍기·돌려주기·잡기·떨어뜨리기), sync = 요청이 거절돼 지금 자리를 알려 준다 */
   | { t: 'hat'; owner: string; spot: HatSpot; how: HatHow; by?: string }
   /** id가 모자를 돌려달라고 조른다 (n = 연달아 몇 번째) */
-  | { t: 'hatBeg'; id: string; n: number };
+  | { t: 'hatBeg'; id: string; n: number }
+  /** id가 이모트 e를 보냈다 (보낸 사람 빼고 모두에게) */
+  | { t: 'emote'; id: string; e: number };
 
 // ───────────── 검사 ─────────────
 
@@ -429,6 +433,8 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return isId(m.owner) ? { t: 'hatSnowman', owner: m.owner } : null;
     case 'hatHome':
       return { t: 'hatHome' };
+    case 'emote':
+      return isInt(m.e, 0, EMOTES.length - 1) ? { t: 'emote', e: m.e } : null;
     default:
       return null;
   }

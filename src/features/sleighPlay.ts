@@ -325,6 +325,10 @@ export function createSleighPlay(character: Character, deps: SleighDeps): Sleigh
   let lastRunAt = 0;
   let stowed: StowedHat | null = null;
   let time = 0;
+  /** 빙 돌아서는 모습: 축(앞 끝 x)과 지난 시간. lastF = 지난 프레임의 방향 */
+  let turn: { pivot: number; t: number } | null = null;
+  let lastF = sled.f;
+  let lastTurnX = sled.x;
   let shakeLeft = 0;
   let cheerLeft = 0;
   let noseOffLeft = 0;
@@ -577,12 +581,32 @@ export function createSleighPlay(character: Character, deps: SleighDeps): Sleigh
       const shake = shakeLeft > 0 ? (Math.floor(time * 30) % 2 === 0 ? 1 : -1) : 0;
       const left = artLeft(sled.x, sled.f) - ox + shake;
       const top = Math.round(sled.y) - ART_BOTTOM;
+      // 빙 돌아서는 중: 앞 끝(pivot)을 축으로 가로 배율 -1 → 1 (몸통이 반대편에서 넘어온다)
+      const k = turn ? Math.min(1, turn.t / K.turnSeconds) : 1;
+      const scale = turn ? -Math.cos(Math.PI * k) : 1;
+      const pivot = turn ? turn.pivot - ox : 0;
+      /** 돌아서는 동안 화면 x를 축 기준으로 줄였다 늘린다 */
+      const mapX = (x: number) => (turn ? pivot + (x - pivot) * scale : x);
+      const drawArt = (img: HTMLCanvasElement) => {
+        if (!turn) {
+          ctx.drawImage(img, left, top);
+          return;
+        }
+        if (Math.abs(scale) < 0.05) return;
+        ctx.save();
+        ctx.translate(pivot, 0);
+        ctx.scale(scale, 1);
+        ctx.drawImage(img, left - pivot, top);
+        ctx.restore();
+      };
       // 그림자
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = '#000';
-      ctx.fillRect(sx - K.halfLength, Math.round(sled.y), K.length, 2);
+      const shadowA = mapX(sx - K.halfLength);
+      const shadowB = mapX(sx + K.halfLength);
+      ctx.fillRect(Math.round(Math.min(shadowA, shadowB)), Math.round(sled.y), Math.max(1, Math.round(Math.abs(shadowB - shadowA))), 2);
       ctx.globalAlpha = 1;
-      ctx.drawImage(sleighArt('back', sled.f), left, top);
+      drawArt(sleighArt('back', sled.f));
       // 탄 사람: 뒷자리 → 앞자리 (앞사람이 뒷사람을 살짝 가린다)
       const ids = seatIds();
       for (const seat of [1, 0]) {
@@ -593,15 +617,22 @@ export function createSleighPlay(character: Character, deps: SleighDeps): Sleigh
         const p = seatPos(sled, seat);
         v.ch.x = p.x + shake;
         v.ch.y = p.y;
+        // 돌아서는 동안은 탄 사람도 축을 따라 넘어오고, 반쯤 돌았을 때 고개를 돌린다
+        const facing = facingOf(scale < 0 ? -sled.f : sled.f);
+        const drawX = mapX(p.x + shake - ox) + ox;
+        const keepX = v.ch.x;
+        v.ch.x = drawX;
+        drawCharacter(ctx, v.ch, ox, { pose: v.cheer ? 'sitCheer' : 'sit', lift: K.riderLift, shadow: false, facing });
+        v.ch.x = keepX;
         v.ch.facing = facingOf(sled.f);
-        drawCharacter(ctx, v.ch, ox, { pose: v.cheer ? 'sitCheer' : 'sit', lift: K.riderLift, shadow: false, facing: v.ch.facing });
       }
-      ctx.drawImage(sleighArt('front', sled.f), left, top);
+      drawArt(sleighArt('front', sled.f));
       // 끄는 사람의 털모자는 썰매 뒤쪽에 실려 있다
       const hat = carriedHat();
       if (hat !== undefined) {
         const img = hatCanvas(hat);
-        ctx.drawImage(img, Math.round(sled.x - sled.f * (K.halfLength - 7)) - ox - img.width / 2 + shake, top + 1);
+        const hx = mapX(Math.round(sled.x - sled.f * (K.halfLength - 7)) - ox + shake);
+        ctx.drawImage(img, Math.round(hx - img.width / 2), top + 1);
       }
       drawRope(ctx, ox);
     },
@@ -804,6 +835,16 @@ export function createSleighPlay(character: Character, deps: SleighDeps): Sleigh
         }
         markTrail();
       }
+      // 방향이 바뀌었으면 앞 끝을 축으로 빙 돌아서는 모습 (한 번에 멀리 옮겨진 것은 빼고)
+      if (turn) {
+        turn.t += dt;
+        if (turn.t >= K.turnSeconds) turn = null;
+      }
+      if (sled.f !== lastF) {
+        if (Math.abs(sled.x - lastTurnX) <= K.length + 4) turn = { pivot: hitchOf(sled).x, t: 0 };
+        lastF = sled.f;
+      }
+      lastTurnX = sled.x;
       // 타고 있으면 내 자리에 붙어 간다
       const seat = mySeat();
       if (seat >= 0) {

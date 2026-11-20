@@ -149,13 +149,29 @@ describe('썰매 끌기 (규칙)', () => {
     expect(throwVictim(['a', 'b'], { b: 0 }, K.throwCooldown * 1000)).toBe(1);
   });
 
-  it('밧줄: 멀어지면 썰매가 밧줄 길이만큼 뒤에서 따라오고, 뒤로 넘어가면 돌아선다', () => {
-    const s = { x: SLEIGH_HOME.x, y: SLEIGH_HOME.y, f: 1 as const as 1 | -1, vx: 0, vy: 0 };
+  it('밧줄: 멀어지면 썰매가 밧줄 길이만큼 뒤에서 따라온다', () => {
+    const s = { x: SLEIGH_HOME.x, y: SLEIGH_HOME.y, f: 1 as 1 | -1, vx: 0, vy: 0 };
     const puller = { x: hitchOf(s).x + K.ropeLength + 6, y: s.y };
     followRope(s, puller, 1 / 60);
     expect(Math.hypot(puller.x - hitchOf(s).x, puller.y - hitchOf(s).y)).toBeCloseTo(K.ropeLength, 1);
     expect(s.vx).toBeGreaterThan(0);
-    followRope(s, { x: s.x - K.halfLength, y: s.y }, 1 / 60);
+  });
+
+  it('오른쪽으로 가다가 왼쪽으로 가면 앞 끝을 축으로 빙 돌아서 끄는 사람 뒤를 따라온다', () => {
+    const s = { x: SLEIGH_HOME.x, y: SLEIGH_HOME.y, f: 1 as 1 | -1, vx: 0, vy: 0 };
+    const front = hitchOf(s);
+    // 앞 끝 바로 앞에서는 그대로
+    followRope(s, { x: front.x + 1, y: s.y }, 1 / 60);
+    expect(s.f).toBe(1);
+    // 앞 끝보다 뒤(왼쪽)로 가면 돌아선다: 앞 끝은 그 자리, 몸통은 오른쪽으로 넘어간다
+    followRope(s, { x: front.x - 4, y: s.y }, 1 / 60);
+    expect(s.f).toBe(-1);
+    expect(hitchOf(s).x).toBeCloseTo(front.x);
+    expect(s.x).toBeGreaterThan(front.x);
+    // 계속 왼쪽으로 가면 왼쪽으로 끌려온다
+    const x0 = s.x;
+    followRope(s, { x: front.x - K.ropeLength - 10, y: s.y }, 1 / 60);
+    expect(s.x).toBeLessThan(x0);
     expect(s.f).toBe(-1);
   });
 

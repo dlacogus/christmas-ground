@@ -96,6 +96,8 @@ export function sampleSled(samples: readonly Sample[], renderTime: number): { x:
     else if (!b) b = s;
   }
   const pick = (s: Sample) => ({ x: s.sx!, y: s.sy!, f: (s.sf === 1 ? 1 : -1) as 1 | -1 });
+  // 그 사이에 썰매가 돌아섰으면 미끄러지듯 잇지 않고 바로 (돌아서는 모습은 썰매 그림이 맡는다)
+  if (a && b && a.sf !== b.sf) return pick(b);
   if (a && b) {
     const k = (renderTime - a.t) / Math.max(1e-6, b.t - a.t);
     return { x: a.sx! + (b.sx! - a.sx!) * k, y: a.sy! + (b.sy! - a.sy!) * k, f: pick(b).f };

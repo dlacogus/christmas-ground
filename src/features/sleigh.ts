@@ -130,11 +130,22 @@ export function throwVictim(seats: readonly (string | null)[], thrownAt: Readonl
  * 밧줄 따라가기 (끄는 사람 화면이 매 프레임): 끄는 사람이 밧줄 길이보다 멀어지면 썰매 앞 끝이 그만큼 끌려온다.
  * 밧줄이 느슨하면 썰매는 가던 속도로 미끄러지다 마찰로 멈추고, 밧줄이 많이 느슨해지면 멈춘다.
  * 썰매가 막혀 못 따라오면 끄는 사람을 밧줄 길이 안으로 되돌릴 자리(pullBack)를 준다.
- * 끄는 사람이 썰매 뒤로 넘어가면 썰매가 돌아선다(앞뒤가 바뀐다).
+ * 끄는 사람이 썰매 앞 끝보다 뒤쪽으로 걸어가면(오른쪽으로 가다가 왼쪽으로) 썰매가 앞 끝을 축으로 빙 돌아선다 —
+ * 몸통이 반대편으로 넘어가 끄는 사람 뒤를 따라온다. 돌아설 자리가 막혀 있으면 끄는 사람이 썰매 가운데를 넘어갈 때 제자리에서 돌아선다.
  */
 export function followRope(s: SleighPos & { vx: number; vy: number }, puller: Point, dt: number): { pullBack: Point | null } {
-  // 끄는 사람이 썰매 뒤쪽으로 넘어가면 돌아선다
-  if ((puller.x - s.x) * s.f < -K.halfLength * 0.25) s.f = s.f > 0 ? -1 : 1;
+  const front = hitchOf(s);
+  if ((puller.x - front.x) * s.f < -K.turnMargin) {
+    const f: SleighFacing = s.f > 0 ? -1 : 1;
+    // 앞 끝은 그 자리에 두고 몸통을 반대편으로
+    const x = front.x - f * K.halfLength;
+    if (sleighFits(x, s.y)) {
+      s.x = x;
+      s.f = f;
+      s.vx = 0;
+      s.vy = 0;
+    } else if ((puller.x - s.x) * s.f < -K.halfLength * 0.25) s.f = f;
+  }
   const hitch = hitchOf(s);
   const dx = puller.x - hitch.x;
   const dy = puller.y - hitch.y;

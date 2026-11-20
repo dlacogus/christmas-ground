@@ -85,6 +85,9 @@ export const BENCH_DEPTH = 4;
 
 /** 메인 광장 이정표 (기둥 발밑). 위 판은 왼쪽 회전목마, 아래 판은 오른쪽 아이스링크를 가리킨다 */
 export const SIGNPOST: Point = { x: 542, y: 216 };
+
+/** 루돌프 썰매가 처음 놓인 자리 (발밑 = 날이 바닥에 닿는 줄의 가운데): 메인 광장 앞쪽, 트리 왼쪽 (노점과 멀리). 앞(밧줄)은 오른쪽(1) */
+export const SLEIGH_HOME = { x: 632, y: 250, f: 1 } as const;
 export const SIGNPOST_FOOT_HALF_WIDTH = 3;
 export const SIGNPOST_FOOT_DEPTH = 3;
 

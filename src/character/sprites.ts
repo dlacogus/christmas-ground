@@ -20,7 +20,8 @@ export type PoseName =
   | 'ride'
   | 'rideWave'
   | 'sit'
-  | 'sitWave';
+  | 'sitWave'
+  | 'sitCheer';
 
 const TRANSPARENT = '.';
 
@@ -79,7 +80,7 @@ export const HAT_ROWS: readonly string[] = UPPER.slice(0, 8).map((row) => row.sl
 const HEAD_ROWS = 16;
 
 /** 다리 (6줄, 26~31줄) */
-const LEGS_STAND: readonly string[] = [
+export const LEGS_STAND: readonly string[] = [
   '.....lll.LLL....',
   '.....lll.LLL....',
   '.....lll.LLL....',
@@ -89,7 +90,7 @@ const LEGS_STAND: readonly string[] = [
 ];
 
 /** 걷기: 두 발이 앞뒤로 벌어진 순간 */
-const LEGS_CONTACT: readonly string[] = [
+export const LEGS_CONTACT: readonly string[] = [
   '.....lll.LLL....',
   '....lll...LLL...',
   '....lll...LLL...',
@@ -99,7 +100,7 @@ const LEGS_CONTACT: readonly string[] = [
 ];
 
 /** 걷기: 뒷발을 들어 앞으로 넘기는 순간 */
-const LEGS_PASS: readonly string[] = [
+export const LEGS_PASS: readonly string[] = [
   '.....lllLLL.....',
   '.....lllLLL.....',
   '.....lllLLL.....',
@@ -238,7 +239,7 @@ function withWave(frame: readonly string[], arm: readonly string[]): string[] {
 const LEGS_TOP_ROW = CHARACTER.spriteHeight - LEGS_STAND.length;
 
 /** 앞다리·뒷다리 색을 맞바꾼다 (반대쪽 발이 앞에 나온 프레임) */
-function swapLegs(rows: readonly string[]): string[] {
+export function swapLegs(rows: readonly string[]): string[] {
   const swap: Record<string, string> = { L: 'l', l: 'L', F: 'f', f: 'F' };
   return rows.map((row) => [...row].map((ch) => swap[ch] ?? ch).join(''));
 }
@@ -258,7 +259,7 @@ function stamp(grid: string[][], part: readonly string[], top: number): void {
  * 다리 + 몸 + 머리를 합쳐 한 프레임을 만든다.
  * bodyShift: 몸 전체를 아래로 (걸음 반동), headShift: 머리만 더 아래로 (숨쉬기)
  */
-function composeWith(upper: readonly string[], legs: readonly string[], bodyShift: number, headShift: number): string[] {
+export function composeWith(upper: readonly string[], legs: readonly string[], bodyShift: number, headShift: number): string[] {
   const grid = Array.from({ length: CHARACTER.spriteHeight }, () =>
     Array<string>(CHARACTER.spriteWidth).fill(TRANSPARENT),
   );
@@ -301,6 +302,8 @@ function buildPoses(upper: readonly string[]): Record<PoseName, string[][]> {
   rideWave: WAVE_ARMS.map((arm) => withWave(compose(LEGS_RIDE, 0, 0), arm)),
   sit: [compose(LEGS_SIT, 0, 0)],
   sitWave: WAVE_ARMS.map((arm) => withWave(compose(LEGS_SIT, 0, 0), arm)),
+  // 썰매에 앉아 두 팔 들고 환호
+  sitCheer: [armsUp(compose(LEGS_SIT, 0, 0))],
 };
 }
 

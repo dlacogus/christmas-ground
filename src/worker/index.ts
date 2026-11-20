@@ -25,6 +25,13 @@ import {
   hatOf,
   hatsOnLeave,
   holdersOf,
+  leaveSleigh,
+  moveSleighBy,
+  sleighOf,
+  sleighRestOf,
+  tryGrabSleigh,
+  trySitSleigh,
+  tryThrowSleigh,
   isFull,
   leavePlaza,
   newSession,
@@ -42,7 +49,8 @@ import {
   type OrnamentRow,
   type Session,
 } from '../shared/plazaCore';
-import { parseClientMessage, type HatHow, type ServerMessage, type WireObject, type WireOrnament } from '../shared/protocol';
+import { parseClientMessage, type HatHow, type ServerMessage, type SleighHow, type WireObject, type WireOrnament } from '../shared/protocol';
+import type { SleighRest } from '../features/sleigh';
 
 interface Env {
   ASSETS: Fetcher;
@@ -63,6 +71,9 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 export class Plaza extends DurableObject<Env> {
+  /** 놓인 썰매 자리 (메모리 — 잠들었다 깨면 접속 정보에 적어 둔 것에서 되살린다) */
+  private sleighRest: SleighRest | null = null;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS objects (id TEXT PRIMARY KEY, kind TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL)');
@@ -179,6 +190,29 @@ export class Plaza extends DurableObject<Env> {
     return hat && typeof hat.name === 'string' ? hat.name : null;
   }
 
+  // ── 루돌프 썰매 (자리는 접속 정보에만, 저장소에 쓰지 않는다)
+
+  private rest(pairs: { session: Session }[]): SleighRest {
+    if (!this.sleighRest) this.sleighRest = sleighRestOf(pairs.map((p) => p.session));
+    return this.sleighRest;
+  }
+
+  /** 썰매 자리가 바뀌었다: 놓인 자리를 모든 접속에 적어 두고(지금 접속은 메시지 처리 끝에) 모두에게 알린다 */
+  private sleighChanged(pairs: { ws: WebSocket; session: Session }[], current: WebSocket | null, rest: SleighRest, how: SleighHow, by?: string, who?: string): void {
+    this.sleighRest = rest;
+    for (const p of pairs) {
+      p.session.sleighRest = rest;
+      if (p.ws !== current) p.ws.serializeAttachment(p.session);
+    }
+    const s = sleighOf(pairs.map((p) => p.session), rest);
+    this.broadcast({ t: 'sleigh', s, how, ...(by !== undefined ? { by } : {}), ...(who !== undefined ? { who } : {}) });
+  }
+
+  /** 거절: 보낸 사람에게만 지금 썰매 자리를 알려 준다 */
+  private sleighSync(pairs: { ws: WebSocket; session: Session }[], ws: WebSocket): void {
+    this.send(ws, { t: 'sleigh', s: sleighOf(pairs.map((p) => p.session), this.rest(pairs)), how: 'sync' });
+  }
+
   // ── 트리 장식 저장소
 
   private ornamentRow(id: string): OrnamentRow | null {
@@ -244,7 +278,9 @@ export class Plaza extends DurableObject<Env> {
         tree: this.hungOrnaments(),
         opened: this.openedGifts(now),
         mine: mine.map((r) => ({ id: String(r.id), kind: r.kind as OrnamentKind })),
+        sleigh: sleighOf(others.map((s) => s.session), this.rest(others)),
       });
+      session.sleighRest = this.rest(others);
       this.broadcast({ t: 'joined', player: { ...session.player, hl: hatOf(session) } }, ws);
       // 옮겨 온 눈사람은 다른 사람에게도 알린다
       if (message.legacy?.length) for (const o of objects) if (o.id.startsWith(`${id}-old`)) this.broadcast({ t: 'put', object: o }, ws);
@@ -258,6 +294,8 @@ export class Plaza extends DurableObject<Env> {
         me.x = message.x;
         me.y = message.y;
         me.f = message.f;
+        // 끄는 썰매 자리도 함께 (따로 더 보내지 않는다)
+        moveSleighBy(session, message.sx, message.sy, message.sf);
         this.broadcast({ ...message, id: me.id }, ws);
         break;
       case 'state': {
@@ -318,6 +356,32 @@ export class Plaza extends DurableObject<Env> {
       case 'act':
         this.broadcast({ t: 'act', id: me.id, a: message.a }, ws);
         break;
+      case 'sleighGrab': {
+        const pairs = this.pairs(ws, session);
+        const rest = tryGrabSleigh(pairs.map((p) => p.session), session, this.rest(pairs), now);
+        if (rest) this.sleighChanged(pairs, ws, rest, 'grab', me.id);
+        else this.sleighSync(pairs, ws);
+        break;
+      }
+      case 'sleighSit': {
+        const pairs = this.pairs(ws, session);
+        const sat = trySitSleigh(pairs.map((p) => p.session), session, this.rest(pairs), now);
+        if (sat) this.sleighChanged(pairs, ws, sat.rest, 'sit', me.id);
+        else this.sleighSync(pairs, ws);
+        break;
+      }
+      case 'sleighLeave': {
+        const pairs = this.pairs(ws, session);
+        const stop = message.x !== undefined && message.y !== undefined && message.f !== undefined ? { x: message.x, y: message.y, f: message.f } : undefined;
+        const rest = leaveSleigh(pairs.map((p) => p.session), session, this.rest(pairs), now, stop);
+        if (rest) this.sleighChanged(pairs, ws, rest, 'leave', me.id);
+        break;
+      }
+      case 'sleighThrow': {
+        const pairs = this.pairs(ws, session);
+        if (tryThrowSleigh(pairs.map((p) => p.session), session, message.who, now)) this.sleighChanged(pairs, ws, this.rest(pairs), 'throw', me.id, message.who);
+        break;
+      }
       case 'emote':
         // 정해진 이모트 번호만, 한 사람 0.8초에 하나 (보낸 사람 화면은 이미 띄웠다)
         if (allowEmote(session, now)) this.broadcast({ t: 'emote', id: me.id, e: message.e }, ws);
@@ -467,6 +531,9 @@ export class Plaza extends DurableObject<Env> {
     const hatDrops = hatsOnLeave([...others, session], session);
     for (const p of otherPairs) if (hatDrops.some((d) => d.owner === p.session.player?.id)) p.ws.serializeAttachment(p.session);
     for (const d of hatDrops) this.broadcast({ t: 'hat', owner: d.owner, spot: d.spot, how: 'leave', by: id }, ws);
+    // 썰매: 끌던 사람이 나가면 그 자리에 멈추고, 탄 사람이 나가면 자리가 빈다
+    const sleighPairs = [...otherPairs, { ws, session }];
+    const sleighRest = leaveSleigh(sleighPairs.map((p) => p.session), session, this.rest(sleighPairs), Date.now());
     const { seatFreed, dropped, released } = leavePlaza(session, Date.now(), others);
     session.player = null;
     ws.serializeAttachment(session);
@@ -479,6 +546,7 @@ export class Plaza extends DurableObject<Env> {
     }
     this.broadcast({ t: 'left', id }, ws);
     if (seatFreed) this.broadcast({ t: 'seats', seats: seatsOf(this.sessions().map((s) => s.session)) }, ws);
+    if (sleighRest) this.sleighChanged(otherPairs, ws, sleighRest, 'leave', id);
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {

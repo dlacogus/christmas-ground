@@ -2,6 +2,7 @@
 
 import { getSpriteCanvas } from './character/render';
 import { POSES, type Facing, type PoseName } from './character/sprites';
+import { REINDEER_POSES, getReindeerCanvas, type ReindeerPose } from './character/reindeer';
 import { CHARACTER, COLORS, DEFAULT_OUTFIT, ORNAMENT_KINDS, OUTFITS, PROP_IDS, SKATERS, SPRITE_SHEET, type OrnamentKind, type OutfitName, type PropId } from './constants';
 import { drawOrnament, drawPropIcon, PROP_NAMES, propSize } from './features/props';
 import { ORNAMENT_NAMES, isSpecial } from './features/treeDecor';
@@ -24,6 +25,7 @@ const POSE_LABELS: Record<PoseName, string> = {
   rideWave: '말·손',
   sit: '마차',
   sitWave: '마차·손',
+  sitCheer: '썰매·환호',
 };
 const FACING_LABELS: Record<Facing, string> = { right: '→', left: '←' };
 
@@ -41,6 +43,20 @@ function animatedCell(pose: PoseName, frameDuration: number, outfit: OutfitName)
     label: `${POSE_LABELS[pose]} (움직임)`,
     sprite: (time) => getSpriteCanvas(pose, Math.floor(time / frameDuration) % POSES[pose].length, 'right', outfit),
   };
+}
+
+const REINDEER_LABELS: Record<ReindeerPose, string> = { idle: '서기', walk: '걷기', run: '달리기' };
+
+/** 루돌프 바디슈트 (썰매를 끄는 사람): 모든 자세 좌우 */
+function reindeerCells(): Cell[] {
+  return (['right', 'left'] as const).flatMap((facing) =>
+    (Object.keys(REINDEER_POSES) as ReindeerPose[]).flatMap((pose) =>
+      REINDEER_POSES[pose].map((_, i) => ({
+        label: `🦌${FACING_LABELS[facing]} ${REINDEER_LABELS[pose]} ${i + 1}`,
+        sprite: () => getReindeerCanvas(pose, i, facing),
+      })),
+    ),
+  );
 }
 
 /** 노점 소품: 한 칸에 세 가지 크기(미니·중간·엄청 큰 눈사람용)를 위에서부터 */
@@ -87,6 +103,7 @@ export function startSpriteSheet(canvas: HTMLCanvasElement): void {
       animatedCell('walk', CHARACTER.walkFrameDuration, DEFAULT_OUTFIT),
       animatedCell('glide', SKATERS.glideFrameDuration, SKATERS.list[0].outfit),
     ],
+    reindeerCells(),
     PROP_IDS.map(propCell),
     ORNAMENT_KINDS.map(ornamentCell),
   ];

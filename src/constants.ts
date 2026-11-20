@@ -2665,6 +2665,132 @@ export const EMOTES = [
   { text: '잘 가~', icon: '🌙' },
 ] as const;
 
+/** 루돌프 썰매 (features/sleigh.ts 규칙, features/sleighPlay.ts 조작·그림) */
+export const SLEIGH = {
+  /** 몸통 길이(두 사람이 앞뒤로 앉는다)와 반, 바닥을 차지하는 깊이 (발밑에서 위로) */
+  length: 40,
+  halfLength: 20,
+  depth: 5,
+  /** 밧줄 길이 (썰매 앞 끝 ~ 끄는 사람 어깨), 놓여 있을 때 밧줄 끝이 앞으로 늘어진 거리, 느슨할 때 가장 크게 처지는 px */
+  ropeLength: 14,
+  ropeRestReach: 11,
+  ropeSag: 5,
+  /** 이 거리 안에서 Space: 밧줄 끝 = 끌기, 썰매 옆 = 타기 */
+  grabRadius: 12,
+  rideRadius: 18,
+  /** 타기 자리는 썰매 옆 바닥(가운데에서 앞으로 이만큼) */
+  rideFront: 6,
+  /** 자리 (가운데에서 썰매 앞쪽으로): 앞자리, 뒷자리. 앉은 사람을 몸통 위로 띄우는 px */
+  seatFront: 6,
+  seatBack: -8,
+  riderLift: 4,
+  /** 내리면 썰매 옆(앞쪽 바닥)으로 이만큼 */
+  getOffFront: 9,
+  /** 걸음 배율: 처음, 방향키를 계속 누르면 올라가는 최대(달리기), 최대까지 걸리는 초, 손을 떼면 줄어드는 빠르기(초당) */
+  startSpeed: 0.85,
+  maxSpeed: 1.6,
+  rampSeconds: 2.5,
+  rampFall: 2.5,
+  /** 탄 사람 한 명당 느려지는 비율 */
+  perRider: 0.1,
+  /** 이 배율 넘게 빠르면 달리는 루돌프 */
+  runFrom: 1.2,
+  /** 미끄러짐: 초당 줄어드는 비율, 밧줄이 이만큼(밧줄 길이 비율)보다 짧아지면 멈춘다 */
+  friction: 3,
+  slackStop: 0.55,
+  /** 놓았을 때 멈출 자리까지 스르르 가는 시간 */
+  releaseSlideSeconds: 0.6,
+  /** 아무도 안 쓰면 이만큼 뒤에 제자리로 천천히 미끄러져 돌아간다 (초) */
+  idleReturnSeconds: 120,
+  returnSeconds: 12,
+  /** 급회전: 이만큼 달리다가 (속도 단계 0~1) 반대쪽(방향 내적 이하)을 누르면, 손을 떼고 바꾸는 틈 (초) */
+  sharpTurnRamp: 0.95,
+  sharpTurnDot: -0.5,
+  sharpTurnGrace: 0.3,
+  /** 같은 사람은 이만큼에 한 번만 튕겨 나간다 (초), 썰매가 흔들리는 시간 */
+  throwCooldown: 10,
+  shakeSeconds: 0.5,
+  /** 튕겨 나가 데굴데굴: 구르는 시간·거리·바퀴 수, 엎드려 있는 시간, 눈가루 수 */
+  tumbleSeconds: 0.7,
+  tumbleDistance: 26,
+  tumbleTurns: 2,
+  lieSeconds: 1,
+  tumbleDust: 16,
+  /** 타는 사람 ↑ = 두 팔 들고 환호 */
+  cheerSeconds: 1,
+  /** 루돌프 옷을 입고 벗을 때 '평' (가려져 있는 시간, 눈가루 수) */
+  poofSeconds: 0.3,
+  poofDust: 22,
+  /** 날 자국: 남아 있는 시간, 최대 점 수, 점 사이 간격, 두 줄 사이 (위아래 px) */
+  trailLife: 25,
+  trailMax: 700,
+  trailGap: 1,
+  trailSpread: 3,
+  trailAlpha: 0.7,
+  /** 남은 시간이 이 비율 아래로 내려가면 흐려지기 시작한다 */
+  trailFadeFrom: 0.5,
+  /** 빨간 코 빛: 반지름 (가만히 ~ 가장 빨리), 숨쉬는 주기(초), 밝기, 재채기 반짝 (초·반지름), 눈덩이에 맞아 꺼지는 시간 */
+  noseRadius: 14,
+  noseRunRadius: 22,
+  noseBreathSeconds: 2.4,
+  noseAlpha: 0.55,
+  /** 코 둘레 빛 번짐 (얼굴을 덮지 않게 작고 옅게): 반지름 비율, 밝기 */
+  noseBloomRatio: 0.3,
+  noseBloomAlpha: 0.3,
+  noseFlashSeconds: 0.5,
+  noseFlashRadius: 34,
+  noseOffSeconds: 0.45,
+  /** 루돌프 걸음: 프레임 시간 (걷기·달리기), 통통 뛰는 높이, 달릴 때 몸을 숙이는 px */
+  walkFrameSeconds: 0.13,
+  runFrameSeconds: 0.085,
+  walkBounce: 1,
+  runBounce: 2,
+  runLean: 1,
+  /** ?debug=1: 가짜 친구를 앞자리에 앉힌다 */
+  debugKey: 'KeyU',
+} as const;
+
+export const SLEIGH_COLORS = {
+  red: '#c8343e',
+  redLight: '#e0505a',
+  redDark: '#8f2230',
+  gold: '#e8bf4a',
+  goldDark: '#a87d22',
+  wood: '#9a6a3c',
+  woodDark: '#5e3a20',
+  inside: '#5a1820',
+  rope: '#d8b67a',
+  ropeDark: '#a8864a',
+  trail: '#7584ab',
+  nose: '#ff3a46',
+  dust: '#f3f6ff',
+  /** 이름표 옆 뿔 아이콘 (어두운 배경에서도 보이게 밝게) */
+  antlerIcon: '#c08a52',
+} as const;
+
+/** 루돌프 바디슈트 (끄는 사람만): 원래 옷·머리와 상관없이 모두 같은 모습 */
+export const REINDEER_PALETTE: Readonly<Record<string, string>> = {
+  A: '#4a2e1a', // 뿔
+  B: '#8a5a36', // 털옷
+  b: '#6b4328', // 털옷 그늘
+  T: '#ead3ab', // 배
+  S: '#ffdcbf', // 얼굴
+  s: '#f2bd98',
+  E: '#2b1d26', // 눈
+  C: '#ff9b9b', // 볼
+  N: '#ff3a46', // 빨간 코
+  n: '#ff9aa0', // 코 반짝임
+  H: '#3a2416', // 손 발굽
+  W: '#ffffff', // 꼬리
+  Q: '#d8b67a', // 어깨에 멘 밧줄
+  L: '#8a5a36', // 다리
+  l: '#6b4328',
+  F: '#3a2416', // 발굽
+  f: '#2a190e',
+};
+/** 코가 꺼졌을 때 (눈덩이에 맞음) */
+export const REINDEER_NOSE_OFF = '#7a2a30';
+
 export const EMOTE = {
   /** 바퀴를 여는 키 (휴대폰 패드는 😊 버튼, 화면은 오른쪽 위 웃는 얼굴 버튼) */
   key: 'KeyE',

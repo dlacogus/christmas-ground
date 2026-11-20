@@ -11,6 +11,7 @@ import type { MoveInput } from '../character/character';
 import type { SnowmanPlay } from '../features/snowmanPlay';
 import type { TreeDecor } from '../features/treeDecorPlay';
 import type { HatChase } from '../features/hatChase';
+import type { RemoteView, SleighPlay } from '../features/sleighPlay';
 import type { RoofSnow, SnowHits } from '../features/roofSnow';
 import type { Ball, Snowman, SnowThing, SnowWorld } from '../features/snowman';
 import { emptySeats, type Act, type Maker, type ServerMessage, type SnowmanData, type WireHat, type WireSeats, type WireState } from '../shared/protocol';
@@ -41,7 +42,7 @@ export interface SessionDeps {
   /** 친구가 눈덩이를 던졌다 / 눈사람 머리를 맞혔다 / 누가 맞았다 (to가 나면 me = true) */
   thrown?: (start: { x: number; y: number }, dir: { x: number; y: number }, peak: number) => void;
   headHit?: (snowman: Snowman, n: number, dir: number) => void;
-  splatted?: (at: { x: number; y: number; lift: number }, me: boolean, head: boolean, dir: number) => void;
+  splatted?: (at: { x: number; y: number; lift: number }, me: boolean, head: boolean, dir: number, id?: string) => void;
   /** 다시 들어올 때 새 모자를 쓴다 */
   newHat?: () => void;
   /** 친구가 눈사람에 소품을 달아줬다 */
@@ -52,6 +53,8 @@ export interface SessionDeps {
   treeDecor?: () => TreeDecor;
   /** 남의 모자 주워 쓰기·조르기·돌려주기·잡기 (모자 자리는 서버가 정한다) */
   hatChase?: () => HatChase;
+  /** 루돌프 썰매 (자리는 서버가 정한다) */
+  sleigh?: () => SleighPlay | null;
   /** 예전에 이 브라우저에만 저장해 둔 내 눈사람 (처음 접속 때 서버로 옮기고 지운다) */
   legacy: SnowmanData[];
 }
@@ -84,6 +87,15 @@ export interface Session {
   };
   /** 서버에 붙어 있나, 서버가 준 내 접속 id, 서버 시각 (ms — 접속이 없으면 내 시계) */
   online(): boolean;
+  /** 썰매: 끌기·타기·내리기(끄던 사람은 멈출 자리)·급회전으로 튕겨 나감 */
+  readonly sleighSend: {
+    grab(): void;
+    sit(): void;
+    leave(stop?: { x: number; y: number; f: 0 | 1 }): void;
+    throwOut(who: string): void;
+  };
+  /** 썰매가 그릴 친구 모습 */
+  remoteView(id: string): RemoteView | null;
   /** 털모자 주고받기를 서버에 보낸다 */
   readonly hats: {
     pick(owner: string, sm?: string): void;
@@ -130,6 +142,7 @@ export function createSession(deps: SessionDeps): Session {
     (x, y, dx, dy) => deps.step?.(x, y, dx, dy),
     // 친구가 조르거나 엉덩방아를 찧는 자세
     (id) => deps.hatChase?.().poseFor(id) ?? null,
+    () => deps.sleigh?.() ?? null,
   );
   // 머리 위 이모트 말풍선 (id → 번호·뜬 지 몇 초, 나는 'me')
   const bubbles = createEmoteBubbles(deps.canvas);
@@ -192,6 +205,7 @@ export function createSession(deps: SessionDeps): Session {
     const s = character.state.get();
     if (s.kind === 'riding') return { kind: 'riding', mount: s.mount, slot: s.slot };
     if (s.kind === 'sitting') return { kind: 'sitting', bench: s.bench, slot: s.slot };
+    if (s.kind === 'inSleigh') return { kind: 'inSleigh', seat: s.seat };
     return { kind: s.kind };
   };
   const sendState = (force = false) => {
@@ -241,6 +255,8 @@ export function createSession(deps: SessionDeps): Session {
             // 못 지워도 다음 접속 때 서버가 같은 것을 다시 받을 뿐이다
           }
         }
+        // 썰매 자리 (나는 새 접속이라 썰매에 없다)
+        deps.sleigh?.()?.onState(message.sleigh, 'sync');
         sentRiding = false;
         sendState(true);
         break;
@@ -267,6 +283,9 @@ export function createSession(deps: SessionDeps): Session {
       case 'hatBeg':
         deps.hatChase?.().onBeg(message.id, message.n);
         break;
+      case 'sleigh':
+        deps.sleigh?.()?.onState(message.s, message.how, message.by, message.who);
+        break;
       case 'emote': {
         const r = remotes.get(message.id);
         if (!r) break;
@@ -276,6 +295,8 @@ export function createSession(deps: SessionDeps): Session {
       }
       case 'act': {
         remotes.handle(message, now);
+        // 썰매를 끄는 루돌프가 재채기하면 모자 대신 코에서 빨간 빛이 반짝
+        if (message.a === 'sneeze' && deps.sleigh?.()?.puller === message.id) deps.sleigh?.()?.noseFlash();
         // 곁에서 하이파이브를 청하면 나도 두 손을 든다
         const from = remotes.get(message.id);
         if (message.a === 'highfive' && from && Math.hypot(from.ch.x - character.x, from.ch.y - character.y) <= COPUSH.highFiveRadius) {
@@ -337,12 +358,14 @@ export function createSession(deps: SessionDeps): Session {
         break;
       }
       case 'splat': {
-        if (message.to === net.id) deps.splatted?.({ x: character.x, y: character.y, lift: 0 }, true, message.head === 1, message.dir);
+        if (message.to === net.id) deps.splatted?.({ x: character.x, y: character.y, lift: 0 }, true, message.head === 1, message.dir, message.to);
         else {
           const r = remotes.get(message.to);
           if (!r) break;
-          r.faceSnow = THROW.faceSnowSeconds;
-          deps.splatted?.({ x: r.ch.x, y: r.ch.y, lift: 0 }, false, message.head === 1, message.dir);
+          // 썰매를 끄는 루돌프는 얼굴 대신 코가 잠깐 꺼진다
+          if (deps.sleigh?.()?.puller === message.to) deps.sleigh?.()?.noseBlink();
+          else r.faceSnow = THROW.faceSnowSeconds;
+          deps.splatted?.({ x: r.ch.x, y: r.ch.y, lift: 0 }, false, message.head === 1, message.dir, message.to);
         }
         break;
       }
@@ -406,6 +429,7 @@ export function createSession(deps: SessionDeps): Session {
       // 접속이 없는 동안 친구들은 보이지 않는다 (혼자 돌아다닐 수는 있다)
       remotes.clear();
       applySeats(emptySeats());
+      deps.sleigh?.()?.onOffline();
     }
     ui.status(status === 'reconnecting' ? '다시 연결 중…' : status === 'connecting' ? '연결 중…' : null);
     if (status === 'full') ui.notice('광장이 꽉 찼어요 (8명)', '다시 시도', () => enter());
@@ -470,12 +494,22 @@ export function createSession(deps: SessionDeps): Session {
   let lastY = character.y;
   let lastPosSent = 0;
   let sentMoving = false;
+  let lastSledX = 0;
+  let lastSledY = 0;
   const sendPosition = (now: number) => {
-    const moved = character.x !== lastX || character.y !== lastY;
+    let moved = character.x !== lastX || character.y !== lastY;
     lastX = character.x;
     lastY = character.y;
     // 탭을 숨겼거나 회전목마를 타는 중(자리로 정해진다)이면 보내지 않는다
-    if (document.hidden || character.state.get().kind === 'riding') return;
+    const kind = character.state.get().kind;
+    if (document.hidden || kind === 'riding' || kind === 'inSleigh') return;
+    // 끄는 썰매 자리도 함께 싣는다 (끄는 사람이 멈춰도 썰매가 미끄러지는 동안은 보낸다)
+    const sled = deps.sleigh?.()?.myPull() ?? null;
+    if (sled && (sled.x !== lastSledX || sled.y !== lastSledY)) moved = true;
+    if (sled) {
+      lastSledX = sled.x;
+      lastSledY = sled.y;
+    }
     if (!moved && !sentMoving) return;
     if (moved && now - lastPosSent < 1 / NET.positionsPerSecond) return;
     lastPosSent = now;
@@ -488,6 +522,7 @@ export function createSession(deps: SessionDeps): Session {
       f: character.facing === 'right' ? 1 : 0,
       m: moved ? 1 : 0,
       ...(s && moved ? { vx: Math.round(s.vx), vy: Math.round(s.vy) } : {}),
+      ...(sled ? { sx: sled.x, sy: sled.y, sf: sled.f } : {}),
     });
   };
 
@@ -573,6 +608,25 @@ export function createSession(deps: SessionDeps): Session {
       },
     },
     online: () => net.status === 'online',
+    sleighSend: {
+      grab() {
+        net.send({ t: 'sleighGrab' });
+      },
+      sit() {
+        net.send({ t: 'sleighSit' });
+      },
+      leave(stop) {
+        net.send(stop ? { t: 'sleighLeave', ...stop } : { t: 'sleighLeave' });
+      },
+      throwOut(who) {
+        net.send({ t: 'sleighThrow', who });
+      },
+    },
+    remoteView(id) {
+      const r = remotes.get(id);
+      if (!r) return null;
+      return { ch: r.ch, cheer: r.cheerLeft > 0, faceSnow: r.faceSnow, sled: r.sled, hatOn: r.info.hat === 'on', hatColor: r.ch.hatColor };
+    },
     hats: {
       pick(owner, sm) {
         net.send(sm === undefined ? { t: 'hatPick', owner } : { t: 'hatPick', owner, sm });

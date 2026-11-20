@@ -12,7 +12,26 @@ export type WireState =
   | { kind: 'walk' }
   | { kind: 'riding'; mount: number; slot: number }
   | { kind: 'skating' }
-  | { kind: 'sitting'; bench: number; slot: number };
+  | { kind: 'sitting'; bench: number; slot: number }
+  | { kind: 'pullingSleigh' }
+  | { kind: 'inSleigh'; seat: number };
+
+/**
+ * 루돌프 썰매 (서버가 자리를 정한다 — 메모리와 접속 정보에만, 저장소에 쓰지 않는다):
+ * p = 끄는 사람 id, s = 타는 자리 [앞, 뒤], (x, y, f) = 놓인 자리 (끄는 동안은 끄는 사람의 pos 메시지가 실어 오는 sx·sy·sf가 실제 자리),
+ * since = 아무도 안 쓰기 시작한 서버 시각 (ms, 쓰는 중이면 null) — 2분 뒤 제자리로 돌아가는 것을 각자 계산한다.
+ */
+export interface WireSleigh {
+  p: string | null;
+  s: (string | null)[];
+  x: number;
+  y: number;
+  f: 0 | 1;
+  since: number | null;
+}
+
+/** 썰매 자리가 왜 바뀌었나 (연출을 고른다). sync = 요청이 거절됐다 */
+export type SleighHow = 'grab' | 'sit' | 'leave' | 'throw' | 'sync';
 
 /** 털모자: 쓰고 있거나, 눈사람에게 씌워 줬거나, 다른 사람이 주워 쓰고 있거나, 떨어져 있는 자리 */
 export type WireHat = 'on' | 'onSnowman' | 'taken' | { x: number; y: number };
@@ -141,7 +160,7 @@ export type ClientMessage =
   /** 입장 (맨 처음 한 번). legacy = 예전에 이 브라우저에만 저장해 둔 내 눈사람 (서버로 옮긴다) */
   | { t: 'join'; name: string; scarf: number; legacy?: SnowmanData[] }
   /** 위치 (움직이는 동안 초당 최대 8번, 멈추면 한 번). 스케이트 중에는 속도도 */
-  | { t: 'pos'; x: number; y: number; f: 0 | 1; m: 0 | 1; vx?: number; vy?: number }
+  | { t: 'pos'; x: number; y: number; f: 0 | 1; m: 0 | 1; vx?: number; vy?: number; sx?: number; sy?: number; sf?: 0 | 1 }
   /** 상태가 바뀌었을 때만 */
   | { t: 'state'; state: WireState; hat: WireHat; hold?: Held | null; hc?: number | null; ho?: string | null }
   | { t: 'act'; a: Act }
@@ -185,7 +204,15 @@ export type ClientMessage =
   | { t: 'hatSnowman'; owner: string }
   | { t: 'hatHome' }
   /** 이모트 (정해진 6가지 가운데 번호 하나). 서버는 한 사람 0.8초에 하나만 받는다 */
-  | { t: 'emote'; e: number };
+  | { t: 'emote'; e: number }
+  /**
+   * 썰매: 밧줄을 잡겠다 (끌기) / 타겠다 (앞자리부터) / 내리거나 놓겠다 (끄던 사람은 썰매가 미끄러져 멈출 자리 x·y·f) /
+   * 급회전으로 who가 튕겨 나갔다 (끄는 사람 화면이 판정한다)
+   */
+  | { t: 'sleighGrab' }
+  | { t: 'sleighSit' }
+  | { t: 'sleighLeave'; x?: number; y?: number; f?: 0 | 1 }
+  | { t: 'sleighThrow'; who: string };
 
 // ───────────── 서버 → 클라이언트 ─────────────
 
@@ -203,12 +230,14 @@ export type ServerMessage =
       tree: WireOrnament[];
       opened: string[];
       mine: { id: string; kind: OrnamentKind }[];
+      /** 썰매 자리 */
+      sleigh: WireSleigh;
     }
   /** 광장이 꽉 찼다 (8명) */
   | { t: 'full' }
   | { t: 'joined'; player: WirePlayer }
   | { t: 'left'; id: string }
-  | { t: 'pos'; id: string; x: number; y: number; f: 0 | 1; m: 0 | 1; vx?: number; vy?: number }
+  | { t: 'pos'; id: string; x: number; y: number; f: 0 | 1; m: 0 | 1; vx?: number; vy?: number; sx?: number; sy?: number; sf?: 0 | 1 }
   | { t: 'state'; id: string; state: WireState; hat: WireHat; hold?: Held | null; hc?: number | null; ho?: string | null }
   | { t: 'act'; id: string; a: Act }
   | { t: 'seats'; seats: WireSeats }
@@ -241,7 +270,9 @@ export type ServerMessage =
   /** id가 모자를 돌려달라고 조른다 (n = 연달아 몇 번째) */
   | { t: 'hatBeg'; id: string; n: number }
   /** id가 이모트 e를 보냈다 (보낸 사람 빼고 모두에게) */
-  | { t: 'emote'; id: string; e: number };
+  | { t: 'emote'; id: string; e: number }
+  /** 썰매 자리가 바뀌었다 (모두에게). by = 그렇게 한 사람, who = 튕겨 나간 사람. 거절이면 보낸 사람에게만 how = 'sync' */
+  | { t: 'sleigh'; s: WireSleigh; how: SleighHow; by?: string; who?: string };
 
 // ───────────── 검사 ─────────────
 
@@ -272,7 +303,8 @@ export function cleanName(v: unknown): string | null {
 export function validState(v: unknown): v is WireState {
   if (typeof v !== 'object' || v === null) return false;
   const s = v as Record<string, unknown>;
-  if (s.kind === 'walk' || s.kind === 'skating') return true;
+  if (s.kind === 'walk' || s.kind === 'skating' || s.kind === 'pullingSleigh') return true;
+  if (s.kind === 'inSleigh') return isInt(s.seat, 0, 1);
   if (s.kind === 'riding') return isInt(s.mount, 0, CAROUSEL.horseCount - 1) && isInt(s.slot, 0, seatCount(s.mount as number) - 1);
   if (s.kind === 'sitting') return isInt(s.bench, 0, 7) && isInt(s.slot, 0, 1);
   return false;
@@ -379,6 +411,12 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
         out.vx = m.vx;
         out.vy = m.vy;
       }
+      // 끄는 썰매의 자리
+      if (inMap(m.sx, m.sy) && isBit(m.sf)) {
+        out.sx = m.sx as number;
+        out.sy = m.sy as number;
+        out.sf = m.sf;
+      }
       return out;
     }
     case 'state':
@@ -435,6 +473,15 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return { t: 'hatHome' };
     case 'emote':
       return isInt(m.e, 0, EMOTES.length - 1) ? { t: 'emote', e: m.e } : null;
+    case 'sleighGrab':
+    case 'sleighSit':
+      return { t: m.t };
+    case 'sleighLeave':
+      // 끄던 사람만 멈출 자리를 보낸다 (맵 안이어야 한다)
+      if (m.x === undefined) return { t: 'sleighLeave' };
+      return inMap(m.x, m.y) && isBit(m.f) ? { t: 'sleighLeave', x: m.x as number, y: m.y as number, f: m.f } : null;
+    case 'sleighThrow':
+      return isId(m.who) ? { t: 'sleighThrow', who: m.who } : null;
     default:
       return null;
   }

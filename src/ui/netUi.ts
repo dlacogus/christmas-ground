@@ -2,7 +2,7 @@
 //   입장 창(닉네임 + 목도리 색), 구석의 작은 상태 글자('다시 연결 중…'), 가운데 안내('광장이 꽉 찼어요', '다시 들어가기'),
 //   친구 캐릭터 머리 위 닉네임.
 
-import { NET, OUTFITS, SCREEN_HEIGHT, SCREEN_WIDTH, type OutfitName } from '../constants';
+import { NET, OUTFITS, SCREEN_HEIGHT, SLEIGH_COLORS, SCREEN_WIDTH, type OutfitName } from '../constants';
 import { cleanName } from '../shared/protocol';
 import type { Profile } from '../net/client';
 
@@ -113,8 +113,24 @@ export interface NetUi {
   status(text: string | null): void;
   /** 가운데 안내. 단추가 있으면 누를 때 onClick (null이면 닫는다) */
   notice(text: string | null, buttonLabel?: string, onClick?: () => void): void;
-  /** 머리 위 닉네임들: (sx, sy) = 내부 해상도 화면 좌표 */
-  names(list: readonly { id: string; name: string; sx: number; sy: number }[]): void;
+  /** 머리 위 닉네임들: (sx, sy) = 내부 해상도 화면 좌표. icon = 이름 옆 작은 픽셀 그림 (루돌프 뿔) */
+  names(list: readonly { id: string; name: string; sx: number; sy: number; icon?: 'antler' }[]): void;
+}
+
+/** 이름표 옆 작은 픽셀 뿔 (썰매를 끄는 루돌프). 코드로 찍어 한 번만 만든다 */
+const ANTLER = ['A.A.A.A', '.AA.AA.', '..A.A..', '..A.A..'];
+let antlerUrl: string | null = null;
+function antlerIcon(): string {
+  if (antlerUrl) return antlerUrl;
+  const c = document.createElement('canvas');
+  c.width = ANTLER[0].length;
+  c.height = ANTLER.length;
+  const g = c.getContext('2d')!;
+  // 어두운 이름표 그림자 위에서도 보이게 밝은 뿔색
+  g.fillStyle = SLEIGH_COLORS.antlerIcon;
+  ANTLER.forEach((row, y) => [...row].forEach((ch, x) => ch === 'A' && g.fillRect(x, y, 1, 1)));
+  antlerUrl = c.toDataURL();
+  return antlerUrl;
 }
 
 export function createNetUi(canvas: HTMLCanvasElement): NetUi {
@@ -176,7 +192,17 @@ export function createNetUi(canvas: HTMLCanvasElement): NetUi {
           document.body.append(tag);
           tags.set(item.id, tag);
         }
-        if (tag.textContent !== item.name) tag.textContent = item.name;
+        const label = item.icon ? `${item.icon}|${item.name}` : item.name;
+        if (tag.dataset.label !== label) {
+          tag.dataset.label = label;
+          tag.textContent = item.name;
+          if (item.icon) {
+            const img = document.createElement('img');
+            img.src = antlerIcon();
+            Object.assign(img.style, { width: '14px', height: '8px', imageRendering: 'pixelated', marginLeft: '3px', verticalAlign: 'middle' });
+            tag.append(img);
+          }
+        }
         const visible = item.sx > -10 && item.sx < SCREEN_WIDTH + 10;
         tag.style.display = visible ? 'block' : 'none';
         tag.style.left = `${rect.left + (item.sx / SCREEN_WIDTH) * rect.width}px`;

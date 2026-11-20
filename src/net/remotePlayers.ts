@@ -21,6 +21,10 @@ interface Sample {
   f: 0 | 1;
   vx: number;
   vy: number;
+  /** 끄는 썰매 자리 (끄는 동안만) */
+  sx?: number;
+  sy?: number;
+  sf?: 0 | 1;
 }
 
 export interface Remote {
@@ -45,6 +49,8 @@ export interface Remote {
   faceSnow: number;
   /** 이모트를 보내며 폴짝 뛰는 남은 시간 */
   hop: number;
+  /** 끄는 썰매 자리 (받은 것 사이를 이어서, 끄는 동안만) */
+  sled: { x: number; y: number; f: 1 | -1 } | null;
 }
 
 interface Puff {
@@ -80,6 +86,32 @@ export function samplePosition(samples: readonly Sample[], renderTime: number): 
   return { x: samples[0].x, y: samples[0].y, f: samples[0].f };
 }
 
+/** 받은 썰매 자리 사이를 이어 그릴 자리 (썰매 자리가 실린 것만) */
+export function sampleSled(samples: readonly Sample[], renderTime: number): { x: number; y: number; f: 1 | -1 } | null {
+  let a: Sample | null = null;
+  let b: Sample | null = null;
+  for (const s of samples) {
+    if (s.sx === undefined) continue;
+    if (s.t <= renderTime) a = s;
+    else if (!b) b = s;
+  }
+  const pick = (s: Sample) => ({ x: s.sx!, y: s.sy!, f: (s.sf === 1 ? 1 : -1) as 1 | -1 });
+  if (a && b) {
+    const k = (renderTime - a.t) / Math.max(1e-6, b.t - a.t);
+    return { x: a.sx! + (b.sx! - a.sx!) * k, y: a.sy! + (b.sy! - a.sy!) * k, f: pick(b).f };
+  }
+  if (a) return pick(a);
+  return b ? pick(b) : null;
+}
+
+/** 썰매와 함께 그리는 친구들 (sleighPlay가 정한다) */
+export interface RemoteSleighHooks {
+  /** 썰매에 탄 친구의 자리 */
+  seatOf(id: string): { x: number; y: number; facing: 'left' | 'right' } | null;
+  /** 친구를 대신 그린다 (끄는 친구는 루돌프, '평', 구르기, 탄 친구는 썰매가 그린다). 그렸으면 true */
+  drawRemote(id: string, ch: Character, ctx: CanvasRenderingContext2D, offsetX: number): boolean;
+}
+
 export interface RemotePlayers {
   readonly count: number;
   get(id: string): Remote | undefined;
@@ -94,7 +126,7 @@ export interface RemotePlayers {
   /** 발밑 y로 앞뒤 정렬해 그릴 것들 (사람이 들고 날 때마다 바뀐다) */
   drawables(): readonly DepthDrawable[];
   /** 머리 위 닉네임 자리 (내부 해상도 화면 좌표) */
-  names(offsetX: number): { id: string; name: string; sx: number; sy: number }[];
+  names(offsetX: number): { id: string; name: string; sx: number; sy: number; icon?: 'antler' }[];
 }
 
 /** poseFor = 친구 자세를 바꿔 그릴 때 (모자 조르기·엉덩방아 등). 없으면 null */
@@ -103,6 +135,7 @@ export function createRemotePlayers(
   rideTime: () => number,
   onStep?: (x: number, y: number, dx: number, dy: number) => void,
   poseFor?: (id: string) => DrawOptions | null,
+  sleigh?: () => RemoteSleighHooks | null,
 ): RemotePlayers {
   const remotes = new Map<string, Remote>();
   const puffs: Puff[] = [];
@@ -149,6 +182,11 @@ export function createRemotePlayers(
       const footX = Math.round(r.ch.x) - ox;
       if (footX < -30 || footX > SCREEN_WIDTH + 30) return;
       const footY = Math.round(r.ch.y);
+      // 썰매: 끄는 친구는 루돌프로, 탄 친구는 썰매가 그린다 ('평'·구르기도)
+      if (sleigh?.()?.drawRemote(r.info.id, r.ch, ctx, ox)) {
+        r.sneeze.draw(ctx, ox);
+        return;
+      }
       // 회전목마에 탄 친구는 회전목마가 탈 것과 함께 그린다
       if (kind !== 'riding') {
         const special = r.hits.snowman ? null : (poseFor?.(r.info.id) ?? null);
@@ -230,6 +268,7 @@ export function createRemotePlayers(
         walked: 0,
         faceSnow: 0,
         hop: 0,
+        sled: null,
       };
       remotes.set(player.id, r);
       applyState(r, player.state, player.hat, false, player.hold ?? null, player.hc ?? null, player.ho ?? null);
@@ -252,7 +291,13 @@ export function createRemotePlayers(
       const r = remotes.get(message.id);
       if (!r) return;
       if (message.t === 'pos') {
-        r.samples.push({ t: now, x: message.x, y: message.y, f: message.f, vx: message.vx ?? 0, vy: message.vy ?? 0 });
+        const sample: Sample = { t: now, x: message.x, y: message.y, f: message.f, vx: message.vx ?? 0, vy: message.vy ?? 0 };
+        if (message.sx !== undefined && message.sy !== undefined && message.sf !== undefined) {
+          sample.sx = message.sx;
+          sample.sy = message.sy;
+          sample.sf = message.sf;
+        }
+        r.samples.push(sample);
         if (r.samples.length > 12) r.samples.shift();
       } else if (message.t === 'state') applyState(r, message.state, message.hat, true, message.hold ?? null, message.hc ?? null, message.ho ?? null);
       else act(r, message.a);
@@ -267,16 +312,27 @@ export function createRemotePlayers(
       }
       for (const r of remotes.values()) {
         const ch = r.ch;
+        const seat = r.info.state.kind === 'inSleigh' ? (sleigh?.()?.seatOf(r.info.id) ?? null) : null;
         if (r.info.state.kind === 'riding') {
           // 자리는 서버가 정한 배열에서: 탈 것을 따라 움직인다
           syncToSeat(ch, seats, r.info.id, rideTime());
           ch.moving = false;
+        } else if (seat) {
+          // 썰매에 탄 친구는 썰매 자리를 따라간다
+          ch.x = seat.x;
+          ch.y = seat.y;
+          ch.facing = seat.facing;
+          ch.moving = false;
+          r.walked = 0;
+          // 내리면 그 자리에서부터 이어 그린다
+          r.samples.length = 0;
+          r.samples.push({ t: now - NET.renderDelay, x: seat.x, y: seat.y, f: seat.facing === 'right' ? 1 : 0, vx: 0, vy: 0 });
         } else {
           const p = samplePosition(r.samples, now - NET.renderDelay);
           if (p) {
             const moved = Math.hypot(p.x - ch.x, p.y - ch.y);
             // 걸은 거리만큼 발자국을 남긴다 (한 번에 멀리 옮겨지면 찍지 않는다)
-            if (r.info.state.kind !== 'walk' || moved > FOOTPRINTS.stride) r.walked = 0;
+            if ((r.info.state.kind !== 'walk' && r.info.state.kind !== 'pullingSleigh') || moved > FOOTPRINTS.stride) r.walked = 0;
             else if (moved > 0) {
               r.walked += moved;
               if (r.walked >= FOOTPRINTS.stride) {
@@ -294,6 +350,7 @@ export function createRemotePlayers(
             }
           }
         }
+        r.sled = r.info.state.kind === 'pullingSleigh' ? sampleSled(r.samples, now - NET.renderDelay) : null;
         ch.animTime += dt;
         if (r.sneeze.update(dt)) r.sneeze.burst(ch.x, ch.y, ch.facing);
         ch.lean = r.sneeze.lean(ch.facing);
@@ -317,10 +374,12 @@ export function createRemotePlayers(
     },
     drawables: () => list,
     names(offsetX) {
-      const out: { id: string; name: string; sx: number; sy: number }[] = [];
+      const out: { id: string; name: string; sx: number; sy: number; icon?: 'antler' }[] = [];
       for (const r of remotes.values()) {
         const lift = r.info.state.kind === 'riding' ? CAROUSEL.riderAboveSeat - 30 : 0;
-        out.push({ id: r.info.id, name: r.info.name, sx: r.ch.x - offsetX, sy: r.ch.y - NET.nameAbove - lift });
+        // 루돌프(썰매를 끄는 친구)는 이름표 옆에 작은 뿔
+        if (r.info.state.kind === 'pullingSleigh') out.push({ id: r.info.id, name: r.info.name, sx: r.ch.x - offsetX, sy: r.ch.y - NET.nameAbove - lift, icon: 'antler' });
+        else out.push({ id: r.info.id, name: r.info.name, sx: r.ch.x - offsetX, sy: r.ch.y - NET.nameAbove - lift });
       }
       return out;
     },

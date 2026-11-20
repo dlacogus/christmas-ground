@@ -2,7 +2,7 @@ import { createCamera, layerOffsetX, snapCamera, updateCamera, type Camera } fro
 import { createCharacter, setDynamicObstacles, setWalkTarget } from './character/character';
 import { drawCharacter, headLook } from './character/render';
 import type { CharacterState } from './character/state';
-import { BENCH_SIT, CAROUSEL, CHARACTER, COLD, EMOTE, EMOTES, FOOTPRINTS, GIFT, HAT, HAT_CHASE, HINT, LAYER_FACTORS, PROPS, ROOF_SNOW, THROW, SANTA, SKATE, SNEEZE, SNOWBALL, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, TREE_DECOR, WARM_BUFFERS } from './constants';
+import { BENCH_SIT, CAROUSEL, CHARACTER, COLD, EMOTE, EMOTES, FOOTPRINTS, SLEIGH, GIFT, HAT, HAT_CHASE, HINT, LAYER_FACTORS, PROPS, ROOF_SNOW, THROW, SANTA, SKATE, SNEEZE, SNOWBALL, SCENERY_SEED, SCREEN_HEIGHT, SCREEN_WIDTH, SOUND, TREE_DECOR, WARM_BUFFERS } from './constants';
 import { createFpsMeter, drawDebugOverlay } from './debug';
 import { createInput } from './input';
 import { createLayers, drawLayers, updateLayers } from './layers';
@@ -29,6 +29,7 @@ import { createPropsPlay } from './features/propsPlay';
 import { createHatChase } from './features/hatChase';
 import { createTreeDecor } from './features/treeDecorPlay';
 import { createTreeDecorSounds } from './audio/treeDecorSounds';
+import { createSleighPlay } from './features/sleighPlay';
 import { createSnowmanPlay } from './features/snowmanPlay';
 import { createSession } from './net/session';
 import { createCold, isWarmAt } from './character/cold';
@@ -52,6 +53,8 @@ import { MY_ID, createCarouselPlay, nearEntry, onCarousel, type PlayHint } from 
 import { createSkatePlay } from './zones/skatePlay';
 import { rinkBounds } from './props/iceRink';
 import type { DepthDrawable } from './zones/zone';
+import type { PointLight } from './scenery/lighting';
+import type { Rect } from './world';
 
 /** 노점이 무엇을 파는지: 곁을 지날 때와 구경하기 힌트 아래에 */
 const STALL_SIGN_TEXT = '⛄ 눈사람 꾸미기 소품 가게';
@@ -60,6 +63,8 @@ function describeState(state: CharacterState): string {
   if (state.kind === 'riding') return `state riding mount ${state.mount} slot ${state.slot}`;
   if (state.kind === 'skating') return `state skating ${state.vx}, ${state.vy}`;
   if (state.kind === 'sitting') return `state sitting bench ${state.bench} slot ${state.slot}`;
+  if (state.kind === 'pullingSleigh') return 'state pullingSleigh';
+  if (state.kind === 'inSleigh') return `state inSleigh seat ${state.seat}`;
   return 'state walk';
 }
 
@@ -152,6 +157,12 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       propsPlay.tap(worldX, sy);
       return;
     }
+    // 썰매: 타는 중이면 내리고, 끄는 중이면 누른 곳으로 걸어간다
+    if (sleighPlay.role) {
+      sleighPlay.tap(worldX, sy);
+      return;
+    }
+    if (sleighPlay.locked) return;
     // 스케이트를 타는 동안: 모자 곁이면 낚아채고, 출구에서 멈췄으면 벗고, 아니면 누르고 있는 쪽으로 민다 (매 프레임 따로 읽는다)
     if (skate.active) {
       if (hat.canPickUp(character.x, character.y)) {
@@ -198,6 +209,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     }
     // 노점을 탭하면 걸어가 구경하고, 소품을 들고 눈사람을 탭하면 걸어가 달아준다
     if (propsPlay.tap(worldX, sy)) return;
+    // 썰매·밧줄 끝을 누르면 걸어가 타거나 끈다
+    if (sleighPlay.tap(worldX, sy)) return;
     // 눈사람을 탭하면 (곁에 있을 때) 내 모자를 씌워주거나 돌려받는다
     if (!propsPlay.holding && sy >= WALK_AREA.y - 40) {
       const give = hatGift.nearestToGive();
@@ -250,8 +263,10 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
   let swallowSpace = false;
   let wasFrozen = false;
   /** 이번 프레임에 고른 상호작용 (힌트도 이것만 띄운다) */
-  let choice: 'hat' | 'carousel' | 'skate' | 'bench' | 'exit' | 'ball' | 'stall' | 'prop' | 'decorate' | 'giveHat' | 'takeHat' | 'gift' | 'hang' | 'pickOther' | 'catchHat' | 'begHat' | 'returnHat' | null = null;
+  let choice: 'hat' | 'carousel' | 'skate' | 'bench' | 'exit' | 'ball' | 'stall' | 'prop' | 'decorate' | 'giveHat' | 'takeHat' | 'gift' | 'hang' | 'pickOther' | 'catchHat' | 'begHat' | 'returnHat' | 'sleighGrab' | 'sleighRide' | null = null;
 
+  /** 루돌프 썰매 (세션이 만들어지는 동안에는 아직 없다 — 아래에서 만든다) */
+  let sleighRef: ReturnType<typeof createSleighPlay> | null = null;
   // 눈사람 만들기: 눈덩이·눈사람 목록(내 눈사람은 저장해 둔 것을 불러온다)과 굴리기 조작
   const snowWorld = createSnowWorld();
   // 실시간 서버: 친구들과 같은 광장. 눈덩이·눈사람은 서버에 저장한다 (예전에 이 브라우저에 저장한 것은 처음 접속 때 옮긴다)
@@ -268,6 +283,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     snowPlay: () => snowPlay,
     treeDecor: () => treeDecor,
     hatChase: () => hatChase,
+    // 세션이 만들어지는 동안에는 아직 썰매가 없다
+    sleigh: () => sleighRef,
     legacy: loadSnowmen(),
     decorated: (snowman, by) => propsPlay.showHeart(snowman, by),
     newHat: () => hat.putOn(),
@@ -276,6 +293,16 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     splatted: (at, me, head, dir) => {
       throwPlay.splatAt(at.x, at.y, head ? 26 : 14);
       if (!me) return;
+      // 썰매: 끄는 루돌프는 코가 잠깐 꺼지고, 탄 사람은 얼굴에 눈만 묻는다
+      if (sleighPlay.role === 'pull') {
+        sleighPlay.noseBlink();
+        return;
+      }
+      if (sleighPlay.role === 'ride') {
+        faceSnowLeft = THROW.faceSnowSeconds;
+        cold.add(THROW.cold);
+        return;
+      }
       // 내가 맞았다: 1초 동안 얼굴에 눈이 묻어 눈을 질끈 감고, 추워진다
       faceSnowLeft = THROW.faceSnowSeconds;
       cold.add(THROW.cold);
@@ -370,8 +397,27 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       else snowmanSounds.thud();
     },
   });
+  // 루돌프 썰매: 밧줄 끝에서 Space = 끌기 (루돌프 바디슈트), 썰매 옆에서 Space = 타기 (자리는 서버가 정한다)
+  const sleighPlay = createSleighPlay(character, {
+    myId: () => session.myId(),
+    online: () => session.online(),
+    now: () => session.serverNow(),
+    send: session.sleighSend,
+    remote: (id) => session.remoteView(id),
+    act: (a) => session.act(a),
+    faceSnow: () => faceSnowLeft,
+    putDownHeld: () => propsPlay.putDown(),
+    sound: { poof: () => snowmanSounds.squeak(SNOWBALL.startSize), thud: () => snowmanSounds.thud() },
+  });
+  sleighRef = sleighPlay;
+  if (debug) {
+    window.addEventListener('keydown', (e) => {
+      // U: 가짜 친구를 썰매 앞자리에 앉히거나 내보낸다
+      if (e.code === SLEIGH.debugKey && !e.repeat) sleighPlay.debugFriend();
+    });
+  }
   // ?debug=1: 콘솔에서 모자 자리를 들여다볼 수 있게
-  if (debug) Object.assign(window, { hatChase, me: character });
+  if (debug) Object.assign(window, { hatChase, sleighPlay, me: character });
   let nearOtherHat: ReturnType<typeof hatChase.nearestGroundHat> = null;
   let wearer: ReturnType<typeof hatChase.myHatWearer> = null;
   let nearOwner: ReturnType<typeof hatChase.nearestOwner> = null;
@@ -446,6 +492,11 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     draw(c: CanvasRenderingContext2D, cam: Camera) {
       const kind = character.state.get().kind;
       const ox = layerOffsetX(cam, LAYER_FACTORS.main);
+      // 썰매: 끄는 동안은 루돌프, 타는 동안은 썰매가 함께 그린다 ('평'·구르기도)
+      if (sleighPlay.drawSelf(c, ox)) {
+        sneeze.draw(c, ox);
+        return;
+      }
       // 타는 동안에는 회전목마가 탈 것과 함께 그린다
       if (kind !== 'riding') {
         const footX = Math.round(character.x) - ox;
@@ -501,22 +552,33 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
       if (e.code === ROOF_SNOW.debugSlowKey) slowMotion = !slowMotion;
     });
   }
+  const pointLights: PointLight[] = [];
   // 발밑 y로 앞뒤 정렬되는 것들. 눈덩이·눈사람은 매 프레임 뒤에 덧붙인다
-  const actors: DepthDrawable[] = [characterDrawable, hat, ...roofSnow.drawables, ...snowPlay.drawables, ...propsPlay.drawables, ...hatGift.drawables, ...throwPlay.drawables, ...hatChase.drawables];
+  const actors: DepthDrawable[] = [characterDrawable, hat, ...sleighPlay.drawables, ...roofSnow.drawables, ...snowPlay.drawables, ...propsPlay.drawables, ...hatGift.drawables, ...throwPlay.drawables, ...hatChase.drawables];
   const fixedActors = actors.length;
   const layers = createLayers(
     zones,
     actors,
     SCENERY_SEED,
-    [footprints, { draw: (c, ox) => roofSnow.drawFloor(c, ox) }],
+    [footprints, sleighPlay.floor, { draw: (c, ox) => roofSnow.drawFloor(c, ox) }],
     [santa, treeDecor.sky],
-    () => treeDecor.lights(),
+    () => {
+      // 선물 상자·빛나는 장식 + 루돌프의 빨간 코 (매 프레임 같은 배열을 다시 채운다)
+      const decor = treeDecor.lights();
+      const nose = sleighPlay.lights();
+      if (nose.length === 0) return decor;
+      pointLights.length = 0;
+      for (const l of decor) pointLights.push(l);
+      for (const l of nose) pointLights.push(l);
+      return pointLights;
+    },
   );
 
   const fpsMeter = createFpsMeter();
   // 화면 밖 구역의 그림도 틈틈이 미리 그려 둔다 (처음 들어설 때 멈칫하지 않게)
   window.setTimeout(() => warmBuffers(WARM_BUFFERS.perStep, WARM_BUFFERS.stepMs), WARM_BUFFERS.delayMs);
   let lastTime = performance.now();
+  const dynamicObstacles: Rect[] = [];
   const frame = (now: number) => {
     const dt = frameDt(now, lastTime) * (slowMotion ? ROOF_SNOW.debugSlowFactor : 1);
     const fps = fpsMeter.tick((now - lastTime) / 1000);
@@ -545,17 +607,24 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     if (wasFrozen && !snowHits.frozen) cold.sneezeIn(COLD.afterSnowmanSeconds);
     wasFrozen = snowHits.frozen;
     const lit = isWarmAt(character.x, character.y);
-    if (cold.update(dt, { warm: lit, bald: headLook(character).bald, canSneeze: !sneeze.active && !snowHits.frozen && pickLeft <= 0 && !treeDecor.busy })) startSneeze();
+    const suited = sleighPlay.role === 'pull';
+    // 루돌프 바디슈트(털옷)를 입고 있으면 추위가 오르지 않는다
+    if (cold.update(dt, { warm: lit, bald: headLook(character).bald && !suited, canSneeze: !sneeze.active && !snowHits.frozen && pickLeft <= 0 && !treeDecor.busy && !sleighPlay.locked, insulated: suited })) startSneeze();
     if (sneeze.update(dt)) {
       // 에취! 입김 구름이 터지고 모자가 날아간다
       sneezeSound.achoo();
       cold.add(-COLD.sneezeRelief);
       sneeze.burst(character.x, character.y - (kindNow === 'sitting' ? BENCH_SIT.lift : 0), character.facing);
       const s = skate.skate;
+      if (sleighPlay.role === 'pull') {
+        // 루돌프는 모자 대신 코에서 빨간 빛이 반짝 터진다
+        sleighPlay.noseFlash();
+      } else {
       // 들고 있던 소품도 손에서 튀어 나간다
       propsPlay.putDown(true);
       const launch = s ? ({ kind: 'ice', vx: s.vx, vy: s.vy } as const) : kindNow === 'riding' ? ({ kind: 'carousel', frontY: carouselGeometry().rimBottom, safe: carouselEntry } as const) : ({ kind: 'ground' } as const);
       if (!hatChase.dropTop(character.facing, launch)) hat.launch({ x: character.x, y: character.y }, character.facing, launch);
+      }
     }
     hat.update(dt);
     baldHead.update(dt, lit);
@@ -577,7 +646,15 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
 
     // 눈밭: 걷힌 눈이 다시 쌓이고, 놓아둔 눈덩이·눈사람은 걸어서 못 지나간다
     snowField().update(dt);
-    setDynamicObstacles(snowWorld.obstacles(snowPlay.rolling ?? snowPlay.helping));
+    // 썰매도 걸어 다니는 사람에게는 장애물 (내가 끌거나 탈 때는 빼고)
+    const snowObstacles = snowWorld.obstacles(snowPlay.rolling ?? snowPlay.helping);
+    const sleighBox = sleighPlay.obstacle();
+    if (sleighBox) {
+      dynamicObstacles.length = 0;
+      for (const o of snowObstacles) dynamicObstacles.push(o);
+      dynamicObstacles.push(sleighBox);
+      setDynamicObstacles(dynamicObstacles);
+    } else setDynamicObstacles(snowObstacles);
     // 굴리기: 스페이스를 한 번 누르면 시작해 계속 굴리고, 다시 누르면 놓는다 (닿아 있으면 올린다).
     // 모바일은 바닥을 길게 눌러 시작하고, 누른 채 끌면 그쪽으로 굴리고, 떼면 놓는다
     const press = input.pointer();
@@ -619,6 +696,9 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     } else if (pickLeft > 0) {
       character.moving = false;
       character.target = null;
+    } else if (sleighPlay.role || sleighPlay.locked) {
+      // 썰매를 끌거나 타는 중, 튕겨 나가 구르는 중 (눈 굴리기·던지기·모자 줍기·소품 달기는 못 한다)
+      sleighPlay.handleInput(dt, dir, actions);
     } else if (snowBusy) {
       // 눈덩이를 굴리거나 올리는 중: 캐릭터는 snowPlay가 움직인다
       character.target = null;
@@ -695,6 +775,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
         { id: 'takeHat', distance: nearTake ? nearTake.distance : Infinity, radius: PROPS.attachRadius },
         { id: 'prop', distance: nearProp ? nearProp.distance : Infinity, radius: PROPS.pickRadius },
         { id: 'stall', distance: nearStall.distance, radius: PROPS.stallRadius },
+        { id: 'sleighGrab', distance: sleighPlay.grabDistance(), radius: SLEIGH.grabRadius },
+        { id: 'sleighRide', distance: sleighPlay.rideDistance(), radius: SLEIGH.rideRadius },
       ]);
       // 스페이스(모바일은 길게 누르기): 눈덩이 곁이면 이어 굴리고, 더 가까운 상호작용이 없는 눈밭이면 새로 뭉친다
       let startedRolling = false;
@@ -717,6 +799,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
         else if (choice === 'catchHat' && wearer) hatChase.catch(wearer.id);
         else if (choice === 'begHat') hatChase.beg();
         else if (choice === 'returnHat' && nearOwner) hatChase.give(nearOwner.owner);
+        else if (choice === 'sleighGrab') sleighPlay.grab();
+        else if (choice === 'sleighRide') sleighPlay.sit();
       }
       // F: 눈을 한 줌 뭉쳐 던진다 (눈 쌓인 바닥에서, 다른 일을 시작하지 않았을 때)
       if (wantThrow && !startedRolling && pickLeft <= 0 && !propsPlay.busy && !hatGift.busy && !treeDecor.busy && !hatChase.busy) throwPlay.start(aimNow);
@@ -732,6 +816,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     }
     for (const zone of zones) zone.update(dt);
     skate.update(dt);
+    sleighPlay.update(dt);
     // 지붕 눈: 걸어 다닐 때만 맞는다 (회전목마·스케이트·벤치 중에는 안 맞는다)
     const roofEvents = roofSnow.update(dt, [
       {
@@ -772,7 +857,8 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     updateCamera(camera, riding ? CAROUSEL_X : (treeDecor.cameraFocus ?? character.x), dt);
     updateLayers(layers, dt, camera);
     sound.setListener(character.x, character.y);
-    const walking = character.state.get().kind === 'walk' && !skate.active;
+    const kindAfter = character.state.get().kind;
+    const walking = (kindAfter === 'walk' || kindAfter === 'pullingSleigh') && !skate.active && !sleighPlay.locked;
     if (advanceStepTimer(stepTimer, dt, walking && character.moving)) footsteps.step();
     // 걸은 거리만큼 발자국을 남긴다 (타고 내릴 때처럼 한 번에 멀리 옮겨지면 찍지 않는다)
     const movedX = character.x - lastX;
@@ -814,7 +900,7 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     // 바퀴는 내 캐릭터 몸 가운데를 둘러싼다
     emoteWheel.place(character.x - layerOffsetX(camera, LAYER_FACTORS.main), character.y - CHARACTER.spriteHeight / 2);
     if (debug) {
-      drawDebugOverlay(ctx, camera, character, zones, fps, [describeState(character.state.get()), `cold ${cold.value.toFixed(0)}  B: friend  H: santa  N: sneeze  R: roof snow  T: slow${slowMotion ? ' ON' : ''}`, treeDecor.debugLine()]);
+      drawDebugOverlay(ctx, camera, character, zones, fps, [describeState(character.state.get()), `cold ${cold.value.toFixed(0)}  B: friend  H: santa  N: sneeze  R: roof snow  T: slow${slowMotion ? ' ON' : ''}`, treeDecor.debugLine(), sleighPlay.debugLine() + '  U: sleigh friend']);
       roofSnow.drawDebug(ctx, camera);
       treeDecor.drawDebug(ctx, camera);
       ctx.fillStyle = '#7fd6ff';
@@ -825,13 +911,16 @@ export function startGame(canvas: HTMLCanvasElement, debug: boolean): void {
     // 힌트도 고른 상호작용 하나만. 조작 패드를 쓰는 동안은 패드가 키보드 역할이라 키보드 힌트를 (버튼 이름으로 바꿔) 보인다
     const touch = coarsePointer && !touchPad.active;
     let h: PlayHint | null;
-    if (snowPlay.busy) h = snowPlay.hint(touch);
+    if (sleighPlay.role || sleighPlay.locked) h = sleighPlay.hint(touch);
+    else if (snowPlay.busy) h = snowPlay.hint(touch);
     else if (propsPlay.busy) h = propsPlay.hint(touch);
     else if (treeDecor.busy) h = treeDecor.hint(touch);
     else if (choice === 'gift' && nearGift) h = { text: touch ? '탭해서 열기' : 'Space 열기', anchor: 'point', at: { x: nearGift.x, y: nearGift.y - GIFT.height - 8 } };
     else if (choice === 'hang') h = { text: touch ? '트리를 탭해서 달기' : 'Space 달기', anchor: 'head' };
     else if (choice === 'catchHat' && wearer) h = { text: touch ? '탭해서 잡기!' : 'Space 잡기!', anchor: 'point', at: { x: wearer.x, y: wearer.y - HINT.aboveHead } };
     else if (choice === 'begHat' && wearer) h = { text: touch ? '탭해서 돌려줘!' : 'Space 돌려줘!', anchor: 'head' };
+    else if (choice === 'sleighGrab') h = { text: touch ? '밧줄 끝을 탭해서 끌기' : 'Space 끌기', anchor: 'head' };
+    else if (choice === 'sleighRide') h = { text: touch ? '썰매를 탭해서 타기' : 'Space 타기', anchor: 'head' };
     else if (choice === 'returnHat' && nearOwner) h = { text: touch ? '탭해서 돌려주기' : 'Space 돌려주기', anchor: 'point', at: { x: nearOwner.x, y: nearOwner.y - HINT.aboveHead }, scale: nearOwner.begging ? HAT_CHASE.bigHint : undefined };
     else if (choice === 'pickOther' && nearOtherHat) h = { text: touch ? '탭해서 줍기' : 'Space 줍기', anchor: 'point', at: { x: nearOtherHat.x, y: nearOtherHat.y - HAT.hintAbove } };
     else if (choice === 'giveHat' && nearGive) h = { text: touch ? '눈사람을 탭해서 내 모자 씌워주기' : 'Space 내 모자 씌워주기', anchor: 'point', at: { x: nearGive.snowman.x, y: nearGive.snowman.y - snowmanHeight(nearGive.snowman.tiers) - 10 } };

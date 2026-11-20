@@ -4,7 +4,8 @@
 
 import { COPUSH, EMOTE, GIFT, HAT_CHASE as HC, NET, SNOWBALL, SNOWMAN, type OrnamentKind } from '../constants';
 import { canUnhang, checkHang, giftIndexOf, giftOfPass, giftOpenable } from '../features/treeDecor';
-import { emptySeats, seatCount, type BallData, type HatSpot, type WireGift, type WireHat, type WireObject, type WirePlayer, type WireSeats } from './protocol';
+import { SLEIGH_HOME_REST, restingPos, throwVictim, toWireFacing, type SleighRest } from '../features/sleigh';
+import { emptySeats, seatCount, type WireSleigh, type BallData, type HatSpot, type WireGift, type WireHat, type WireObject, type WirePlayer, type WireSeats } from './protocol';
 
 /** 접속 하나에 붙여 두는 정보 (serializeAttachment) */
 export interface Session {
@@ -23,6 +24,14 @@ export interface Session {
   hat?: HatSpot;
   /** 마지막으로 조른 때 (ms) — 1초에 한 번만 받는다 */
   begAt?: number;
+  /** 썰매에서 하는 일: 끄기('pull') / 타기(자리 0 = 앞, 1 = 뒤). 없으면 null */
+  sleigh?: 'pull' | 0 | 1 | null;
+  /** 끄는 동안 이 사람 화면이 보낸 썰매 자리 (나가면 그 자리에 멈춘다) */
+  sleighPos?: { x: number; y: number; f: 0 | 1 } | null;
+  /** 놓인 썰매 자리 — 모든 접속에 같은 것을 적어 둔다 (서버가 잠들었다 깨어나도 남게, 저장소에는 쓰지 않는다) */
+  sleighRest?: SleighRest;
+  /** 썰매에서 마지막으로 튕겨 나간 때 (ms) — 같은 사람은 10초에 한 번 */
+  thrownAt?: number;
   /** 마지막으로 이모트를 보낸 때 (ms) — 0.8초에 하나만 받는다 */
   emoteAt?: number;
   /** 사람마다 마지막으로 잡은 때 (ms) — 같은 사람은 3초에 한 번 */
@@ -369,4 +378,119 @@ export function hatsOnLeave(sessions: readonly Session[], leaving: Session): { o
     s.hat = { k: 'ground', x: Math.round(me.x + dx), y: Math.round(me.y) };
     return { owner: s.player!.id, spot: s.hat };
   });
+}
+
+// ───────────── 루돌프 썰매 (자리는 메모리와 접속 정보에만 — 저장소에 쓰지 않는다) ─────────────
+
+/** 지금 썰매를 끄는 사람 / 타는 자리 [앞, 뒤] */
+function sleighUsers(sessions: readonly Session[]): { puller: Session | null; seats: (Session | null)[] } {
+  const seats: (Session | null)[] = [null, null];
+  let puller: Session | null = null;
+  for (const s of sessions) {
+    if (!s.player) continue;
+    if (s.sleigh === 'pull' && !puller) puller = s;
+    else if ((s.sleigh === 0 || s.sleigh === 1) && !seats[s.sleigh]) seats[s.sleigh] = s;
+  }
+  return { puller, seats };
+}
+
+/** 접속들에 적어 둔 놓인 자리 가운데 가장 나중 것 (없으면 제자리) */
+export function sleighRestOf(sessions: readonly Session[]): SleighRest {
+  let best: SleighRest | null = null;
+  for (const s of sessions) if (s.sleighRest && (!best || s.sleighRest.since > best.since)) best = s.sleighRest;
+  return best ?? SLEIGH_HOME_REST;
+}
+
+/** 아무도 안 쓰나 */
+function sleighEmpty(sessions: readonly Session[]): boolean {
+  const u = sleighUsers(sessions);
+  return !u.puller && !u.seats[0] && !u.seats[1];
+}
+
+/** 썰매가 지금 있는 자리 (끄는 중이면 끄는 사람이 보낸 자리, 아니면 놓인 자리 — 2분 넘게 비어 있었으면 돌아가는 중) */
+function sleighNow(sessions: readonly Session[], rest: SleighRest, now: number): SleighRest {
+  const u = sleighUsers(sessions);
+  if (u.puller?.sleighPos) return { ...u.puller.sleighPos, since: now };
+  const at = restingPos(rest, sleighEmpty(sessions) ? rest.since : null, now);
+  return { x: Math.round(at.x * 10) / 10, y: Math.round(at.y * 10) / 10, f: toWireFacing(at.f), since: now };
+}
+
+/** 모두에게 보낼 썰매 자리 */
+export function sleighOf(sessions: readonly Session[], rest: SleighRest): WireSleigh {
+  const u = sleighUsers(sessions);
+  const pos = u.puller?.sleighPos ?? rest;
+  return {
+    p: u.puller?.player?.id ?? null,
+    s: u.seats.map((s) => s?.player?.id ?? null),
+    x: pos.x,
+    y: pos.y,
+    f: pos.f,
+    since: sleighEmpty(sessions) ? rest.since : null,
+  };
+}
+
+/** 썰매를 쓸 수 있는 사람인가: 들어와 있고, 썰매에 없고, 걷는 중 (회전목마·스케이트 중에는 못 잡는다) */
+function canUseSleigh(session: Session): boolean {
+  const p = session.player;
+  return p !== null && (session.sleigh === undefined || session.sleigh === null) && p.state.kind === 'walk';
+}
+
+/**
+ * 밧줄을 잡겠다 (끌기 1자리): 아무도 안 끌고 있을 때만, 동시에 오면 먼저 처리된 한 명.
+ * 허락하면 새 놓인 자리(지금 자리에서 멈춘 것으로)를 돌려준다. 거절이면 null
+ */
+export function tryGrabSleigh(sessions: readonly Session[], session: Session, rest: SleighRest, now: number): SleighRest | null {
+  if (!canUseSleigh(session) || sleighUsers(sessions).puller) return null;
+  const at = sleighNow(sessions, rest, now);
+  session.sleigh = 'pull';
+  session.sleighPos = { x: at.x, y: at.y, f: at.f };
+  return at;
+}
+
+/** 타겠다 (2자리, 앞자리부터): 앉힌 자리와 새 놓인 자리. 꽉 찼으면 null */
+export function trySitSleigh(sessions: readonly Session[], session: Session, rest: SleighRest, now: number): { seat: 0 | 1; rest: SleighRest } | null {
+  if (!canUseSleigh(session)) return null;
+  const u = sleighUsers(sessions);
+  const seat = !u.seats[0] ? 0 : !u.seats[1] ? 1 : null;
+  if (seat === null) return null;
+  const next = u.puller ? rest : sleighNow(sessions, rest, now);
+  session.sleigh = seat;
+  return { seat, rest: next };
+}
+
+/**
+ * 내리거나 놓는다 (나갈 때도): 끄던 사람이 놓으면 썰매는 stop(끄던 사람 화면이 계산한 멈출 자리)에, 없으면 마지막으로 보낸 자리에 멈춘다.
+ * 탄 사람은 그대로 앉아 있다. 썰매에 없었으면 null, 아니면 새 놓인 자리 (비게 되면 이때부터 2분을 센다)
+ */
+export function leaveSleigh(sessions: readonly Session[], session: Session, rest: SleighRest, now: number, stop?: { x: number; y: number; f: 0 | 1 }): SleighRest | null {
+  if (session.sleigh === undefined || session.sleigh === null) return null;
+  let next: SleighRest = rest;
+  if (session.sleigh === 'pull') {
+    const at = stop ?? session.sleighPos ?? rest;
+    next = { x: at.x, y: at.y, f: at.f, since: now };
+    session.sleighPos = null;
+  } else if (!sleighUsers(sessions).puller) next = { ...rest, since: now };
+  session.sleigh = null;
+  return next;
+}
+
+/** 끄는 사람이 보낸 썰매 자리 (pos 메시지에 실려 온다) */
+export function moveSleighBy(session: Session, sx: number | undefined, sy: number | undefined, sf: 0 | 1 | undefined): void {
+  if (session.sleigh !== 'pull' || sx === undefined || sy === undefined || sf === undefined) return;
+  session.sleighPos = { x: sx, y: sy, f: sf };
+}
+
+/** 급회전으로 who가 튕겨 나갔다 (끄는 사람만 보낼 수 있다): 뒷자리부터, 같은 사람은 10초에 한 번. 허락하면 그 자리를 비운다 */
+export function tryThrowSleigh(sessions: readonly Session[], session: Session, who: string, now: number): boolean {
+  if (session.sleigh !== 'pull') return false;
+  const u = sleighUsers(sessions);
+  const ids = u.seats.map((s) => s?.player?.id ?? null);
+  const thrownAt: Record<string, number> = {};
+  for (const s of u.seats) if (s?.player && s.thrownAt !== undefined) thrownAt[s.player.id] = s.thrownAt;
+  const seat = throwVictim(ids, thrownAt, now);
+  const target = seat === null ? null : u.seats[seat];
+  if (!target || target.player?.id !== who) return false;
+  target.sleigh = null;
+  target.thrownAt = now;
+  return true;
 }

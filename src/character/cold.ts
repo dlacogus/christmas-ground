@@ -33,6 +33,8 @@ export interface ColdEnv {
   bald: boolean;
   /** 지금 재채기를 시작할 수 있나 (이미 하는 중이면 false) */
   canSneeze: boolean;
+  /** 털옷(루돌프 바디슈트)을 입었나: 추위가 오르지 않는다 (따뜻한 곳에서는 그대로 줄어든다) */
+  insulated?: boolean;
 }
 
 export interface Cold {
@@ -75,7 +77,7 @@ export function createCold(random: () => number = Math.random, initial = 0): Col
     },
     update(dt, env) {
       time += dt;
-      value = clamp(value + (env.warm ? -COLD.warmFallPerSecond : COLD.risePerSecond * (env.bald ? COLD.baldFactor : 1)) * dt);
+      value = clamp(value + (env.warm ? -COLD.warmFallPerSecond : env.insulated ? 0 : COLD.risePerSecond * (env.bald ? COLD.baldFactor : 1)) * dt);
       // 많이 추우면 가끔 부르르
       shiverLeft = Math.max(0, shiverLeft - dt);
       if (value > COLD.shiverFrom) {
